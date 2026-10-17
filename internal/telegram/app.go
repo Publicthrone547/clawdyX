@@ -276,7 +276,10 @@ func (a *App) registerCommands() {
 	cmds := []models.BotCommand{
 		{Command: "help", Description: "Command reference"},
 		{Command: "status", Description: "Bot, Claude CLI and session overview"},
-		{Command: "new", Description: "Start a new session: /new [name] [--ws name]"},
+		{Command: "new", Description: "New session, keep the current one: /new [name]"},
+		{Command: "newf", Description: "New session, forget the current one: /newf [name] [--delete]"},
+		{Command: "clear", Description: "Fresh context with the same settings (old session kept)"},
+		{Command: "forget", Description: "Forget a session: /forget S2 [--delete]"},
 		{Command: "sessions", Description: "List sessions"},
 		{Command: "switch", Description: "Switch session: /switch S2"},
 		{Command: "model", Description: "Show or set the model"},

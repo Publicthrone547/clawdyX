@@ -356,6 +356,47 @@ func (s *Store) Restore(id int64) error {
 	return err
 }
 
+// CreateSessionAndForget inserts x, makes it the active session and turns
+// oldID (if > 0) into a tombstone, all in one transaction: a failure
+// leaves the previous state untouched.
+func (s *Store) CreateSessionAndForget(x Session, oldID int64, activeKey string) (*Session, error) {
+	var id int64
+	err := s.Tx(func(tx *sql.Tx) error {
+		t := now()
+		res, err := tx.Exec(`INSERT INTO sessions(name,claude_session_id,workspace_name,workspace_path,mode,model,effort,status,origin,started,created_at,last_used_at)
+			VALUES(?,?,?,?,?,NULLIF(?,''),NULLIF(?,''),'active',?,0,?,?)`,
+			x.Name, x.ClaudeSessionID, x.WorkspaceName, x.WorkspacePath, x.Mode, x.Model, x.Effort, orDefault(x.Origin, "bot"), t, t)
+		if err != nil {
+			return err
+		}
+		id, _ = res.LastInsertId()
+		if _, err := tx.Exec(`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`, activeKey, fmt.Sprint(id)); err != nil {
+			return err
+		}
+		if oldID > 0 {
+			r, err := tx.Exec(`UPDATE sessions SET status='forgotten', forgotten_at=? WHERE id=? AND status!='forgotten'`, t, oldID)
+			if err != nil {
+				return err
+			}
+			if n, _ := r.RowsAffected(); n != 1 {
+				return fmt.Errorf("store: session %d could not be forgotten", oldID)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return s.GetSession(id)
+}
+
+// NameTaken reports whether a non-forgotten session other than except uses name.
+func (s *Store) NameTaken(name string, except int64) bool {
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE name=? AND status!='forgotten' AND id!=?`, name, except).Scan(&n)
+	return n > 0
+}
+
 // Tx runs f in one transaction.
 func (s *Store) Tx(f func(tx *sql.Tx) error) error {
 	tx, err := s.db.Begin()

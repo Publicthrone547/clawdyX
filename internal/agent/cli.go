@@ -39,6 +39,8 @@ type AuthInfo struct {
 	AuthMethod       string `json:"authMethod"`
 	APIProvider      string `json:"apiProvider"`
 	SubscriptionType string `json:"subscriptionType"`
+	// ProjectsDirectory is where Claude Code keeps transcripts.
+	ProjectsDirectory string `json:"projectsDirectory"`
 }
 
 // AuthStatus runs `claude auth status` (slow: 20-40 s observed).

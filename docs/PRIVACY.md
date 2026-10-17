@@ -33,4 +33,5 @@ clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics,
 
 - `clawdyx service uninstall --purge-state` stops the service and deletes the state folder and logs.
 - Delete `~/.config/clawdyx/` to remove the token and settings, then revoke the token in @BotFather.
-- Claude Code's own transcripts are managed by Claude Code (`claude purge <folder>` erases a project's history; see its documentation).
+- One session's Claude Code history: `/forget S2 --delete` (or Delete history in the app) removes exactly that session's transcript file and folder after a confirmation that lists them. Claude Code documents that these files may be deleted by hand; clawdyX touches nothing else under `~/.claude`.
+- All history of a project folder: `claude purge <folder>` (Claude Code's own command).

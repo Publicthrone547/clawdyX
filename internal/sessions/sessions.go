@@ -124,8 +124,8 @@ func (s *Service) EnsureActive() (*store.Session, bool, error) {
 func (s *Service) Create(name string, ws *config.Workspace) (*store.Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if name != "" && !ValidName(name) {
-		return nil, fmt.Errorf("session name must match %s", nameRe)
+	if err := s.checkName(name, 0); err != nil {
+		return nil, err
 	}
 	if ws == nil {
 		ws = s.DefaultWorkspace()

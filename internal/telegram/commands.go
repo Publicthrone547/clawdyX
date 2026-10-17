@@ -42,8 +42,12 @@ var lacksXHigh = map[string]bool{"claude-opus-4-6": true, "claude-sonnet-4-6": t
 const helpText = `<b>Claude control center</b> — send any message to talk to Claude in the active session.
 
 <b>Sessions</b>
-/status — overview · /sessions [all] · /new [name] [--ws name] · /switch S2
-/sessions archive S2 · /cwd [workspace] — default workspace for new sessions
+/status — overview · /sessions [all] · /switch S2 · /rename S2 name
+/new [name] [--ws name] — new session, keep the current one
+/newf [name] [--delete] — new session, forget the current one (--delete also erases its Claude Code history)
+/clear — fresh context: new session with the same settings, old one kept
+/sessions archive S2 · /sessions restore S2 · /forget S2 [--delete]
+/cwd [workspace] — default workspace for new sessions
 <b>Claude settings</b>
 /model [name|alias|reset] [--default] · /effort [low|medium|high|xhigh|max|auto] [--default]
 /mode [observe|assisted|automation] — permission tier of the active session
@@ -123,6 +127,14 @@ func (a *App) command(ctx context.Context, m *models.Message, text string) {
 		a.cmdSessions(m, args)
 	case "new":
 		a.cmdNew(m, args)
+	case "newf":
+		a.cmdNewForget(m, args)
+	case "clear":
+		a.cmdClear(m)
+	case "forget":
+		a.cmdForget(m, args)
+	case "rename":
+		a.cmdRename(m, args)
 	case "switch", "resume":
 		a.cmdSwitch(m, args)
 	case "cwd", "workspace":
@@ -900,6 +912,16 @@ func (a *App) cmdAlias(m *models.Message, args []string) {
 // ---- sessions ----
 
 func (a *App) cmdSessions(m *models.Message, args []string) {
+	if len(args) == 2 && args[0] == "restore" {
+		x, err := a.sess.Restore(args[1])
+		if err != nil {
+			a.reply(m.ID, "⚠️ "+Esc(err.Error()))
+			return
+		}
+		a.sessionsChanged("restore")
+		a.reply(m.ID, fmt.Sprintf("%s restored. /switch %s makes it active.", x.Label(), x.Label()))
+		return
+	}
 	if len(args) == 2 && args[0] == "archive" {
 		s, err := a.sess.Resolve(args[1])
 		if err != nil {
@@ -948,7 +970,7 @@ func (a *App) cmdSessions(m *models.Message, args []string) {
 		mo, ef := a.sess.Effective(&s)
 		fmt.Fprintf(&sb, "%s%s%s · ws %s · %s · %s · %d turns · %s · <code>%s</code>%s\n", s.Label(), star, name, Esc(s.WorkspaceName), s.Mode, Esc(modelEffort(mo, ef)), s.Turns, ago(s.LastUsedAt), shortID(s.ClaudeSessionID), status)
 	}
-	sb.WriteString("* = active · /switch S-ID · /new [name]")
+	sb.WriteString("* = active · /switch S-ID · /new [name] · /newf · /clear · /forget S-ID")
 	a.reply(m.ID, sb.String())
 }
 
@@ -1112,6 +1134,9 @@ func (a *App) confirm(replyTo, editID int, tok string) {
 	a.st.Audit("confirm", action, args, "accepted", 0)
 	if editID != 0 {
 		_ = a.send.Edit(a.ctx, editID, "Confirmed.", noMarkup())
+	}
+	if a.confirmLifecycle(replyTo, action, args) {
+		return
 	}
 	switch action {
 	case "mode_automation":

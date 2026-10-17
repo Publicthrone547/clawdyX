@@ -32,7 +32,7 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | Area | Commands |
 | --- | --- |
 | Chat | Any plain message is a prompt for the active session. Long jobs stream a preview and can be cancelled with the inline button. |
-| Sessions | `/status` `/sessions [all]` `/new [name] [--ws W]` `/switch S2` `/sessions archive S2` `/cwd [W]` |
+| Sessions | `/status` `/sessions [all]` `/new [name] [--ws W]` `/newf [name] [--delete]` `/clear` `/switch S2` `/rename S2 name` `/sessions archive S2` `/sessions restore S2` `/forget S2 [--delete]` `/cwd [W]` |
 | Claude settings | `/model [name\|alias\|reset] [--default]` `/effort [low\|medium\|high\|xhigh\|max\|auto] [--default]` `/mode observe\|assisted` `/aliases` `/alias set fast haiku` |
 | Jobs | `/stop [j-ID\|S-ID\|all]` `/cancel j-ID` `/jobs [n]` `/logs j-ID [lines]` |
 | Machine | `/processes` `/usage` `/doctor` `/open youtube.com` (opens a website in the Mac's browser; typed by you, never by Claude) |
@@ -40,6 +40,20 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | Bot | `/start` (resume) `/pause` `/confirm` `/deny` `/shutdown` (disabled by default) |
 
 `/model fable` sets the **primary** model (`fable` resolves to `claude-fable-5-1` on CLI 2.1.292). Every model change is validated with a one-turn probe before it is saved. The separate `--advisor` model is never touched.
+
+### What each session command touches
+
+| Command | clawdyX session list | Claude Code history on disk |
+| --- | --- | --- |
+| `/new` | adds a session and makes it active; the old one stays | untouched |
+| `/clear` | adds a session with the same workspace, tier, model and effort; the old one stays | untouched (Claude Code's own `/clear` only exists inside a live session) |
+| `/newf` | adds a session and forgets the previous active one (restorable for 30 days) | untouched |
+| `/newf --delete`, `/forget S2 --delete` | forgets it | deletes exactly that session's transcript file and its folder, after a confirmation that names them |
+| `/forget S2` | forgets it (restorable for 30 days) | untouched |
+| `/sessions archive S2` | hides it | untouched |
+| `/rename S2 name` | changes the label only | untouched |
+
+clawdyX never deletes anything else under `~/.claude`. To erase all Claude Code history for a folder, Claude Code itself offers `claude purge <folder>`.
 
 ## Permission tiers
 

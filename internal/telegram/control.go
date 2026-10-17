@@ -136,6 +136,84 @@ func (a *App) RegisterControl(srv *control.Server) {
 		return control.SessionResult{Session: a.sessionInfo(s), Message: s.Label() + " restored."}, nil
 	}))
 
+	h("sessions.newForget", 30*time.Second, typed(func(_ context.Context, p control.SessionNewForgetParams) (any, error) {
+		old, _ := a.sess.Active()
+		if p.DeleteHistory && old != nil {
+			if h := sessions.FindHistory(a.projectsDir(), old); !h.Deletable {
+				return nil, control.Errorf("the history of %s cannot be deleted: %s", old.Label(), h.Reason)
+			}
+		}
+		x, old, err := a.sess.CreateAndForget(p.Name, a.busy())
+		if err != nil {
+			return nil, control.Errorf("%s", err.Error())
+		}
+		a.sessionsChanged("newf")
+		res := control.SessionResult{Session: a.sessionInfo(x), Message: x.Label() + " created and active."}
+		if old != nil {
+			res.Previous = a.sessionInfo(old)
+			res.Message += " " + old.Label() + " forgotten from clawdyX; its Claude Code history is kept."
+			if p.DeleteHistory {
+				removed, derr := sessions.DeleteHistory(a.projectsDir(), old)
+				res.Deleted = homeRels(removed)
+				if derr != nil {
+					res.Message = x.Label() + " created and active. " + old.Label() + " forgotten, but its history was NOT deleted: " + derr.Error()
+				} else {
+					_ = a.st.MarkHistoryDeleted(old.ID)
+					a.st.Audit("session", "delete_history", old.Label(), fmt.Sprintf("%d paths", len(removed)), 0)
+					res.Message = fmt.Sprintf("%s created and active. %s forgotten and its Claude Code history deleted (%d item(s)).", x.Label(), old.Label(), len(removed))
+				}
+			}
+		}
+		return res, nil
+	}))
+	h("sessions.fresh", 10*time.Second, typed(func(context.Context, none) (any, error) {
+		x, from, err := a.sess.Fresh(a.busy())
+		if err != nil {
+			return nil, control.Errorf("%s", err.Error())
+		}
+		a.sessionsChanged("fresh")
+		res := control.SessionResult{Session: a.sessionInfo(x), Message: "Fresh context: " + x.Label() + "."}
+		if from != nil {
+			res.Previous = a.sessionInfo(from)
+			res.Message += " " + from.Label() + " is kept; nothing was deleted."
+		}
+		return res, nil
+	}))
+	h("sessions.forget", 30*time.Second, typed(func(_ context.Context, p control.SessionForgetParams) (any, error) {
+		x, err := a.sess.Resolve(p.Ref)
+		if err != nil {
+			return nil, sessionErr(err)
+		}
+		if p.DeleteHistory {
+			if h := sessions.FindHistory(a.projectsDir(), x); !h.Deletable {
+				return nil, control.Errorf("the history of %s cannot be deleted: %s", x.Label(), h.Reason)
+			}
+		}
+		msg, removed, err := a.forgetSession(x, p.DeleteHistory)
+		if err != nil {
+			return nil, control.Errorf("%s", err.Error())
+		}
+		return control.SessionResult{Message: msg, Deleted: homeRels(removed)}, nil
+	}))
+	h("sessions.rename", 5*time.Second, typed(func(_ context.Context, p control.SessionRenameParams) (any, error) {
+		x, err := a.sess.Resolve(p.Ref)
+		if err != nil {
+			return nil, sessionErr(err)
+		}
+		if err := a.sess.Rename(x, p.Name); err != nil {
+			return nil, control.Errorf("%s", err.Error())
+		}
+		a.sessionsChanged("rename")
+		x, _ = a.st.GetSession(x.ID)
+		return control.SessionResult{Session: a.sessionInfo(x), Message: "Renamed. Only the label changed."}, nil
+	}))
+	h("sessions.history", 10*time.Second, typed(func(_ context.Context, p control.SessionRefParams) (any, error) {
+		x, err := a.sess.Resolve(p.Ref)
+		if err != nil {
+			return nil, sessionErr(err)
+		}
+		return a.historyInfo(x), nil
+	}))
 	h("jobs.list", 5*time.Second, typed(func(_ context.Context, p control.JobsListParams) (any, error) {
 		n := p.Limit
 		if n <= 0 || n > 200 {
@@ -191,6 +269,14 @@ func (a *App) RegisterControl(srv *control.Server) {
 	}))
 	h("diagnostics.run", 150*time.Second, typed(func(ctx context.Context, _ none) (any, error) { return a.diagnostics(ctx), nil }))
 	a.registerScreenControl(srv)
+}
+
+func homeRels(ps []string) []string {
+	out := make([]string, 0, len(ps))
+	for _, p := range ps {
+		out = append(out, homeRel(p, 200))
+	}
+	return out
 }
 
 func sessionErr(err error) error {

@@ -17,6 +17,9 @@ import (
 var ctlMethods = []string{
 	"ping", "status.get", "bot.start", "bot.stop {cancelJobs}", "bot.pause", "bot.resume",
 	"sessions.list {all,forgotten}", "sessions.create {name,workspace}", "sessions.switch {ref}", "sessions.archive {ref}", "sessions.restore {ref}",
+	"sessions.newForget {name,deleteHistory}", "sessions.fresh", "sessions.forget {ref,deleteHistory}", "sessions.rename {ref,name}", "sessions.history {ref}",
+	"jobs.submit {session,text,captureId}",
+	"screens.list", "screens.capture {display}", "screens.full {id}", "screens.discard {id}", "screens.use {id,session,text}", "screens.enabled.set {enabled}",
 	"jobs.list {limit}", "jobs.cancel {id}", "jobs.events {id,limit}", "processes.list",
 	"claude.status", "claude.models", "model.set {session,model,default}", "effort.set {session,effort,default}", "mode.set {session,mode}",
 	"log.tail {lines,level}", "diagnostics.run",
