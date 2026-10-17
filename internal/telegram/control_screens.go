@@ -35,7 +35,7 @@ func (a *App) registerScreenControl(srv *control.Server) {
 		for _, d := range ds {
 			out.Displays = append(out.Displays, displayInfo(d))
 		}
-		out.Access, _ = a.broker.Access()
+		out.Access, _ = a.broker.Check(ctx)
 		return out, nil
 	}))
 	srv.HandleLarge("screens.capture", 90*time.Second, typed(func(ctx context.Context, p control.CaptureParams) (any, error) {

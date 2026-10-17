@@ -270,6 +270,7 @@ func (a *App) RegisterControl(srv *control.Server) {
 	h("diagnostics.run", 150*time.Second, typed(func(ctx context.Context, _ none) (any, error) { return a.diagnostics(ctx), nil }))
 	a.registerScreenControl(srv)
 	a.registerTelegramControl(srv)
+	a.registerSettingsControl(srv)
 }
 
 func homeRels(ps []string) []string {
@@ -746,7 +747,7 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 		Fix: map[bool]string{true: "", false: "Stop the worker and restore a backup (see the runbook)."}[dbErr == nil]})
 	if a.cfg.Desktop.ScreenControl {
 		c := control.DiagnosticCheck{ID: "screen", Label: "Screen Recording permission", FixURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"}
-		switch acc, at := a.broker.Access(); acc {
+		switch acc, at := a.broker.Check(ctx); acc {
 		case "granted":
 			c.OK, c.Detail = true, "granted (last capture "+ago(at)+")"
 		case "denied":

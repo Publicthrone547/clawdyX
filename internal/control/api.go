@@ -474,3 +474,59 @@ type DetectResult struct {
 	Until   int64            `json:"until"`
 	Senders []DetectedSender `json:"senders"`
 }
+
+// WorkspaceInfo is one configured workspace.
+type WorkspaceInfo struct {
+	Name            string   `json:"name"`
+	Path            string   `json:"path"`
+	DefaultMode     string   `json:"defaultMode"`
+	AllowedCommands []string `json:"allowedCommands"`
+	DeniedCommands  []string `json:"deniedCommands"`
+	IsDefault       bool     `json:"isDefault"`
+}
+
+// SettingsInfo is the editable, non-secret configuration.
+type SettingsInfo struct {
+	ConfigPath        string          `json:"configPath"`
+	Workspaces        []WorkspaceInfo `json:"workspaces"`
+	DefaultWorkspace  string          `json:"defaultWorkspace"`
+	ClaudeBinary      string          `json:"claudeBinary"`
+	MaxConcurrentJobs int             `json:"maxConcurrentJobs"`
+	JobTimeoutMinutes int             `json:"jobTimeoutMinutes"`
+	MaxTurns          int             `json:"maxTurns"`
+	AutomationEnabled bool            `json:"automationEnabled"`
+	ScreenControl     bool            `json:"screenControl"`
+	OpenURLs          bool            `json:"openUrls"`
+	BrowserApp        string          `json:"browserApp"`
+	ShutdownCommand   bool            `json:"shutdownCommand"`
+	LogLevel          string          `json:"logLevel"`
+	JobsDays          int             `json:"jobsDays"`
+	JobEventsDays     int             `json:"jobEventsDays"`
+	AuditDays         int             `json:"auditDays"`
+	RestartPending    bool            `json:"restartPending"`
+}
+
+// SettingsPatch changes settings; nil fields are left alone. Changes to
+// config.json take effect after the worker restarts.
+type SettingsPatch struct {
+	MaxConcurrentJobs *int              `json:"maxConcurrentJobs,omitempty"`
+	JobTimeoutMinutes *int              `json:"jobTimeoutMinutes,omitempty"`
+	MaxTurns          *int              `json:"maxTurns,omitempty"`
+	AutomationEnabled *bool             `json:"automationEnabled,omitempty"`
+	ScreenControl     *bool             `json:"screenControl,omitempty"`
+	OpenURLs          *bool             `json:"openUrls,omitempty"`
+	BrowserApp        *string           `json:"browserApp,omitempty"`
+	ShutdownCommand   *bool             `json:"shutdownCommand,omitempty"`
+	LogLevel          *string           `json:"logLevel,omitempty"`
+	JobsDays          *int              `json:"jobsDays,omitempty"`
+	JobEventsDays     *int              `json:"jobEventsDays,omitempty"`
+	AuditDays         *int              `json:"auditDays,omitempty"`
+	AddWorkspace      *WorkspaceInfo    `json:"addWorkspace,omitempty"`
+	RemoveWorkspace   string            `json:"removeWorkspace,omitempty"`
+	WorkspaceModes    map[string]string `json:"workspaceModes,omitempty"`
+}
+
+// WorkspaceDefaultParams sets the workspace for new sessions (immediate).
+type WorkspaceDefaultParams struct {
+	Name string `json:"name"`
+}

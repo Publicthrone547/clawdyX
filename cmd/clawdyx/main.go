@@ -104,7 +104,13 @@ func main() {
 	case "mcp-screen":
 		// Started by claude (via --mcp-config) for automation sessions with
 		// screen control. Speaks MCP on stdin/stdout.
-		srv := &screen.Server{D: screen.Mac{TmpDir: os.TempDir()}, Version: version}
+		mac := screen.Mac{TmpDir: os.TempDir()}
+		if exe, err := os.Executable(); err == nil {
+			if exe, err = filepath.EvalSymlinks(exe); err == nil {
+				mac.Helper = screen.FindHelper(exe)
+			}
+		}
+		srv := &screen.Server{D: mac, Version: version}
 		if sock := os.Getenv("CLAWDYX_CONTROL_SOCKET"); sock != "" {
 			// Ask the worker before every screenshot: the owner may have
 			// switched screen features off since this job started.
@@ -326,4 +332,4 @@ func backup(cfgPath string) int {
 	return exitOK
 }
 
-var errNoSub = errors.New("usage: clawdyx service start|stop|restart|status|uninstall")
+var errNoSub = errors.New("usage: clawdyx service start|stop|restart|status|install|where|uninstall")

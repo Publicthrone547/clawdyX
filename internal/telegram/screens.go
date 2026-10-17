@@ -114,7 +114,7 @@ func (a *App) cmdScreens(m *models.Message) {
 		}
 		sb.WriteString("\n")
 	}
-	switch acc, at := a.broker.Access(); acc {
+	switch acc, at := a.broker.Check(ctx); acc {
 	case "granted":
 		fmt.Fprintf(&sb, "Screen Recording: granted (last capture %s)\n", ago(at))
 	case "denied":

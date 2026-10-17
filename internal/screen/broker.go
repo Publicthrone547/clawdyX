@@ -192,11 +192,32 @@ func (b *Broker) setAccess(v string) {
 // (Inferring it without capturing proved unreliable on macOS 27.)
 func (b *Broker) Access() (string, time.Time) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.access == "" {
-		return "unknown", time.Time{}
+	acc, at := b.access, b.accAt
+	b.mu.Unlock()
+	if acc != "" {
+		return acc, at
 	}
-	return b.access, b.accAt
+	return "unknown", time.Time{}
+}
+
+// Preflighter can check the permission without capturing (bundled helper).
+type Preflighter interface {
+	Preflight(ctx context.Context) (granted, known bool)
+}
+
+// Check refreshes the permission state without capturing when the provider
+// supports it, and returns Access().
+func (b *Broker) Check(ctx context.Context) (string, time.Time) {
+	if p, ok := b.P.(Preflighter); ok {
+		if g, known := p.Preflight(ctx); known {
+			if g {
+				b.setAccess("granted")
+			} else {
+				b.setAccess("denied")
+			}
+		}
+	}
+	return b.Access()
 }
 
 // Get returns a held capture.

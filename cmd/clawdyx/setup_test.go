@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/setup"
 )
 
 func fakeClaude(t *testing.T) string {
@@ -31,7 +32,7 @@ func TestWorkspaceName(t *testing.T) {
 		"/x/" + strings.Repeat("a", 31) + "-bb": strings.Repeat("a", 31),
 	}
 	for in, want := range cases {
-		if got := workspaceName(in); got != want {
+		if got := setup.WorkspaceName(in); got != want {
 			t.Errorf("workspaceName(%q) = %q want %q", in, got, want)
 		}
 	}
@@ -39,7 +40,7 @@ func TestWorkspaceName(t *testing.T) {
 
 func TestGenerateConfigIsValid(t *testing.T) {
 	ws, bin := t.TempDir(), fakeClaude(t)
-	data, err := json.MarshalIndent(generateConfig(111111111, ws, "Safari", bin), "", "  ")
+	data, err := json.MarshalIndent(setup.GenerateConfig(111111111, ws, "Safari", bin), "", "  ")
 	if err != nil {
 		t.Fatal(err)
 	}

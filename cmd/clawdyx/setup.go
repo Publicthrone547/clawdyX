@@ -2,27 +2,21 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-telegram/bot"
 	"golang.org/x/term"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/setup"
 	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
@@ -107,19 +101,8 @@ func (w *wizard) secret(label string) (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-// getMeFunc verifies a token with Telegram and returns the bot's username.
-// Tests replace it.
-var getMeFunc = func(ctx context.Context, token string) (string, error) {
-	b, err := bot.New(token, bot.WithSkipGetMe())
-	if err != nil {
-		return "", err
-	}
-	me, err := b.GetMe(ctx)
-	if err != nil {
-		return "", err
-	}
-	return me.Username, nil
-}
+// getMeFunc verifies a token with Telegram (tests replace it).
+var getMeFunc = setup.GetMe
 
 // runSetup is the guided first-time setup. It writes the private config and
 // token files, never prints the token, and ends with the read-only checks.
@@ -225,37 +208,27 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 		}
 		browser := o.Browser
 		if browser == "" {
-			if browser, err = w.ask("Browser app used by /open", detectBrowser()); err != nil {
+			if browser, err = w.ask("Browser app used by /open", setup.DetectBrowser()); err != nil {
 				return exitConfig
 			}
 		}
 		claudeBin := o.ClaudeBinary
 		if claudeBin == "" {
-			claudeBin = detectClaude()
+			claudeBin = setup.DetectClaude()
 		}
 		if claudeBin == "" {
 			w.say("The claude CLI was not found. Install Claude Code (brew install --cask claude-code), run `claude` once to log in, then rerun setup. Pass -claude-binary PATH if it lives elsewhere.")
 			return exitConfig
 		}
-		data, err := json.MarshalIndent(generateConfig(owner, ws, browser, claudeBin), "", "  ")
-		if err != nil {
-			w.say("internal error: %v", err)
-			return exitError
-		}
-		data = append(data, '\n')
-		if _, err := config.Parse(data); err != nil {
-			w.say("The generated configuration is not valid:\n%s", observability.Redact(err.Error()))
+		if err := setup.WriteConfig(cfgPath, setup.GenerateConfig(owner, ws, browser, claudeBin)); err != nil {
+			w.say("Could not write the configuration:\n%s", observability.Redact(err.Error()))
 			return exitConfig
-		}
-		if err := writePrivate(cfgPath, data); err != nil {
-			w.say("write config: %v", err)
-			return exitError
 		}
 		w.say("✓ Wrote %s (owner %d, workspace %s)", cfgPath, owner, ws)
 	}
 	if !keepToken {
 		if o.TokenFile {
-			if err := writePrivate(envPath, []byte("TELEGRAM_BOT_TOKEN="+token+"\n")); err != nil {
+			if err := setup.WritePrivate(envPath, []byte("TELEGRAM_BOT_TOKEN="+token+"\n")); err != nil {
 				w.say("write token file: %v", err)
 				return exitError
 			}
@@ -317,57 +290,6 @@ func (w *wizard) obtainToken(o setupOptions) (string, error) {
 	return "", errors.New("no valid token entered")
 }
 
-type tgUser struct {
-	ID        int64  `json:"id"`
-	IsBot     bool   `json:"is_bot"`
-	FirstName string `json:"first_name"`
-	Username  string `json:"username"`
-}
-
-type tgUpdate struct {
-	UpdateID int64 `json:"update_id"`
-	Message  *struct {
-		From *tgUser `json:"from"`
-		Chat struct {
-			ID   int64  `json:"id"`
-			Type string `json:"type"`
-		} `json:"chat"`
-	} `json:"message"`
-}
-
-// tgGetUpdates fetches pending updates without long polling. offset > 0
-// acknowledges every earlier update.
-func tgGetUpdates(ctx context.Context, token string, offset int64) ([]tgUpdate, error) {
-	params := map[string]any{"timeout": 0, "allowed_updates": []string{"message"}}
-	if offset > 0 {
-		params["offset"] = offset
-	}
-	body, _ := json.Marshal(params)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://api.telegram.org/bot"+token+"/getUpdates", bytes.NewReader(body))
-	if err != nil {
-		return nil, errors.New(observability.Redact(err.Error()))
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, errors.New(observability.Redact(err.Error()))
-	}
-	defer resp.Body.Close()
-	var out struct {
-		OK          bool       `json:"ok"`
-		Result      []tgUpdate `json:"result"`
-		Description string     `json:"description"`
-		ErrorCode   int        `json:"error_code"`
-	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&out); err != nil {
-		return nil, fmt.Errorf("telegram: unreadable response (HTTP %d)", resp.StatusCode)
-	}
-	if !out.OK {
-		return nil, fmt.Errorf("telegram: %s (error %d)", observability.Redact(out.Description), out.ErrorCode)
-	}
-	return out.Result, nil
-}
-
 // detectOwner finds the owner's ID from a message they send to the bot, then
 // acknowledges the pending updates so they are not replayed as prompts.
 func (w *wizard) detectOwner(ctx context.Context, token string) (int64, error) {
@@ -375,68 +297,50 @@ func (w *wizard) detectOwner(ctx context.Context, token string) (int64, error) {
 	if _, err := w.ask("Press Enter when the message is sent", ""); err != nil {
 		return 0, err
 	}
-	ups, err := tgGetUpdates(ctx, token, 0)
+	senders, n, err := setup.DetectSenders(ctx, token)
 	if err != nil {
 		return 0, err
 	}
-	seen := map[int64]string{}
-	var maxID int64
-	for _, u := range ups {
-		if u.UpdateID > maxID {
-			maxID = u.UpdateID
-		}
-		m := u.Message
-		if m == nil || m.From == nil || m.From.IsBot || m.Chat.Type != "private" || m.Chat.ID != m.From.ID {
-			continue
-		}
-		if _, ok := seen[m.From.ID]; !ok {
-			label := m.From.FirstName
-			if m.From.Username != "" {
-				label += " @" + m.From.Username
-			}
-			seen[m.From.ID] = strings.TrimSpace(label)
-		}
-	}
-	if len(seen) == 0 {
+	if len(senders) == 0 {
 		return 0, errors.New("no private message to the bot was found; send one and try again, or type the ID")
 	}
-	ids := make([]int64, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
+	label := func(s setup.Sender) string {
+		l := s.FirstName
+		if s.Username != "" {
+			l += " @" + s.Username
+		}
+		return strings.TrimSpace(l)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	var chosen int64
-	if len(ids) == 1 {
-		w.say("Found one sender: %d (%s)", ids[0], seen[ids[0]])
+	if len(senders) == 1 {
+		w.say("Found one sender: %d (%s)", senders[0].ID, label(senders[0]))
 		if !w.yesNo("Use this ID as the owner?", true) {
 			return 0, errors.New("not confirmed")
 		}
-		chosen = ids[0]
+		chosen = senders[0].ID
 	} else {
 		w.say("Several people have messaged the bot:")
-		for i, id := range ids {
-			w.say("  %d) %d (%s)", i+1, id, seen[id])
+		for i, s := range senders {
+			w.say("  %d) %d (%s)", i+1, s.ID, label(s))
 		}
 		ans, err := w.ask("Which one is you? (number)", "")
 		if err != nil {
 			return 0, err
 		}
-		n, err := strconv.Atoi(ans)
-		if err != nil || n < 1 || n > len(ids) {
+		k, err := strconv.Atoi(ans)
+		if err != nil || k < 1 || k > len(senders) {
 			return 0, errors.New("invalid choice")
 		}
-		chosen = ids[n-1]
+		chosen = senders[k-1].ID
 	}
-	if _, err := tgGetUpdates(ctx, token, maxID+1); err == nil {
-		w.say("Cleared %d pending update(s) so the bot starts clean.", len(ups))
-	}
+	w.say("Cleared %d pending update(s) so the bot starts clean.", n)
 	return chosen, nil
 }
 
 func (w *wizard) chooseWorkspace(flag string) (string, error) {
 	def := flag
 	if def == "" {
-		if cwd, err := os.Getwd(); err == nil && workspaceOK(cwd) == nil {
+		if cwd, err := os.Getwd(); err == nil && setup.WorkspaceOK(cwd) == nil {
 			def = cwd
 		}
 	}
@@ -448,168 +352,27 @@ func (w *wizard) chooseWorkspace(flag string) (string, error) {
 				return "", err
 			}
 		}
-		p = expandHome(p)
+		p = setup.ExpandHome(p)
 		if abs, err := filepath.Abs(p); err == nil {
 			p = abs
 		}
-		if err := workspaceOK(p); err != nil {
+		if err := setup.WorkspaceOK(p); err != nil {
 			if w.yes || flag != "" {
 				return "", err
 			}
 			w.say("%s", err)
 			continue
 		}
-		if warn := privacyWarning(p); warn != "" {
+		if warn := setup.PrivacyWarning(p); warn != "" {
 			w.say("Note: %s", warn)
 		}
 		return p, nil
 	}
 }
 
-func workspaceOK(p string) error {
-	if p == "" {
-		return errors.New("a project folder is required")
-	}
-	if !filepath.IsAbs(p) {
-		return fmt.Errorf("%s is not an absolute path", p)
-	}
-	st, err := os.Stat(p)
-	if err != nil {
-		return fmt.Errorf("%v", err)
-	}
-	if !st.IsDir() {
-		return fmt.Errorf("%s is not a directory", p)
-	}
-	canon, err := filepath.EvalSymlinks(p)
-	if err != nil {
-		return err
-	}
-	home, _ := os.UserHomeDir()
-	if canon == "/" || canon == filepath.Clean(home) {
-		return errors.New("the home folder and the filesystem root cannot be workspaces; pick a project folder such as ~/projects/<name>")
-	}
-	return nil
-}
-
-// privacyWarning flags folders that macOS privacy protection can hide from a
-// background (launchd) process.
-func privacyWarning(p string) string {
-	home, _ := os.UserHomeDir()
-	for _, d := range []string{"Desktop", "Documents", "Downloads"} {
-		root := filepath.Join(home, d)
-		if p == root || strings.HasPrefix(p, root+string(filepath.Separator)) {
-			return fmt.Sprintf("%s is protected by macOS privacy settings; the background service may be denied access there. A folder such as ~/projects/<name> avoids that.", root)
-		}
-	}
-	return ""
-}
-
-func detectBrowser() string {
-	for _, c := range [][2]string{{"/Applications/Firefox.app", "Firefox"}, {"/Applications/Google Chrome.app", "Google Chrome"}, {"/Applications/Brave Browser.app", "Brave Browser"}, {"/Applications/Arc.app", "Arc"}} {
-		if st, err := os.Stat(c[0]); err == nil && st.IsDir() {
-			return c[1]
-		}
-	}
-	return "Safari"
-}
-
-func detectClaude() string {
-	if p, err := exec.LookPath("claude"); err == nil {
-		if abs, err := filepath.Abs(p); err == nil {
-			return abs
-		}
-		return p
-	}
-	home, _ := os.UserHomeDir()
-	for _, p := range []string{"/opt/homebrew/bin/claude", "/usr/local/bin/claude", filepath.Join(home, ".local", "bin", "claude")} {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p
-		}
-	}
-	return ""
-}
-
-var wsNameClean = regexp.MustCompile(`[^a-z0-9_-]+`)
-
-// workspaceName derives a config-safe workspace name from a folder path.
-func workspaceName(path string) string {
-	n := strings.ToLower(filepath.Base(filepath.Clean(path)))
-	n = wsNameClean.ReplaceAllString(n, "-")
-	n = strings.Trim(n, "-_")
-	if len(n) > 32 {
-		n = strings.TrimRight(n[:32], "-_")
-	}
-	if n == "" {
-		return "workspace"
-	}
-	return n
-}
-
-// generateConfig builds the default configuration for one workspace.
-func generateConfig(owner int64, wsPath, browser, claudeBin string) *config.Config {
-	open := true
-	name := workspaceName(wsPath)
-	childPath := "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-	if dir := filepath.Dir(claudeBin); !strings.Contains(":"+childPath+":", ":"+dir+":") {
-		childPath = dir + ":" + childPath
-	}
-	return &config.Config{
-		Telegram: config.Telegram{OwnerUserID: owner, PollTimeoutSeconds: 30},
-		Claude: config.Claude{
-			Binary: claudeBin, DefaultModel: "fable", DefaultEffort: "auto", SettingSources: "user", StrictMCPConfig: true,
-			JobTimeout: config.Duration{Duration: 15 * time.Minute}, MaxTurns: 60, MaxConcurrentJobs: 2, MaxQueuePerSession: 5,
-			MaxOutputBytes: 1 << 20, MaxChildRSSMB: 2048, BgWaitCeilingMS: 60000, ChildPath: childPath, ExtraDisallowedTools: []string{},
-		},
-		Workspaces: []config.Workspace{{
-			Name: name, Path: wsPath, DefaultMode: config.ModeObserve,
-			AllowedCommands: []string{"Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(make test *)", "Bash(go test *)", "Bash(go build *)", "Bash(go vet *)"},
-			DeniedCommands:  []string{"Bash(rm *)", "Bash(rmdir *)", "Bash(sudo *)", "Bash(git push *)", "Bash(git remote *)", "Bash(curl *)", "Bash(wget *)", "Bash(brew *)", "Bash(claude *)"},
-		}},
-		DefaultWorkspace: name,
-		Desktop:          config.Desktop{OpenURLs: &open, BrowserApp: browser},
-		Logging:          config.Logging{Level: "info"},
-		Retention:        config.Retention{JobsDays: 90, JobEventsDays: 14, ProcessedUpdatesDays: 7, AuditDays: 180},
-	}
-}
-
-// writePrivate writes data to path atomically with mode 0600 inside a 0700 directory.
-func writePrivate(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return err
-	}
-	_ = os.Chmod(dir, 0o700)
-	tmp, err := os.CreateTemp(dir, ".tmp-*")
-	if err != nil {
-		return err
-	}
-	name := tmp.Name()
-	if err := tmp.Chmod(0o600); err == nil {
-		_, err = tmp.Write(data)
-	}
-	if cerr := tmp.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		_ = os.Remove(name)
-		return err
-	}
-	return os.Rename(name, path)
-}
-
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
-}
-
-func expandHome(p string) string {
-	if p == "~" || strings.HasPrefix(p, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			return filepath.Join(home, strings.TrimPrefix(p, "~"))
-		}
-	}
-	return p
 }
 
 // storeAndVerify saves the token in the vault and reads it back.

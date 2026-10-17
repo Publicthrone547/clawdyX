@@ -163,6 +163,21 @@ func (m Mac) CapturePNG(ctx context.Context, d Display) ([]byte, error) {
 	defer os.RemoveAll(dir)
 	_ = os.Chmod(dir, 0o700)
 	f := filepath.Join(dir, "d.png")
+	if m.Helper != "" {
+		out, err := run(ctx, 20*time.Second, m.Helper, "capture", strconv.FormatUint(uint64(d.ID), 10), f)
+		var r helperResult
+		_ = json.Unmarshal([]byte(lastLine(out)), &r)
+		switch {
+		case err == nil && r.OK:
+		case strings.Contains(r.Error, "permission"):
+			return nil, ErrNoScreenRecording
+		case ctx.Err() != nil:
+			return nil, errors.New("capture timed out (if macOS is showing a screen-access dialog, answer it on the Mac)")
+		default:
+			return nil, fmt.Errorf("capture helper: %s", firstNonEmpty(r.Error, out))
+		}
+		return readCapture(f)
+	}
 	rect := fmt.Sprintf("-R%s,%s,%s,%s", ff0(d.X), ff0(d.Y), ff0(d.W), ff0(d.H))
 	if out, err := run(ctx, 20*time.Second, "/usr/sbin/screencapture", "-x", "-t", "png", rect, f); err != nil {
 		if strings.Contains(out, "could not create image") {
@@ -173,14 +188,63 @@ func (m Mac) CapturePNG(ctx context.Context, d Display) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("screencapture: %v", err)
 	}
+	return readCapture(f)
+}
+
+func readCapture(f string) ([]byte, error) {
 	b, err := os.ReadFile(f)
 	if err != nil {
 		return nil, err
 	}
 	if len(b) == 0 {
-		return nil, errors.New("screencapture produced an empty image")
+		return nil, errors.New("the capture produced an empty image")
 	}
 	return b, nil
+}
+
+type helperResult struct {
+	OK      bool   `json:"ok"`
+	Granted bool   `json:"granted"`
+	Error   string `json:"error"`
+}
+
+// Preflight reports whether macOS grants Screen Recording to this process
+// without capturing anything. It needs the bundled helper (CGPreflight-
+// ScreenCaptureAccess is not reachable from JXA); known is false without it.
+func (m Mac) Preflight(ctx context.Context) (granted, known bool) {
+	if m.Helper == "" {
+		return false, false
+	}
+	out, err := run(ctx, 10*time.Second, m.Helper, "preflight")
+	var r helperResult
+	if err != nil || json.Unmarshal([]byte(lastLine(out)), &r) != nil || !r.OK {
+		return false, false
+	}
+	return r.Granted, true
+}
+
+// RequestAccess asks macOS to show the Screen Recording prompt (once).
+func (m Mac) RequestAccess(ctx context.Context) error {
+	if m.Helper == "" {
+		return errors.New("needs the clawdyX app's capture helper")
+	}
+	_, err := run(ctx, 30*time.Second, m.Helper, "request")
+	return err
+}
+
+func lastLine(s string) string {
+	s = strings.TrimSpace(s)
+	if i := strings.LastIndexByte(s, '\n'); i >= 0 {
+		return s[i+1:]
+	}
+	return s
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return strings.TrimSpace(b)
 }
 
 func ff0(v float64) string { return strconv.FormatFloat(math.Round(v), 'f', 0, 64) }

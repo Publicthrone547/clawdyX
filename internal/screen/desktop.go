@@ -17,6 +17,7 @@ import (
 	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -55,9 +56,25 @@ type Desktop interface {
 	Trusted(ctx context.Context) bool
 }
 
-// Mac is the real macOS implementation (screencapture, sips, osascript JXA).
+// Mac is the real macOS implementation (screencapture or the bundled
+// ScreenCaptureKit helper, osascript JXA).
 type Mac struct {
 	TmpDir string
+	// Helper is the path of clawdyx-screenshot (inside clawdyX.app); empty
+	// means screencapture is used.
+	Helper string
+}
+
+// HelperName is the ScreenCaptureKit helper's file name.
+const HelperName = "clawdyx-screenshot"
+
+// FindHelper returns the helper next to exe, or "".
+func FindHelper(exe string) string {
+	p := filepath.Join(filepath.Dir(exe), HelperName)
+	if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 {
+		return p
+	}
+	return ""
 }
 
 func run(ctx context.Context, timeout time.Duration, name string, args ...string) (string, error) {

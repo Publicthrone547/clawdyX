@@ -1362,7 +1362,7 @@ func (a *App) cmdDoctor(m *models.Message) {
 		fmt.Fprintf(&sb, "Child environment (names only): %s\n", Esc(strings.Join(names, ", ")))
 		fmt.Fprintf(&sb, "Settings sources for jobs: %s · strict MCP: %v · bypass/auto disabled via --settings\n", Esc(a.cfg.Claude.SettingSources), a.cfg.Claude.StrictMCPConfig)
 		if a.cfg.Desktop.ScreenControl {
-			acc, _ := a.broker.Access()
+			acc, _ := a.broker.Check(ctx)
 			granted := acc != "denied"
 			fmt.Fprintf(&sb, "%s Screen Recording permission: %s (from the last capture) · screen features %s\n", ok(granted), acc, map[bool]string{true: "on", false: "switched off"}[a.ScreenOn()])
 			fmt.Fprintf(&sb, "%s Accessibility permission (mouse and keyboard)\n", ok(a.desktop.Trusted(ctx)))

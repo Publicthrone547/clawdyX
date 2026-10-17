@@ -147,3 +147,37 @@ func mustJSON(t *testing.T, v any) []byte {
 	}
 	return b
 }
+
+func TestSettingsGetSet(t *testing.T) {
+	h := start(t)
+	p := writeConfig(t, h)
+	c := withControl(t, h)
+	ctx := context.Background()
+	var si control.SettingsInfo
+	if err := c.Call(ctx, "settings.get", nil, &si); err != nil || len(si.Workspaces) != 1 || si.ConfigPath != p {
+		t.Fatalf("get: %v %+v", err, si)
+	}
+	n, on := 3, true
+	extra := t.TempDir()
+	patch := control.SettingsPatch{MaxConcurrentJobs: &n, AutomationEnabled: &on, AddWorkspace: &control.WorkspaceInfo{Path: extra}}
+	if err := c.Call(ctx, "settings.set", patch, &si); err != nil || si.MaxConcurrentJobs != 3 || !si.AutomationEnabled || len(si.Workspaces) != 2 || !si.RestartPending {
+		t.Fatalf("set: %v %+v", err, si)
+	}
+	cfg, err := config.Parse(mustRead(t, p))
+	if err != nil || cfg.Claude.MaxConcurrentJobs != 3 || len(cfg.Workspaces) != 2 {
+		t.Fatalf("file: %v", err)
+	}
+	bad := 99
+	if err := c.Call(ctx, "settings.set", control.SettingsPatch{MaxConcurrentJobs: &bad}, nil); err == nil {
+		t.Fatal("invalid concurrency accepted")
+	}
+	if cfg2, _ := config.Parse(mustRead(t, p)); cfg2.Claude.MaxConcurrentJobs != 3 {
+		t.Fatal("a rejected patch changed the file")
+	}
+	if err := c.Call(ctx, "settings.set", control.SettingsPatch{RemoveWorkspace: "w"}, nil); err == nil {
+		t.Fatal("removing the default workspace accepted")
+	}
+	if err := c.Call(ctx, "settings.set", control.SettingsPatch{AddWorkspace: &control.WorkspaceInfo{Path: "/"}}, nil); err == nil {
+		t.Fatal("filesystem root accepted as a workspace")
+	}
+}

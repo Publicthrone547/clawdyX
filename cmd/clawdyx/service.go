@@ -123,7 +123,20 @@ func service(sub, cfgPath string, purge bool) int {
 			fmt.Fprintln(os.Stderr, "Run `clawdyx setup` (or `make setup`) first.")
 			return exitConfig
 		}
-		if loaded, _ := serviceState(); loaded {
+		if loaded, _ := serviceState(); loaded && sub == "install" {
+			// install always points the service at this executable (for
+			// example when moving from ~/go/bin to clawdyX.app).
+			if out, err := launchctl("bootout", target()); err != nil {
+				fmt.Fprintf(os.Stderr, "launchctl bootout failed: %v\n%s", err, out)
+				return exitError
+			}
+			for i := 0; i < 20; i++ {
+				if l, _ := serviceState(); !l {
+					break
+				}
+				time.Sleep(250 * time.Millisecond)
+			}
+		} else if loaded {
 			if out, err := launchctl("kickstart", "-k", target()); err != nil {
 				fmt.Fprintf(os.Stderr, "launchctl kickstart failed: %v\n%s", err, out)
 				return exitError
@@ -187,6 +200,23 @@ func service(sub, cfgPath string, purge bool) int {
 			}
 		}
 		return exitOK
+	case "where":
+		// Prints the executable the LaunchAgent runs (for the desktop app).
+		b, err := os.ReadFile(plistPath())
+		if err != nil {
+			fmt.Println("")
+			return exitError
+		}
+		if i := strings.Index(string(b), "<key>ProgramArguments</key><array>"); i >= 0 {
+			rest := string(b)[i:]
+			if a := strings.Index(rest, "<string>"); a >= 0 {
+				if z := strings.Index(rest[a:], "</string>"); z >= 0 {
+					fmt.Println(rest[a+8 : a+z])
+					return exitOK
+				}
+			}
+		}
+		return exitError
 	case "status":
 		cfg, err := loadConfigOnly(cfgPath)
 		if err != nil {
