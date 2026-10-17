@@ -1140,3 +1140,13 @@ Phase 1 is implemented on the local `main` branch. README.md, docs/RUNBOOK.md an
 - **`/open ADDRESS`** is owner-typed and opens only http(s) URLs via `/usr/bin/open -a <browser_app> -- <url>`. Claude itself still cannot run `open` outside automation.
 - **Screen control (added on owner request).** It is gated by `desktop.screen_control` and offered only in automation sessions. The bot binary serves an MCP stdio server (`mcp-screen`) with screenshot, click, move, scroll, type and key tools, built on `screencapture`, `sips` and JXA CGEvent / System Events. Claude Code receives it through `--mcp-config` with `--strict-mcp-config` and a safety system prompt. No allow rule is added, so auto mode's classifier still reviews these calls. A live run confirmed the real CLI reaches the tool. Owner-typed `/screenshot` sends a photo to the private chat.
 - **Not built yet (Phase 2+):** attaching external sessions (`/resume <uuid>` currently only switches between bot sessions), `/run` capabilities, stopping background agents with `claude stop`, the approval relay, warm sessions, and attachments.
+
+## Implementation status (v0.3.0, 2026-10-17)
+
+The v2 product plan (desktop app plus worker) is implemented. Deviations from the plan, with reasons:
+
+- **Worker registration uses a LaunchAgent written by the bundled worker** (`clawdyx service install`, label `local.clawdyx`, program `/Applications/clawdyX.app/Contents/Helpers/clawdyx`), not `SMAppService.agent`. The LaunchAgent path was already proven on this Mac, needs no cgo bridge, and works for ad-hoc-signed local builds; the app still shows it in Settings and can start, stop, re-point and uninstall it. `SMAppService.agent` remains an option for signed distribution builds.
+- **Screen Recording check:** inferring the permission from window titles (JXA) proved wrong on macOS 27 (it reported "granted" while captures were refused). The worker now reports the state from the last real capture, or from the bundled helper's `CGPreflightScreenCaptureAccess` when the app is installed; otherwise "unknown".
+- **App memory is above the plan's 60 MB budget** (about 120–137 MB plus WebKit helpers; see `docs/RELEASE.md`). Destroying the window on close did not reduce it. The worker (29 MB) is independent of the app.
+- **Token storage:** the Keychain item is created through `/usr/bin/security` (go-keyring), so the worker and the app can read it without prompts and rebuilds do not invalidate it; any process of the same macOS user can also read it with the same tool.
+- **Not built yet:** command palette, chat companion view, native notifications, periodic monitor refresh, attaching external Claude sessions, warm sessions, approval relay, self-update, Windows.

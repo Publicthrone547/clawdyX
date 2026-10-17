@@ -79,7 +79,7 @@ const claudeOK = computed(() => st.value?.claude.loggedIn === true);
 </script>
 
 <template>
-  <Page title="Overview" subtitle="Telegram bot and Claude Code on this Mac">
+  <Page title="Overview" subtitle="Telegram bot and Claude Code on this Mac. Closing this window keeps the bot and the menu-bar item running.">
     <template #actions>
       <template v-if="store.connection.connected">
         <button v-if="!polling" class="btn btn-primary" :disabled="busy || st?.bot.state === 'starting'" @click="start">

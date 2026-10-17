@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-10-17
+
+- **Desktop app (clawdyX.app):** Wails v3 + Vue 3 + Tailwind 4 control panel with a first-run wizard, Overview (Start/Stop), Telegram (token, allowed users, detection), Sessions, Jobs & processes, Monitors, Settings and Diagnostics; menu-bar item; close hides the window; `make app`, `make dmg`.
+- **Worker control socket:** JSON-RPC over a 0600 Unix socket with a peer-uid check; `clawdyx ctl`. Telegram polling can be started and stopped without stopping the worker.
+- **Screens:** all displays, `/screens`, `/screen N|all|off`, `/look N question`; captures go through one broker (switch, in-memory only, audit); a bundled ScreenCaptureKit helper captures by display ID and checks the permission without capturing.
+- **Sessions:** `/newf [--delete]`, `/clear`, `/forget [--delete]`, `/rename`, `/sessions restore`; deleting history removes exactly that session's documented transcript files.
+- **Security:** bot token in the macOS Keychain (`setup -migrate-token`); allowed users with owner/user roles; confirmations bound to the person who asked; replies go to the asking chat.
+- **Docs:** ARCHITECTURE, PRIVACY, SECURITY, RELEASE (measured baseline), THIRD_PARTY_NOTICES.
+
 ## 0.2.0 — 2026-10-17
 
 - Project renamed to clawdyX: binary `clawdyx`, service `local.clawdyx`, config in `~/.config/clawdyx`, state in `~/Library/Application Support/clawdyx`, logs in `~/Library/Logs/clawdyx`, env override `CLAWDYX_CONFIG`.

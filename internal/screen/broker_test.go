@@ -146,3 +146,24 @@ func TestBrokerAccessFromLastCapture(t *testing.T) {
 		t.Fatalf("after a capture: %s", a)
 	}
 }
+
+// BenchmarkEncodeLargeDisplay measures the re-encode step for a 3440×1440
+// capture (the largest display on the development Mac) to the 1568-px JPEG
+// sent to Claude.
+func BenchmarkEncodeLargeDisplay(b *testing.B) {
+	img := image.NewRGBA(image.Rect(0, 0, 3440, 1440))
+	for y := 0; y < 1440; y += 3 {
+		for x := 0; x < 3440; x += 7 {
+			img.Set(x, y, color.RGBA{uint8(x), uint8(y), 90, 255})
+		}
+	}
+	var buf bytes.Buffer
+	_ = png.Encode(&buf, img)
+	raw := buf.Bytes()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := EncodeJPEG(raw, ClaudeMaxEdge, 75); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

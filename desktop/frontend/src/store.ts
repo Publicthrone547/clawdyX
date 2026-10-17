@@ -41,7 +41,6 @@ export const store = reactive({
   tick: 0,
   sessionsTick: 0,
   ready: false,
-  hiddenNoteShown: false,
 });
 
 let nextToast = 1;
@@ -122,12 +121,6 @@ export function initStore() {
     }
     store.tick++;
     soon();
-  });
-  Events.On("app:hidden", () => {
-    if (!store.hiddenNoteShown) {
-      store.hiddenNoteShown = true;
-      toast("clawdyX keeps running in the menu bar. The bot is not affected by closing the window.");
-    }
   });
   Promise.all([Worker.Connection().then((c) => (store.connection = c)), refreshSetup(), refreshService()]).finally(() => {
     store.ready = true;
