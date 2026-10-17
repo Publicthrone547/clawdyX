@@ -6,13 +6,41 @@ Only the Telegram users on your local allowlist are served (by numeric ID, in th
 
 Design and verified CLI facts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Operations: [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Tests: [`docs/TESTING.md`](docs/TESTING.md). Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md). Security reports: [`SECURITY.md`](SECURITY.md).
 
-## Quick start
+## Desktop app
+
+clawdyX.app is the control panel: first-run setup, Start/Stop, sessions, jobs and processes, monitors, settings and diagnostics, plus a menu-bar item. It does not run the bot itself. The bot runs in a small background worker (a LaunchAgent that starts at login), so closing the window or quitting the app never stops Telegram. The app talks to the worker over a private Unix socket.
+
+Build and install it from source (macOS 14 or later, Xcode command-line tools, Go, Node.js):
+
+```sh
+make app                                # bin/clawdyX.app (about 30 MB): app + worker + capture helper
+cp -R bin/clawdyX.app /Applications/    # or: make dmg, then drag it to Applications
+open /Applications/clawdyX.app          # the setup wizard runs on first launch
+```
+
+The wizard asks for the bot token, your Telegram ID (or detects it from a message you send to the bot), checks Claude Code, lets you pick a project folder, then installs and starts the worker. If you already run the standalone worker (`make start`), the app offers **Use the app's worker** on the Overview page; settings, sessions and the token are kept.
+
+| Screen | What it does |
+| --- | --- |
+| Overview | worker, bot, Telegram and Claude status; Start/Stop bot; active session; running jobs |
+| Telegram | token (masked, replace with a test first), allowed users and roles, detect an ID from a message, connection counters |
+| Sessions | new, new and forget, fresh context, switch, rename, archive, restore, forget (optionally delete the Claude Code history), tier/model/effort of the active session |
+| Jobs & processes | bot-owned Claude processes with memory and CPU, recent jobs with activity and result, other Claude Code sessions on the Mac |
+| Monitors | every display, capture one or all, preview, send a capture to Claude, the screen switch, permission help |
+| Settings | appearance, open at login, defaults, workspaces, limits, features, retention, the background worker |
+| Diagnostics | health checks with fixes, the redacted log, a sanitized report you preview before saving |
+
+Closing the window hides it; the menu-bar item stays. **Quit clawdyX** asks whether to stop the bot too. ⌘1–7 switch screens, ⌘R refreshes.
+
+The app is ad-hoc signed when built locally, so macOS opens it without a Gatekeeper prompt on the Mac that built it. To share it, sign it with a Developer ID and notarize it (see `docs/RUNBOOK.md`). Screen Recording and Accessibility grants belong to the app; grant them to **clawdyX** in System Settings.
+
+## Quick start (without the app)
 
 Requirements: macOS (tested on Apple silicon), Go 1.27 or newer, and Claude Code installed and logged in (`claude` works in your terminal). Create a bot with @BotFather in Telegram and keep its token ready.
 
 ```sh
-make setup      # asks for the token, your Telegram ID and a project folder; writes ~/.config/clawdyx (private); runs the checks
-make start      # runs the bot in the background now and at every login
+make setup      # asks for the token, your Telegram ID and a project folder; stores the token in the Keychain; runs the checks
+make start      # runs the bot in the background now and at every login (from ~/go/bin/clawdyx)
 ```
 
 Then open Telegram and send `/start` to your bot.

@@ -30,3 +30,10 @@ coverage.out
 .vscode/
 *.swp
 .claude/settings.local.json
+
+# Desktop app build output
+desktop/frontend/node_modules/
+desktop/frontend/dist/
+*.dmg
+*.app/
+desktop/desktop

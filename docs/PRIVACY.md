@@ -14,6 +14,10 @@ clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics,
 | Claude transcripts | `~/.claude/projects/…` | owned by Claude Code | Claude Code keeps these under its own retention (`cleanupPeriodDays`, 30 days by default). clawdyX sets `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` for its jobs so prompts are not also added to Claude Code's global prompt history |
 | Screenshots | memory only | — | see below |
 
+## The desktop app
+
+The app stores only per-window conveniences (appearance, last screen) in its own web storage. It reads status from the worker over a Unix socket that only your macOS user can open, and shows the bot token only as its last four characters. A diagnostic report is shown in full before it is saved; tokens are removed, home paths shortened, Telegram IDs left out unless you tick the box, and screenshots are never included. Captures appear in the app only after you click Capture; they stay in memory.
+
 ## What leaves the Mac
 
 - **To Telegram:** the replies the bot sends to the allowed users' private chats, including Claude's answers, job status, and screenshots that the owner explicitly requested with a command. Telegram stores chat history on its servers under its own terms.

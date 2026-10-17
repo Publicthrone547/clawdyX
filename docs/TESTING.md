@@ -4,6 +4,7 @@
 make test               # go test -race ./...  (no network, no real claude)
 make lint               # gofmt, go vet (+ staticcheck/govulncheck if installed)
 make check-secrets      # fails if a token-shaped string is tracked
+make test-desktop       # desktop module (Go) + frontend type check and Vitest
 ```
 
 ## What the suites cover
@@ -22,6 +23,9 @@ make check-secrets      # fails if a token-shaped string is tracked
 | `internal/screen` | Display ordering (main first) and durable keys, never-upscale JPEG encoding, broker switch/limits/TTL/discard/audit, access state from the last real capture, MCP screenshot on a second display maps clicks to global points, worker authorization before each screenshot |
 | `internal/vault` | Memory store semantics, per-config Keychain accounts. Tests never touch the real Keychain (`TestMain` swaps in a memory store). |
 | `cmd/clawdyx` | Setup stores the token in the vault by default, `-token-file` writes a 0600 file, `-migrate-token` moves it and deletes the file only after a read-back, env > Keychain > file order |
+| `desktop` (Go) | LaunchAgent plist parsing, home-path shortening, only allowlisted links can be opened, diagnostics report redaction, calls fail cleanly when the worker is down |
+| `desktop/frontend` (Vitest) | Secret input masked until shown, status badges always carry a text label, allowlist ID validation, formatting helpers |
+| `internal/setup` | Owner detection keeps private-chat humans only and acknowledges pending updates; workspace and name checks |
 | `internal/render` | Escaping of model output, Markdown conversion, safe links only, chunk limits with balanced code fences |
 
 Unit and end-to-end tests use `internal/agent/testdata/fakeclaude`, a small program that imitates `claude -p` stream-json (2.1.292 shapes), and an `httptest` fake of the Bot API.
@@ -44,6 +48,14 @@ These run eight short prompts against the installed CLI with the bot's real flag
 `TestLiveScreenTools` (with `CLAWDYX_BIN=$PWD/bin/clawdyx`) checks that the real CLI starts the bot's screen MCP server in an automation session and that the screenshot tool is called rather than denied. On this Mac the screenshot succeeded, so one image of the main display was sent to Claude during the test.
 
 Last run: 2026-10-16, CLI 2.1.292, all passed. An image prompt through `--input-format stream-json` (a generated red square) was verified on 2026-10-17: the CLI answered "Red" and exited at end of input.
+
+## Desktop app checks (manual, on the target Mac)
+
+1. Fresh account (or `mv ~/.config/clawdyx ~/.config/clawdyx.bak` and remove the Keychain item): the wizard appears; Continue stays disabled until the token test passes, a valid ID is entered, Claude is logged in and the folder is valid.
+2. Start/Stop on Overview: the badge changes only after the worker confirms; twenty fast clicks never create a second poller (`clawdyx ctl status.get` → `bot.pollStarts`).
+3. Close the window: the process keeps running, the menu-bar item stays, Telegram still answers. Quit → the dialog offers to stop the bot.
+4. Monitors: nothing is captured until a Capture button is clicked; switching screen features off also blocks `/screen` in Telegram.
+5. Keyboard: Tab reaches every control with a visible focus ring; Esc closes dialogs; ⌘1–7 switch screens. VoiceOver reads badges as text.
 
 ## Manual acceptance (needs a real bot token)
 

@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+/* Design tokens. Status colours are always paired with a text label. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --surface: #ffffff;
+  --surface-2: #efefec;
+  --border: #dddcd7;
+  --text: #1c1c1f;
+  --muted: #62626a;
+  --accent: #c2541b;
+  --accent-text: #ffffff;
+  --ok: #1f7a3d;
+  --warn: #8a5a00;
+  --danger: #b42318;
+  --focus: #2563eb;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111216;
+    --surface: #181a20;
+    --surface-2: #20232b;
+    --border: #2d3039;
+    --text: #ececef;
+    --muted: #a0a2ab;
+    --accent: #ff8a3d;
+    --accent-text: #1a1206;
+    --ok: #4ade80;
+    --warn: #fbbf24;
+    --danger: #f87171;
+    --focus: #60a5fa;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111216;
+  --surface: #181a20;
+  --surface-2: #20232b;
+  --border: #2d3039;
+  --text: #ececef;
+  --muted: #a0a2ab;
+  --accent: #ff8a3d;
+  --accent-text: #1a1206;
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --focus: #60a5fa;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--border);
+  --color-fg: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-text);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+html, body, #app { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem; /* 13 pt at default text size; rem scales with the system */
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+input, textarea, select, .selectable, pre, code { user-select: text; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+.drag { --wails-draggable: drag; }
+.nodrag { --wails-draggable: no-drag; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: .4rem;
+  padding: .38rem .8rem; border-radius: 7px; font-weight: 500;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+  transition: background-color .12s, opacity .12s;
+}
+.btn:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-2) 80%, var(--text) 8%); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn-primary { background: var(--accent); color: var(--accent-text); border-color: transparent; }
+.btn-primary:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 88%, black 12%); }
+.btn-danger { background: transparent; color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, transparent); }
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); }
+.btn-ghost { background: transparent; border-color: transparent; }
+.btn-sm { padding: .22rem .55rem; font-size: .75rem; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
+.input {
+  width: 100%; padding: .42rem .6rem; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+}
+.input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
+.label { font-size: .72rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.mono { font-family: var(--font-mono); font-size: .75rem; }
+table.tbl { width: 100%; border-collapse: collapse; }
+table.tbl th { text-align: left; font-size: .7rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: .45rem .6rem; border-bottom: 1px solid var(--border); }
+table.tbl td { padding: .5rem .6rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+table.tbl tr:last-child td { border-bottom: 0; }

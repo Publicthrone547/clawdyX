@@ -10,7 +10,21 @@ All commands run as the logged-in macOS user. Paths:
 | Logs | `~/Library/Logs/clawdyx/` (`bot.log` JSON, rotated 20 MB × 5; `stdout.log`, `stderr.log` from launchd) |
 | LaunchAgent | `~/Library/LaunchAgents/local.clawdyx.plist`, label `local.clawdyx` |
 
-## Install and first run
+## Desktop app
+
+```sh
+make app && cp -R bin/clawdyX.app /Applications/ && open /Applications/clawdyX.app
+make dmg                                    # bin/clawdyX-<version>.dmg with an Applications link
+```
+
+- **First launch:** the wizard writes `~/.config/clawdyx/config.json`, stores the token in the Keychain, and installs the LaunchAgent for the worker inside the app (`/Applications/clawdyX.app/Contents/Helpers/clawdyx`).
+- **Switching from the standalone worker:** Overview → **Use the app's worker** (or `/Applications/clawdyX.app/Contents/Helpers/clawdyx service install`). It re-points the same LaunchAgent (`local.clawdyx`) at the app's worker. To go back: `~/go/bin/clawdyx service install` (note: `make start` also re-points it to `~/go/bin`).
+- **Updating the app:** quit it, replace `/Applications/clawdyX.app`, open it, then Settings → Background worker → Restart (the worker binary inside the app changed).
+- **Permissions:** grant Screen Recording and Accessibility to **clawdyX** (the worker and its capture helper live inside the app). Settings → Background worker shows which program the service runs.
+- **Signing for distribution:** `CLAWDYX_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" CLAWDYX_HARDENED=1 make dmg`, then `xcrun notarytool submit bin/clawdyX-<version>.dmg --keychain-profile <profile> --wait` and `xcrun stapler staple bin/clawdyX-<version>.dmg`. Unsigned or ad-hoc builds downloaded from the internet must be allowed once in System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later no longer offer Control-click → Open).
+- **Uninstall:** Settings → Background worker → Uninstall (optionally delete state and logs), quit the app, move it to the Trash. Remaining: `~/.config/clawdyx/` and the Keychain item `clawdyx` (`security delete-generic-password -s clawdyx`). Claude Code and your projects are never touched.
+
+## Install and first run (CLI)
 
 ```sh
 make setup      # token, your Telegram ID, project folder → ~/.config/clawdyx/{.env,config.json} (0600); then the read-only checks

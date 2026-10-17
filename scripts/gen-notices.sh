@@ -4,8 +4,6 @@
 # npm dependencies). Run from the repository root: scripts/gen-notices.sh
 set -eu
 out=THIRD_PARTY_NOTICES.md
-pkgs="./cmd/clawdyx"
-[ -d desktop ] && pkgs="$pkgs ./desktop"
 {
   echo "# Third-party notices"
   echo
@@ -17,8 +15,13 @@ pkgs="./cmd/clawdyx"
   echo
   echo "| Module | Version | License file |"
   echo "| --- | --- | --- |"
-  # shellcheck disable=SC2086
-  go list -deps -f '{{if and (not .Standard) .Module}}{{if not .Module.Main}}{{.Module.Path}} {{.Module.Version}} {{.Module.Dir}}{{end}}{{end}}' $pkgs | sort -u > /tmp/clawdyx-mods.$$
+  fmt='{{if and (not .Standard) .Module}}{{if not .Module.Main}}{{if not (eq .Module.Path "github.com/Publicthrone547/clawdyX")}}{{.Module.Path}} {{.Module.Version}} {{.Module.Dir}}{{end}}{{end}}{{end}}'
+  {
+    go list -deps -f "$fmt" ./cmd/clawdyx
+    if [ -f desktop/go.mod ]; then
+      (cd desktop && CGO_ENABLED=1 go list -deps -f "$fmt" .)
+    fi
+  } | sort -u > /tmp/clawdyx-mods.$$
   while read -r p v d; do
     lic=$(ls "$d" | grep -i -m1 -E '^(license|licence|copying)' || true)
     echo "| \`$p\` | $v | ${lic:-not found} |"
@@ -49,7 +52,7 @@ pkgs="./cmd/clawdyx"
         rows.push({name,version:p.version,license:p.license||"?",text:lf?fs.readFileSync(path.join(dir,lf),"utf8"):""});
         for(const d of Object.keys(p.dependencies||{})) walk(d);
       }
-      for(const d of Object.keys(pkg.dependencies||{})) walk(d);
+      for(const d of [...Object.keys(pkg.dependencies||{}), "tailwindcss"]) walk(d); // the Tailwind-generated CSS is bundled
       rows.sort((a,b)=>a.name.localeCompare(b.name));
       console.log("| Package | Version | License |\n| --- | --- | --- |");
       for(const r of rows) console.log(`| \`${r.name}\` | ${r.version} | ${r.license} |`);

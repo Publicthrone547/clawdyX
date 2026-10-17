@@ -1,8 +1,10 @@
-BIN   := bin/clawdyx
-GOBIN := $(shell go env GOPATH)/bin
-PKG   := ./...
+BIN     := bin/clawdyx
+GOBIN   := $(shell go env GOPATH)/bin
+PKG     := ./...
+VERSION := 0.3.0
+MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
 
-.PHONY: identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all app dmg helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -36,7 +38,34 @@ doctor: build ## read-only checks: config, token, Claude CLI, auth, Telegram
 
 ## Development
 build:
-	CGO_ENABLED=0 go build -trimpath -o $(BIN) ./cmd/clawdyx
+	CGO_ENABLED=0 go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(BIN) ./cmd/clawdyx
+
+## Desktop app
+app: build helper frontend ## build bin/clawdyX.app (desktop app + worker + capture helper)
+	cd desktop && $(MACENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.version=$(VERSION)" -o ../bin/clawdyX-gui .
+	VERSION=$(VERSION) scripts/bundle.sh
+
+dmg: app ## build bin/clawdyX-$(VERSION).dmg for installing by drag and drop
+	rm -rf bin/dmg && mkdir -p bin/dmg && cp -R bin/clawdyX.app bin/dmg/ && ln -s /Applications bin/dmg/Applications
+	hdiutil create -volname clawdyX -srcfolder bin/dmg -ov -format UDZO bin/clawdyX-$(VERSION).dmg >/dev/null
+	rm -rf bin/dmg && ls -lh bin/clawdyX-$(VERSION).dmg
+
+helper:
+	swiftc -O -parse-as-library -target $$(uname -m)-apple-macos14.0 desktop/helper/main.swift -o bin/clawdyx-screenshot
+
+frontend:
+	cd desktop/frontend && (test -d node_modules || npm ci) && npm run build
+
+bindings: ## regenerate the TypeScript bindings (needs: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30)
+	cd desktop && $(MACENV) wails3 generate bindings -ts -i -d frontend/bindings
+
+dev: build helper ## run the desktop app against a running worker (hot reload needs wails3 dev)
+	cd desktop/frontend && npm run build
+	cd desktop && $(MACENV) CLAWDYX_WORKER=$(CURDIR)/bin/clawdyx go run .
+
+test-desktop:
+	cd desktop && $(MACENV) go vet ./... && go test ./...
+	cd desktop/frontend && npm run typecheck && npm test
 
 test:
 	go test -race $(PKG)
@@ -60,6 +89,8 @@ check-secrets:
 
 check: lint test check-secrets
 
+check-all: check test-desktop ## everything, including the desktop app's tests
+
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh
 
@@ -78,4 +109,4 @@ identities: ## list code-signing identities usable for CLAWDYX_SIGN_IDENTITY
 	@security find-identity -v -p codesigning
 
 clean:
-	rm -rf bin coverage.out
+	rm -rf bin coverage.out desktop/frontend/dist

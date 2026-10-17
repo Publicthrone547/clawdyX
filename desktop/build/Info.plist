@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleName</key><string>clawdyX</string>
+  <key>CFBundleDisplayName</key><string>clawdyX</string>
+  <key>CFBundleExecutable</key><string>clawdyX</string>
+  <key>CFBundleIdentifier</key><string>io.github.publicthrone547.clawdyx.app</string>
+  <key>CFBundleVersion</key><string>__VERSION__</string>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleIconFile</key><string>icons</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSHumanReadableCopyright</key><string>Source-available under the PolyForm Noncommercial License 1.0.0</string>
+  <key>NSScreenCaptureUsageDescription</key><string>clawdyX captures a display only when you ask for it (Monitors, /screen, /look, or Claude's screenshot tool in an automation session you enabled).</string>
+  <key>NSAppleEventsUsageDescription</key><string>clawdyX's automation tier can type text for Claude through System Events when you enable it.</string>
+</dict>
+</plist>
