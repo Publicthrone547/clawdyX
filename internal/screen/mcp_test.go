@@ -11,7 +11,7 @@ import (
 
 type fakeDesk struct{ calls []string }
 
-func (f *fakeDesk) Screenshot(ctx context.Context) (Shot, error) {
+func (f *fakeDesk) Screenshot(ctx context.Context, display string) (Shot, error) {
 	f.calls = append(f.calls, "shot")
 	return Shot{JPEG: []byte{0xff, 0xd8}, Width: 1000, Height: 500, ScreenW: 2000, ScreenH: 1000, Scale: 0.5}, nil
 }
@@ -135,5 +135,35 @@ func TestParseKey(t *testing.T) {
 		if _, _, err := ParseKey(bad); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+}
+
+type offsetDesk struct{ fakeDesk }
+
+func (f *offsetDesk) Screenshot(ctx context.Context, display string) (Shot, error) {
+	f.calls = append(f.calls, "shot "+display)
+	return Shot{JPEG: []byte{0xff, 0xd8}, Width: 960, Height: 540, ScreenW: 1920, ScreenH: 1080, Scale: 0.5, OriginX: -1920, OriginY: -1080, Display: Display{Index: 2, Name: "Side"}}, nil
+}
+
+func TestScreenshotOnSecondDisplayMapsGlobalPoints(t *testing.T) {
+	d := &offsetDesk{}
+	var asked []string
+	s := &Server{D: d, Version: "t", Authorize: func(_ context.Context, disp string) error { asked = append(asked, disp); return nil }}
+	ctx := context.Background()
+	if r := s.call(ctx, "screenshot", []byte(`{"display":2}`)); r.IsError {
+		t.Fatalf("%+v", r)
+	}
+	if r := s.call(ctx, "click", []byte(`{"x":100,"y":50}`)); r.IsError {
+		t.Fatalf("%+v", r)
+	}
+	if d.calls[0] != "shot 2" || d.calls[1] != "click -1720.0,-980.0 left" {
+		t.Fatalf("calls %v", d.calls)
+	}
+	if len(asked) != 1 || asked[0] != "2" {
+		t.Fatalf("authorize %v", asked)
+	}
+	s.Authorize = func(context.Context, string) error { return ErrScreenOff }
+	if r := s.call(ctx, "screenshot", nil); !r.IsError {
+		t.Fatal("screenshot must fail when the worker says no")
 	}
 }

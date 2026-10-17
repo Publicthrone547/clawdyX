@@ -1,9 +1,12 @@
 package telegram
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/png"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +17,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -515,7 +519,7 @@ func TestAutomationModeNeedsConfigAndConfirmation(t *testing.T) {
 
 type fakeDesk struct{}
 
-func (fakeDesk) Screenshot(ctx context.Context) (screen.Shot, error) {
+func (fakeDesk) Screenshot(ctx context.Context, display string) (screen.Shot, error) {
 	return screen.Shot{JPEG: []byte{0xff, 0xd8, 0xff, 0xd9}, Width: 10, Height: 5, Scale: 1}, nil
 }
 func (fakeDesk) Click(context.Context, float64, float64, string, int) error { return nil }
@@ -525,32 +529,19 @@ func (fakeDesk) TypeText(context.Context, string) error                     { re
 func (fakeDesk) PressKey(context.Context, int, uint64) error                { return nil }
 func (fakeDesk) Trusted(context.Context) bool                               { return true }
 
-func TestScreenshotCommand(t *testing.T) {
-	off := start(t)
-	off.tg.push(msg(owner, owner, "private", "/screenshot"))
-	off.tg.waitFor(t, "Screen control is off")
+var fakeCaptures atomic.Int64
 
-	h := startFull(t, func(c *config.Config) { c.Desktop.ScreenControl = true }, nil, fakeDesk{})
-	h.tg.push(msg(42, 42, "private", "/screenshot")) // stranger: nothing
-	h.tg.push(msg(owner, owner, "private", "/screenshot"))
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		n := 0
-		for _, c := range h.tg.sent() {
-			if c.Method == "sendPhoto" {
-				n++
-				if c.Form["chat_id"] != fmt.Sprint(owner) {
-					t.Fatalf("photo sent to %s", c.Form["chat_id"])
-				}
-			}
-		}
-		if n == 1 {
-			return
-		}
-		if n > 1 {
-			t.Fatal("stranger triggered a screenshot")
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatal("no photo sent")
+func (fakeDesk) Displays(context.Context) ([]screen.Display, error) {
+	return []screen.Display{
+		{Index: 1, ID: 4, Key: "AAAAAAAA-main", Name: "Wide", W: 400, H: 200, PixelW: 400, PixelH: 200, Scale: 1, Main: true},
+		{Index: 2, ID: 5, Key: "BBBBBBBB-side", Name: "Side", X: -300, Y: -200, W: 300, H: 200, PixelW: 300, PixelH: 200, Scale: 1},
+	}, nil
+}
+
+func (fakeDesk) CapturePNG(_ context.Context, d screen.Display) ([]byte, error) {
+	fakeCaptures.Add(1)
+	img := image.NewRGBA(image.Rect(0, 0, d.PixelW, d.PixelH))
+	var b bytes.Buffer
+	_ = png.Encode(&b, img)
+	return b.Bytes(), nil
 }

@@ -16,8 +16,9 @@ make check-secrets      # fails if a token-shaped string is tracked
 | `internal/policy` | observe/assisted flag mapping, secret-path deny rules, bypass and automation unreachable, broad allow rules rejected, path traversal, symlink escape, workspace swap |
 | `internal/agent` | No prompt in argv, variadic flags last, env allowlist (no token, API key, nested markers), stream-json parsing, per-message usage dedupe, denials, unparseable lines, SIGINT records a result, ladder escalates to SIGKILL and kills grandchildren, PID-reuse guard, missing transcript, CLI helpers, model probe |
 | `internal/jobs` | Per-session serialisation, positions, cancel queued/waiting/running, queue limit, global concurrency cap, timeout, effort warning resets to auto, missing session, failure mapping, pause, shutdown, recovery kills owned orphans and never re-runs |
-| `internal/telegram` | Control methods: status, bot stop/start (stopped bot ignores updates, 20 concurrent starts → one poller, events in order), sessions create/archive/restore/switch, effort/mode/model validation, jobs, processes, log tail redaction. Silent rejection of other users, group chats, foreign chat IDs, forged callbacks and edited messages; prompt → ack → final answer; duplicate updates; `/model` validation and `fable` as primary model; `/effort`; aliases; cancel button with forged nonce; `/stop all` confirmation with stale/replayed tokens; many commands; draft→edit fallback |
+| `internal/telegram` | Screen commands: disabled in config, `/screens` never captures, `/screen 2` and `/screen all` photos only to the owner, nothing captured at startup, `/screen off` blocks `/look` and is re-enabled only locally; `/look` runs Claude with `--input-format stream-json`; app captures and `screens.use` stay off Telegram. Control methods: status, bot stop/start (stopped bot ignores updates, 20 concurrent starts → one poller, events in order), sessions create/archive/restore/switch, effort/mode/model validation, jobs, processes, log tail redaction. Silent rejection of other users, group chats, foreign chat IDs, forged callbacks and edited messages; prompt → ack → final answer; duplicate updates; `/model` validation and `fable` as primary model; `/effort`; aliases; cancel button with forged nonce; `/stop all` confirmation with stale/replayed tokens; many commands; draft→edit fallback |
 | `internal/control` | Socket 0600 in a 0700 dir, peer-uid rejection, typed errors (invalid params, unknown method, timeout, panic), live-socket takeover refused, oversize and garbage frames, ordered events to several clients, backpressure; `FuzzFrames` |
+| `internal/screen` | Display ordering (main first) and durable keys, never-upscale JPEG encoding, broker switch/limits/TTL/discard/audit, access state from the last real capture, MCP screenshot on a second display maps clicks to global points, worker authorization before each screenshot |
 | `internal/render` | Escaping of model output, Markdown conversion, safe links only, chunk limits with balanced code fences |
 
 Unit and end-to-end tests use `internal/agent/testdata/fakeclaude`, a small program that imitates `claude -p` stream-json (2.1.292 shapes), and an `httptest` fake of the Bot API.
@@ -39,12 +40,13 @@ These run eight short prompts against the installed CLI with the bot's real flag
 
 `TestLiveScreenTools` (with `CLAWDYX_BIN=$PWD/bin/clawdyx`) checks that the real CLI starts the bot's screen MCP server in an automation session and that the screenshot tool is called rather than denied. On this Mac the screenshot succeeded, so one image of the main display was sent to Claude during the test.
 
-Last run: 2026-10-16, CLI 2.1.292, all passed.
+Last run: 2026-10-16, CLI 2.1.292, all passed. An image prompt through `--input-format stream-json` (a generated red square) was verified on 2026-10-17: the CLI answered "Red" and exited at end of input.
 
 ## Manual acceptance (needs a real bot token)
 
 1. From the owner account, `/start`, `/status`, a plain prompt, `/model fable`, `/effort high`, `/stop` during a long prompt.
 2. From a second Telegram account, send messages and press old buttons. Expect no reply and no new rows in `/jobs`.
-3. Add the bot to a group and send `/status` there as the owner. Expect no reply.
-4. `kill -TERM` the bot during a long job and restart it. Expect the "interrupted, not re-run" notice and no duplicate job.
-5. Start a second `clawdyx run`. Expect exit code 3 with "another instance".
+3. `/screens`, `/screen 2`, `/look 2 what is on this screen?`, `/screen off`, then `/screen 2` again (expect the switched-off message).
+4. Add the bot to a group and send `/status` there as the owner. Expect no reply.
+5. `kill -TERM` the bot during a long job and restart it. Expect the "interrupted, not re-run" notice and no duplicate job.
+6. Start a second `clawdyx run`. Expect exit code 3 with "another instance".

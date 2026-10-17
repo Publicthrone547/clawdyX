@@ -334,3 +334,93 @@ type DiagnosticCheck struct {
 	Fix    string `json:"fix,omitempty"`
 	FixURL string `json:"fixUrl,omitempty"` // x-apple.systempreferences: URL the GUI may open
 }
+
+// DisplayInfo is one connected display.
+type DisplayInfo struct {
+	Index   int     `json:"index"`
+	Key     string  `json:"key"`
+	Name    string  `json:"name"`
+	PixelW  int     `json:"pixelW"`
+	PixelH  int     `json:"pixelH"`
+	PointW  float64 `json:"pointW"`
+	PointH  float64 `json:"pointH"`
+	Scale   float64 `json:"scale"`
+	Main    bool    `json:"main"`
+	Builtin bool    `json:"builtin"`
+}
+
+// ScreensInfo is the `screens.list` result. Listing never captures.
+type ScreensInfo struct {
+	Status        ScreenStatus  `json:"status"`
+	Displays      []DisplayInfo `json:"displays"`
+	Error         string        `json:"error,omitempty"`
+	Access        string        `json:"access"` // granted | denied | unknown
+	Held          int           `json:"held"`
+	CapturesToday int           `json:"capturesToday"`
+}
+
+// CaptureParams selects displays: "" or "1" (main), an index, a key prefix, or "all".
+type CaptureParams struct {
+	Display string `json:"display"`
+}
+
+// CaptureInfo is one held capture with its preview JPEG (base64 in JSON).
+type CaptureInfo struct {
+	ID       string      `json:"id"`
+	Display  DisplayInfo `json:"display"`
+	TakenAt  int64       `json:"takenAtMs"`
+	Preview  []byte      `json:"preview"`
+	PreviewW int         `json:"previewW"`
+	PreviewH int         `json:"previewH"`
+	FullW    int         `json:"fullW"`
+	FullH    int         `json:"fullH"`
+	Bytes    int         `json:"bytes"`
+}
+
+// CaptureResult lists captures and a partial-failure message.
+type CaptureResult struct {
+	Captures []CaptureInfo `json:"captures"`
+	Error    string        `json:"error,omitempty"`
+}
+
+// CaptureRefParams names a held capture.
+type CaptureRefParams struct {
+	ID string `json:"id"`
+}
+
+// FullImage is a full-resolution JPEG of a held capture.
+type FullImage struct {
+	JPEG   []byte `json:"jpeg"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// ScreensUseParams sends a held capture to Claude in a session.
+type ScreensUseParams struct {
+	ID      string `json:"id"`
+	Session string `json:"session,omitempty"` // default: active
+	Text    string `json:"text,omitempty"`
+}
+
+// SubmitParams queues a prompt from the desktop app.
+type SubmitParams struct {
+	Session   string `json:"session,omitempty"`
+	Text      string `json:"text"`
+	CaptureID string `json:"captureId,omitempty"`
+}
+
+// SubmitResult reports the queued job.
+type SubmitResult struct {
+	Job      JobInfo `json:"job"`
+	Position int     `json:"position"`
+}
+
+// EnabledParams switches a feature.
+type EnabledParams struct {
+	Enabled bool `json:"enabled"`
+}
+
+// AuthorizeParams is sent by Claude's screen tool before each screenshot.
+type AuthorizeParams struct {
+	Display string `json:"display"`
+}

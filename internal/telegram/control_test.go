@@ -203,9 +203,10 @@ func TestControlSessionsJobsAndSettings(t *testing.T) {
 
 func TestTailLogRedactsAndFilters(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "bot.log")
+	tok := "123456789:" + strings.Repeat("A", 35)
 	content := `{"time":"t1","level":"INFO","msg":"hello","x":"1"}
 not json
-{"time":"t2","level":"WARN","msg":"token 123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA leaked"}
+{"time":"t2","level":"WARN","msg":"token ` + tok + ` leaked"}
 {"time":"t3","level":"DEBUG","msg":"noise"}
 `
 	if err := os.WriteFile(p, []byte(content), 0o600); err != nil {
@@ -222,4 +223,4 @@ not json
 
 func jsonUnmarshal(b []byte, v any) error { return json.Unmarshal(b, v) }
 
-func containsToken(s string) bool { return strings.Contains(s, "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA") }
+func containsToken(s string) bool { return strings.Contains(s, strings.Repeat("A", 35)) }

@@ -52,7 +52,7 @@ const helpText = `<b>Claude control center</b> — send any message to talk to C
 /stop [j-ID|S-ID|all] · /cancel j-ID · /jobs [n] · /logs j-ID [lines]
 <b>Machine</b>
 /processes · /usage · /doctor · /open youtube.com — open a website in the Mac's browser
-/screenshot — photo of the Mac's screen (when screen control is enabled)
+/screens — list displays · /screen [N|all] — photo of display N · /look [N] [question] — ask Claude about display N · /screen off
 <b>Bot</b>
 /pause · /start (resume) · /confirm TOKEN · /deny TOKEN`
 
@@ -132,7 +132,11 @@ func (a *App) command(ctx context.Context, m *models.Message, text string) {
 	case "open":
 		a.cmdOpen(m, args)
 	case "screenshot", "screen":
-		a.cmdScreenshot(m)
+		a.cmdScreen(m, args)
+	case "screens":
+		a.cmdScreens(m)
+	case "look":
+		a.cmdLook(m, args)
 	case "doctor":
 		a.cmdDoctor(m)
 	case "pause":
@@ -1258,10 +1262,11 @@ func (a *App) cmdDoctor(m *models.Message) {
 		fmt.Fprintf(&sb, "Child environment (names only): %s\n", Esc(strings.Join(names, ", ")))
 		fmt.Fprintf(&sb, "Settings sources for jobs: %s · strict MCP: %v · bypass/auto disabled via --settings\n", Esc(a.cfg.Claude.SettingSources), a.cfg.Claude.StrictMCPConfig)
 		if a.cfg.Desktop.ScreenControl {
-			_, shotErr := a.desktop.Screenshot(ctx)
-			fmt.Fprintf(&sb, "%s Screen Recording permission (screenshots)\n", ok(shotErr == nil))
+			acc, _ := a.broker.Access()
+			granted := acc != "denied"
+			fmt.Fprintf(&sb, "%s Screen Recording permission: %s (from the last capture) · screen features %s\n", ok(granted), acc, map[bool]string{true: "on", false: "switched off"}[a.ScreenOn()])
 			fmt.Fprintf(&sb, "%s Accessibility permission (mouse and keyboard)\n", ok(a.desktop.Trusted(ctx)))
-			if shotErr != nil || !a.desktop.Trusted(ctx) {
+			if !granted || !a.desktop.Trusted(ctx) {
 				sb.WriteString("   → Grant both to the app that runs clawdyx (Terminal/iTerm when run by hand, the clawdyx binary under launchd) in System Settings → Privacy & Security, then restart the bot.\n")
 			}
 		}

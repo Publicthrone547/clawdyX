@@ -190,6 +190,7 @@ func (a *App) RegisterControl(srv *control.Server) {
 		return tailLog(filepath.Join(a.cfg.LogDir, "bot.log"), p)
 	}))
 	h("diagnostics.run", 150*time.Second, typed(func(ctx context.Context, _ none) (any, error) { return a.diagnostics(ctx), nil }))
+	a.registerScreenControl(srv)
 }
 
 func sessionErr(err error) error {
@@ -229,7 +230,7 @@ func (a *App) Status() control.Status {
 		LastError:   lastErr,
 		LastErrorAt: unixTime(lastErrAt),
 		Jobs:        control.JobCounts{MaxConcurrent: a.cfg.Claude.MaxConcurrentJobs},
-		Screen:      a.screenStatus(),
+		Screen:      control.ScreenStatus(a.screenStatus()),
 	}
 	for _, x := range a.jobs.ActiveJobs() {
 		if x.State == store.JobQueued {
@@ -245,10 +246,6 @@ func (a *App) Status() control.Status {
 }
 
 func (a *App) allowedCount() int { return 1 }
-
-func (a *App) screenStatus() control.ScreenStatus {
-	return control.ScreenStatus{Configured: a.cfg.Desktop.ScreenControl, Enabled: a.cfg.Desktop.ScreenControl}
-}
 
 // tokenHint is a masked fingerprint: the last four characters only.
 func tokenHint(tok string) string {
@@ -591,15 +588,14 @@ func tailLog(path string, p control.LogTailParams) ([]control.LogLine, error) {
 // diagnostics runs the read-only health checks behind the app's Diagnostics page.
 func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	var (
-		wg             sync.WaitGroup
-		ver            string
-		verErr, auErr  error
-		auth           agent.AuthInfo
-		meErr          error
-		botName        string
-		webhookSet     bool
-		screenOK, scKn bool
-		trusted        bool
+		wg            sync.WaitGroup
+		ver           string
+		verErr, auErr error
+		auth          agent.AuthInfo
+		meErr         error
+		botName       string
+		webhookSet    bool
+		trusted       bool
 	)
 	wg.Add(4)
 	go func() { defer wg.Done(); ver, verErr = a.cli.Version(ctx) }()
@@ -618,11 +614,6 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	go func() {
 		defer wg.Done()
 		if a.cfg.Desktop.ScreenControl {
-			if p, ok := a.desktop.(interface {
-				ScreenAccess(context.Context) (bool, bool)
-			}); ok {
-				screenOK, scKn = p.ScreenAccess(ctx)
-			}
 			trusted = a.desktop.Trusted(ctx)
 		}
 	}()
@@ -667,14 +658,17 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	add(control.DiagnosticCheck{ID: "db", Label: "State database", OK: dbErr == nil, Detail: map[bool]string{true: "integrity ok", false: "integrity check failed"}[dbErr == nil],
 		Fix: map[bool]string{true: "", false: "Stop the worker and restore a backup (see the runbook)."}[dbErr == nil]})
 	if a.cfg.Desktop.ScreenControl {
-		c := control.DiagnosticCheck{ID: "screen", Label: "Screen Recording permission", OK: screenOK, FixURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"}
-		switch {
-		case screenOK:
-			c.Detail = "granted (inferred from window titles, without capturing)"
-		case !scKn:
-			c.Detail, c.Warn = "unknown (no other windows on screen to test with)", true
+		c := control.DiagnosticCheck{ID: "screen", Label: "Screen Recording permission", FixURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"}
+		switch acc, at := a.broker.Access(); acc {
+		case "granted":
+			c.OK, c.Detail = true, "granted (last capture "+ago(at)+")"
+		case "denied":
+			c.Detail, c.Fix = "not granted (last attempt "+ago(at)+")", "Grant Screen Recording to the clawdyX worker binary, then restart the worker. macOS ties the grant to the binary, so grant it again after each rebuild unless the binary is signed with a stable identity."
 		default:
-			c.Detail, c.Fix = "not granted", "Grant Screen Recording to the clawdyX worker, then restart it."
+			c.Warn, c.Detail = true, "unknown until the first capture (checking would need a capture)"
+		}
+		if !a.ScreenOn() {
+			c.Detail += " · screen features switched off"
 		}
 		add(c)
 		add(control.DiagnosticCheck{ID: "accessibility", Label: "Accessibility permission (mouse and keyboard tools)", OK: trusted,

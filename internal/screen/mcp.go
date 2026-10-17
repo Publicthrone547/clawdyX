@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -16,6 +17,9 @@ import (
 type Server struct {
 	D       Desktop
 	Version string
+	// Authorize, when set, asks the worker whether a capture is allowed now
+	// (screen features switched off, permission) and records it.
+	Authorize func(ctx context.Context, display string) error
 
 	mu   sync.Mutex
 	last *Shot // last screenshot, used to map image pixels to screen points
@@ -65,8 +69,8 @@ var num = map[string]any{"type": "number"}
 // Tools is the advertised tool list.
 func Tools() []map[string]any {
 	return []map[string]any{
-		{"name": "screenshot", "description": "Take a screenshot of the Mac's main display. Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for other tools are pixels in the most recent screenshot.",
-			"inputSchema": obj(map[string]any{})},
+		{"name": "screenshot", "description": "Take a screenshot of one of the Mac's displays (display 1 is the main display; omit display for it). Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for the other tools are pixels in the most recent screenshot, on the display it shows.",
+			"inputSchema": obj(map[string]any{"display": map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "1 = main display (default), 2… = other displays"}})},
 		{"name": "click", "description": "Click at a point given in pixels of the most recent screenshot.",
 			"inputSchema": obj(map[string]any{"x": num, "y": num,
 				"button": map[string]any{"type": "string", "enum": []string{"left", "right"}},
@@ -153,7 +157,7 @@ func (s *Server) toScreen(x, y float64) (float64, float64, error) {
 	if math.IsNaN(x) || math.IsNaN(y) || x < 0 || y < 0 || x >= float64(s.last.Width) || y >= float64(s.last.Height) {
 		return 0, 0, fmt.Errorf("point (%.0f, %.0f) is outside the %dx%d screenshot", x, y, s.last.Width, s.last.Height)
 	}
-	return x / s.last.Scale, y / s.last.Scale, nil
+	return s.last.OriginX + x/s.last.Scale, s.last.OriginY + y/s.last.Scale, nil
 }
 
 func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) toolResult {
@@ -166,6 +170,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		Text      *string
 		Key       string
 		Seconds   float64
+		Display   int
 	}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &a); err != nil {
@@ -180,7 +185,16 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 	}
 	switch name {
 	case "screenshot":
-		shot, err := s.D.Screenshot(ctx)
+		sel := ""
+		if a.Display > 0 {
+			sel = strconv.Itoa(a.Display)
+		}
+		if s.Authorize != nil {
+			if err := s.Authorize(ctx, sel); err != nil {
+				return fail("screenshot not allowed: %v", err)
+			}
+		}
+		shot, err := s.D.Screenshot(ctx, sel)
 		if err != nil {
 			return fail("screenshot failed: %v", err)
 		}
@@ -189,7 +203,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		s.mu.Unlock()
 		return toolResult{Content: []content{
 			{Type: "image", Data: base64.StdEncoding.EncodeToString(shot.JPEG), MimeType: "image/jpeg"},
-			{Type: "text", Text: fmt.Sprintf("Main display screenshot, %dx%d pixels (screen %.0fx%.0f points). Use these pixel coordinates with click, scroll and move_mouse.", shot.Width, shot.Height, shot.ScreenW, shot.ScreenH)},
+			{Type: "text", Text: fmt.Sprintf("Screenshot of display %s, %dx%d pixels (display %.0fx%.0f points). Use these pixel coordinates with click, scroll and move_mouse; they act on this display.", displayName(shot.Display), shot.Width, shot.Height, shot.ScreenW, shot.ScreenH)},
 		}}
 	case "click":
 		x, y, err := point()
@@ -283,4 +297,15 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		return okText("Waited.")
 	}
 	return fail("unknown tool %q", name)
+}
+
+func displayName(d Display) string {
+	if d.Index == 0 {
+		return "1 (main)"
+	}
+	n := strconv.Itoa(d.Index) + " (" + d.Name
+	if d.Main {
+		n += ", main"
+	}
+	return n + ")"
 }

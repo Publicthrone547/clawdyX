@@ -36,6 +36,7 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | Claude settings | `/model [name\|alias\|reset] [--default]` `/effort [low\|medium\|high\|xhigh\|max\|auto] [--default]` `/mode observe\|assisted` `/aliases` `/alias set fast haiku` |
 | Jobs | `/stop [j-ID\|S-ID\|all]` `/cancel j-ID` `/jobs [n]` `/logs j-ID [lines]` |
 | Machine | `/processes` `/usage` `/doctor` `/open youtube.com` (opens a website in the Mac's browser; typed by you, never by Claude) |
+| Screens | `/screens` (list displays, no capture) · `/screen 2` · `/screen all` (photos sent only to you) · `/look 2 what is wrong here?` (Claude looks at display 2) · `/screen off` |
 | Bot | `/start` (resume) `/pause` `/confirm` `/deny` `/shutdown` (disabled by default) |
 
 `/model fable` sets the **primary** model (`fable` resolves to `claude-fable-5-1` on CLI 2.1.292). Every model change is validated with a one-turn probe before it is saved. The separate `--advisor` model is never touched.
@@ -50,15 +51,23 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 
 Automation requires `"modes": {"automation_enabled": true}` in config.json and a confirmation button for each session (`/mode automation`). `/mode observe` switches back.
 
-### Screen control (opt-in)
+### Screens and screen control (opt-in)
 
-With `"desktop": {"screen_control": true}`, automation sessions also get screen tools from the bot's own MCP server (`clawdyx mcp-screen`): `screenshot`, `click`, `move_mouse`, `scroll`, `type_text`, `press_key`, `wait`. Claude takes a screenshot, decides where to click or what to type, then checks the next screenshot. `/screenshot` sends you a photo of the screen in Telegram.
+With `"desktop": {"screen_control": true}` in config.json:
 
-- **What gets sent:** screenshots of the main display go to Claude like any other prompt content. Screen tools exist only in automation sessions.
+- **`/screens`** lists every connected display (number, name, resolution). It never captures.
+- **`/screen N`** sends you a photo of display N (1 is the main display); **`/screen all`** sends one photo per display. Photos go only to the private chat that asked.
+- **`/look N question`** captures display N and asks Claude about it in the active session. The image goes to Claude as part of the prompt (in memory, through Claude Code's normal request flow) and is not stored.
+- **Automation sessions** also get screen tools from the bot's own MCP server (`clawdyx mcp-screen`): `screenshot` (optional `display` number), `click`, `move_mouse`, `scroll`, `type_text`, `press_key`, `wait`. Before each screenshot the tool asks the worker whether screen features are still on.
+- **`/screen off`** switches every capture path off at once (Telegram, the desktop app, Claude's screenshot tool). It can be switched on again only from the Mac: the clawdyX app, or `clawdyx ctl screens.enabled.set '{"enabled":true}'`.
+
+Nothing is captured at startup or on a timer. Captures stay in memory for at most five minutes; every capture is recorded in the audit table (display, size, destination; never pixels).
+
 - **Safety:** Claude Code's auto-mode classifier still reviews each action. An added system prompt tells Claude to treat on-screen content as untrusted. It must not type passwords or payment details, buy, send messages, change settings or approve dialogs unless you asked for that exact action.
-- **macOS permissions:** grant Screen Recording (screenshots) and Accessibility (mouse/keyboard) in System Settings → Privacy & Security, to the app that runs the bot: your terminal app when run by hand, or the `clawdyx` binary under launchd. Typing also needs Automation permission for System Events. `/doctor` reports what the bot process can do. Claude's tools run under the `claude` process, which can have different grants.
+- **macOS permissions:** grant Screen Recording (captures) and Accessibility (mouse/keyboard) in System Settings → Privacy & Security to the program that runs the bot: your terminal app when run by hand, or the `clawdyx` binary under launchd. Typing also needs Automation permission for System Events. `/doctor` and `clawdyx ctl diagnostics.run` report what the worker can do; Screen Recording is reported from the last real capture, because macOS offers no reliable way to check it without capturing.
+- **Monthly reminder:** macOS 15 and later ask about once a month whether a program may keep capturing the screen without the system picker. The dialog appears on the Mac; until someone answers it there, captures from Telegram fail with a timeout.
 - **Rebuilds:** macOS ties these grants to the binary's signature, so rebuilding `clawdyx` may require granting them again.
-- **Limits:** clicks are coordinate-based, so expect occasional misses. Only the main display is captured.
+- **Limits:** clicks are coordinate-based, so expect occasional misses.
 
 Every job also passes `--settings` that disables bypass and auto modes and blocks file-tool reads outside the working directory. Secret locations are denied in every tier: `~/.ssh`, `~/.aws`, `~/.config`, `~/.claude`, keychains, and browser profiles. One consequence is that Claude Code's auto-memory cannot write under `~/.claude`. Claude reports those writes as denied and carries on.
 

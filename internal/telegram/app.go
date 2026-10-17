@@ -77,6 +77,8 @@ type App struct {
 	shutdownOnce      sync.Once
 
 	poll        poller
+	broker      *screen.Broker
+	quiet       quietJobs
 	events      atomic.Pointer[func(typ string, data any)]
 	nameMu      sync.Mutex
 	botUsername string
@@ -114,6 +116,8 @@ type Options struct {
 	Opener func(ctx context.Context, app, url string) error
 	// Desktop takes screenshots for /screenshot (replaceable in tests).
 	Desktop screen.Desktop
+	// Screens enumerates and captures displays (default: Desktop if it can).
+	Screens screen.Provider
 }
 
 // New builds the app and connects to Telegram (getMe).
@@ -167,6 +171,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 	if a.desktop == nil {
 		a.desktop = screen.Mac{TmpDir: os.TempDir()}
 	}
+	a.initScreens(opt.Screens)
 	return a, nil
 }
 
@@ -286,7 +291,9 @@ func (a *App) registerCommands() {
 		{Command: "aliases", Description: "Custom model aliases"},
 		{Command: "doctor", Description: "Read-only diagnostics"},
 		{Command: "open", Description: "Open a website in the Mac's browser: /open youtube.com"},
-		{Command: "screenshot", Description: "Photo of the Mac's screen (needs screen_control)"},
+		{Command: "screens", Description: "List the Mac's displays"},
+		{Command: "screen", Description: "Photo of a display: /screen 2 · /screen all · /screen off"},
+		{Command: "look", Description: "Ask Claude about a display: /look 2 what is wrong?"},
 		{Command: "pause", Description: "Stop accepting new prompts"},
 		{Command: "start", Description: "Menu; resume after /pause"},
 	}

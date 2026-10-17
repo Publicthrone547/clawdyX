@@ -102,6 +102,20 @@ func main() {
 		// Started by claude (via --mcp-config) for automation sessions with
 		// screen control. Speaks MCP on stdin/stdout.
 		srv := &screen.Server{D: screen.Mac{TmpDir: os.TempDir()}, Version: version}
+		if sock := os.Getenv("CLAWDYX_CONTROL_SOCKET"); sock != "" {
+			// Ask the worker before every screenshot: the owner may have
+			// switched screen features off since this job started.
+			srv.Authorize = func(ctx context.Context, display string) error {
+				cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				defer cancel()
+				c, err := control.Dial(cctx, sock)
+				if err != nil {
+					return errors.New("the clawdyx worker is not reachable")
+				}
+				defer c.Close()
+				return c.Call(cctx, "screens.authorize", control.AuthorizeParams{Display: display}, nil)
+			}
+		}
 		if err := srv.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {
 			os.Exit(exitError)
 		}

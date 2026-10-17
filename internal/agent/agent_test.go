@@ -275,3 +275,44 @@ func TestBuildArgsScreenMCP(t *testing.T) {
 		t.Fatalf("args %q", args)
 	}
 }
+
+func TestStdinPayloadWithImages(t *testing.T) {
+	s := Spec{Prompt: "what is this?"}
+	if p, _ := StdinPayload(s); p != "what is this?" {
+		t.Fatal("plain prompt must be passed as is")
+	}
+	s.Images = []Image{{MediaType: "image/jpeg", Data: []byte{1, 2, 3}}}
+	p, err := StdinPayload(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m struct {
+		Type    string
+		Message struct {
+			Role    string
+			Content []map[string]any
+		}
+	}
+	if err := json.Unmarshal([]byte(p), &m); err != nil || m.Type != "user" || len(m.Message.Content) != 2 {
+		t.Fatalf("%v %+v", err, m)
+	}
+	if m.Message.Content[0]["type"] != "image" || m.Message.Content[1]["text"] != "what is this?" {
+		t.Fatalf("content order %+v", m.Message.Content)
+	}
+	if !strings.HasSuffix(p, "\n") {
+		t.Fatal("stream-json line must end with a newline")
+	}
+	args := strings.Join(BuildArgs(Spec{Flags: s.Flags, Images: s.Images, ClaudeSessionID: "u"}), " ")
+	if !strings.Contains(args, "--input-format stream-json") {
+		t.Fatal("images need --input-format stream-json")
+	}
+	if strings.Contains(strings.Join(BuildArgs(Spec{ClaudeSessionID: "u"}), " "), "--input-format") {
+		t.Fatal("plain prompts must not switch input format")
+	}
+	if _, err := StdinPayload(Spec{Images: []Image{{MediaType: "image/gif"}}}); err == nil {
+		t.Fatal("unsupported type accepted")
+	}
+	if _, err := StdinPayload(Spec{Images: []Image{{MediaType: "image/png", Data: make([]byte, 8<<20)}}}); err == nil {
+		t.Fatal("oversize input accepted")
+	}
+}

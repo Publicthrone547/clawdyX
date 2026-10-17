@@ -1,4 +1,4 @@
-// Package screen gives Claude eyes and hands on the Mac's main display:
+// Package screen gives Claude eyes and hands on the Mac's displays:
 // screenshots, mouse clicks, typing, key presses and scrolling. It is served
 // to Claude Code as an MCP server (`clawdyx mcp-screen`) and is only
 // enabled for automation-tier sessions when desktop.screen_control is true.
@@ -9,13 +9,14 @@
 package screen
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"image/png"
 	"math"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -33,16 +34,19 @@ const MaxImageEdge = 1456
 
 // Shot is a screenshot scaled for the model.
 type Shot struct {
-	JPEG          []byte
-	Width, Height int     // image size in pixels
-	ScreenW       float64 // main display size in points
-	ScreenH       float64
-	Scale         float64 // image pixels per screen point
+	JPEG             []byte
+	Width, Height    int     // image size in pixels
+	ScreenW          float64 // display size in points
+	ScreenH          float64
+	Scale            float64 // image pixels per screen point
+	OriginX, OriginY float64 // display origin in global points (0,0 for the main display)
+	Display          Display
 }
 
 // Desktop performs the actions. Coordinates are screen points.
 type Desktop interface {
-	Screenshot(ctx context.Context) (Shot, error)
+	// Screenshot captures one display ("" or "1" = main; see Select).
+	Screenshot(ctx context.Context, display string) (Shot, error)
 	Click(ctx context.Context, x, y float64, button string, count int) error
 	Move(ctx context.Context, x, y float64) error
 	Scroll(ctx context.Context, x, y float64, dx, dy int) error
@@ -78,8 +82,6 @@ func jxa(ctx context.Context, script string, argv ...string) (string, error) {
 	args := append([]string{"-l", "JavaScript", "-e", script, "--"}, argv...)
 	return run(ctx, 15*time.Second, "/usr/bin/osascript", args...)
 }
-
-const jsBounds = `function run(argv){ ObjC.import("CoreGraphics"); var b=$.CGDisplayBounds($.CGMainDisplayID()); return b.size.width+"x"+b.size.height }`
 
 const jsTrusted = `function run(argv){ ObjC.import("ApplicationServices"); return String($.AXIsProcessTrusted()) }`
 
@@ -117,54 +119,32 @@ const jsKey = `function run(argv){
 
 const jsType = `function run(argv){ var se=Application("System Events"); se.keystroke(argv[0]); return "ok" }`
 
-func (m Mac) bounds(ctx context.Context) (float64, float64, error) {
-	out, err := jxa(ctx, jsBounds)
-	if err != nil {
-		return 0, 0, fmt.Errorf("display size: %w", err)
-	}
-	w, h, ok := strings.Cut(out, "x")
-	if !ok {
-		return 0, 0, fmt.Errorf("display size: unexpected %q", out)
-	}
-	fw, err1 := strconv.ParseFloat(w, 64)
-	fh, err2 := strconv.ParseFloat(h, 64)
-	if err1 != nil || err2 != nil || fw <= 0 || fh <= 0 {
-		return 0, 0, fmt.Errorf("display size: unexpected %q", out)
-	}
-	return fw, fh, nil
-}
-
-// Screenshot captures the main display and scales it so the long edge is at
-// most MaxImageEdge pixels (and never above the display's size in points).
-func (m Mac) Screenshot(ctx context.Context) (Shot, error) {
-	sw, sh, err := m.bounds(ctx)
+// Screenshot captures one display and scales it so the long edge is at most
+// MaxImageEdge pixels and never above the display's size in points.
+func (m Mac) Screenshot(ctx context.Context, display string) (Shot, error) {
+	ds, err := m.Displays(ctx)
 	if err != nil {
 		return Shot{}, err
 	}
-	dir, err := os.MkdirTemp(m.TmpDir, "shot")
+	d, err := Select(ds, display)
 	if err != nil {
 		return Shot{}, err
 	}
-	defer os.RemoveAll(dir)
-	raw := filepath.Join(dir, "raw.png")
-	if out, err := run(ctx, 20*time.Second, "/usr/sbin/screencapture", "-x", "-m", "-t", "png", raw); err != nil {
-		if strings.Contains(out, "could not create image") {
-			return Shot{}, ErrNoScreenRecording
-		}
-		return Shot{}, fmt.Errorf("screencapture: %v", err)
-	}
-	scale := math.Min(1, MaxImageEdge/math.Max(sw, sh))
-	w, h := int(math.Round(sw*scale)), int(math.Round(sh*scale))
-	jpg := filepath.Join(dir, "shot.jpg")
-	if _, err := run(ctx, 20*time.Second, "/usr/bin/sips", "-s", "format", "jpeg", "-s", "formatOptions", "70",
-		"-z", strconv.Itoa(h), strconv.Itoa(w), raw, "--out", jpg); err != nil {
-		return Shot{}, fmt.Errorf("resize: %v", err)
-	}
-	b, err := os.ReadFile(jpg)
+	raw, err := m.CapturePNG(ctx, d)
 	if err != nil {
 		return Shot{}, err
 	}
-	return Shot{JPEG: b, Width: w, Height: h, ScreenW: sw, ScreenH: sh, Scale: scale}, nil
+	src, err := png.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return Shot{}, fmt.Errorf("decode capture: %w", err)
+	}
+	scale := math.Min(1, MaxImageEdge/math.Max(d.W, d.H))
+	w, h := int(math.Round(d.W*scale)), int(math.Round(d.H*scale))
+	enc, err := EncodeJPEGSize(src, w, h, 70)
+	if err != nil {
+		return Shot{}, err
+	}
+	return Shot{JPEG: enc.JPEG, Width: w, Height: h, ScreenW: d.W, ScreenH: d.H, Scale: scale, OriginX: d.X, OriginY: d.Y, Display: d}, nil
 }
 
 // Trusted reports whether macOS accepts synthetic input from this process.
@@ -267,38 +247,4 @@ func ParseKey(combo string) (int, uint64, error) {
 		return 0, 0, fmt.Errorf("unknown key %q", k)
 	}
 	return code, flags, nil
-}
-
-// jsScreenAccess infers Screen Recording permission without capturing:
-// without it, macOS hides the titles of other processes' windows.
-const jsScreenAccess = `function run(argv){
- ObjC.import("CoreGraphics"); ObjC.import("Foundation");
- var arr = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
- var n = arr.count, named = 0, other = 0, me = $.NSProcessInfo.processInfo.processIdentifier;
- for (var i=0;i<n;i++){ var d = arr.objectAtIndex(i);
-   var pid = d.objectForKey("kCGWindowOwnerPID").intValue;
-   var owner = ObjC.unwrap(d.objectForKey("kCGWindowOwnerName"));
-   if (pid == me || owner == "Window Server" || owner == "Dock" || owner == "osascript") continue;
-   other++;
-   var nm = d.objectForKey("kCGWindowName");
-   if (nm && nm.js !== undefined && ObjC.unwrap(nm)) named++;
- }
- return other + " " + named;
-}`
-
-// ScreenAccess reports (granted, known). known is false when no other
-// window is on screen to infer the permission from.
-func (m Mac) ScreenAccess(ctx context.Context) (bool, bool) {
-	out, err := jxa(ctx, jsScreenAccess)
-	if err != nil {
-		return false, false
-	}
-	var other, named int
-	if _, err := fmt.Sscanf(out, "%d %d", &other, &named); err != nil {
-		return false, false
-	}
-	if named > 0 {
-		return true, true
-	}
-	return false, other > 0
 }

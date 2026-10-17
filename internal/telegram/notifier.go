@@ -82,6 +82,9 @@ func header(j *store.Job, s *store.Session) string {
 // JobQueued implements jobs.Notifier: the acknowledgement message.
 func (a *App) JobQueued(j *store.Job, s *store.Session, position int) {
 	a.emit("job.queued", map[string]any{"job": jobInfo(j, true), "position": position})
+	if a.quiet.has(j.ID) {
+		return
+	}
 	st := &stream{jobID: j.ID, replyTo: j.TgMessageID, nonce: nonce(), header: header(j, s), draftOK: true}
 	a.streams.put(st)
 	state := "queued"
@@ -204,7 +207,16 @@ var stateIcon = map[string]string{
 
 // JobFinished implements jobs.Notifier.
 func (a *App) JobFinished(j *store.Job, s *store.Session, o jobs.Outcome) {
-	a.emit("job.finished", map[string]any{"job": jobInfo(j, false), "state": o.State, "durationMs": o.Duration.Milliseconds(), "error": o.ErrorMessage})
+	text := o.Text
+	if len(text) > 200<<10 {
+		text = text[:200<<10]
+	}
+	a.emit("job.finished", map[string]any{"job": jobInfo(j, false), "state": o.State, "durationMs": o.Duration.Milliseconds(), "error": o.ErrorMessage,
+		"text": a.hidePaths(text, s), "denials": o.Denials})
+	if a.quiet.has(j.ID) {
+		a.quiet.drop(j.ID)
+		return
+	}
 	st := a.streams.get(j.ID)
 	a.streams.drop(j.ID)
 	replyTo := j.TgMessageID

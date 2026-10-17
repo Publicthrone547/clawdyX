@@ -3,6 +3,8 @@ package agent
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -36,6 +38,42 @@ type Spec struct {
 	Env             []string // full child environment
 	MCPConfig       string   // JSON for --mcp-config (only servers the bot provides)
 	AppendSystem    string   // text for --append-system-prompt
+	// Images are sent with the prompt as base64 content blocks through
+	// --input-format stream-json (one user message, then end of input).
+	Images []Image
+}
+
+// Image is one image attached to a prompt.
+type Image struct {
+	MediaType string // image/jpeg or image/png
+	Data      []byte
+}
+
+// MaxStdinBytes is Claude Code's documented cap for piped input.
+const MaxStdinBytes = 10 << 20
+
+// StdinPayload returns what is written to the child's stdin.
+func StdinPayload(s Spec) (string, error) {
+	if len(s.Images) == 0 {
+		return s.Prompt, nil
+	}
+	content := make([]map[string]any, 0, len(s.Images)+1)
+	for _, im := range s.Images {
+		if im.MediaType != "image/jpeg" && im.MediaType != "image/png" {
+			return "", fmt.Errorf("agent: unsupported image type %q", im.MediaType)
+		}
+		content = append(content, map[string]any{"type": "image", "source": map[string]any{
+			"type": "base64", "media_type": im.MediaType, "data": base64.StdEncoding.EncodeToString(im.Data)}})
+	}
+	content = append(content, map[string]any{"type": "text", "text": s.Prompt})
+	b, err := json.Marshal(map[string]any{"type": "user", "message": map[string]any{"role": "user", "content": content}})
+	if err != nil {
+		return "", err
+	}
+	if len(b) > MaxStdinBytes-1 {
+		return "", fmt.Errorf("agent: prompt with images is %d bytes, above the %d-byte input limit", len(b), MaxStdinBytes)
+	}
+	return string(b) + "\n", nil
 }
 
 // BuildArgs returns the argv (without the binary) for a job. The prompt is
@@ -43,6 +81,9 @@ type Spec struct {
 func BuildArgs(s Spec) []string {
 	a := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 		"--permission-mode", s.Flags.PermissionMode, "--permission-prompts", "none"}
+	if len(s.Images) > 0 {
+		a = append(a, "--input-format", "stream-json")
+	}
 	if s.Resume {
 		a = append(a, "--resume", s.ClaudeSessionID)
 	} else {
@@ -170,7 +211,11 @@ func Start(s Spec) (*Process, error) {
 	cmd.Dir = s.Dir
 	cmd.Env = s.Env
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Stdin = strings.NewReader(s.Prompt)
+	payload, err := StdinPayload(s)
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stdin = strings.NewReader(payload)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return nil, err

@@ -23,8 +23,10 @@ clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics,
 ## Screen capture
 
 - Disabled by default (`"desktop": {"screen_control": false}`).
-- When enabled, a capture happens only when the owner types a screen command, or when Claude uses the screenshot tool inside an automation-tier session that the owner switched on with a confirmation button. Nothing is captured at startup or on a timer.
-- Images are kept in memory and passed to Telegram or Claude directly. Temporary files used during capture live in a private temporary folder and are deleted immediately.
+- When enabled, a capture happens only when the owner types `/screen` or `/look`, clicks Capture in the desktop app, or when Claude uses the screenshot tool inside an automation-tier session that the owner switched on with a confirmation button. `/screens` only lists displays. Nothing is captured at startup or on a timer.
+- Each display is captured separately and never stitched. Images are kept in memory for at most five minutes (at most six at a time) and passed to Telegram or Claude directly. macOS's `screencapture` can only write files, so each capture passes through a private temporary folder (0700) and is deleted before the image is used. Images are re-encoded, which drops all metadata.
+- Where each capture went is recorded in the audit table (display, size, destination, who asked); pixels are never stored.
+- `/screen off` (or the app's switch) disables every capture path, including Claude's screenshot tool in a running job; only someone at the Mac can switch it on again.
 - macOS asks for Screen Recording permission and, on macOS 15 and later, asks again about once a month. clawdyX cannot grant itself these permissions.
 
 ## Deleting your data
