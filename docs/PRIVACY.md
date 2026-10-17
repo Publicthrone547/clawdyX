@@ -1,6 +1,8 @@
 # Privacy and data handling
 
-clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics, no crash upload and no update check. It talks to exactly two things: Telegram's Bot API (`api.telegram.org`), to receive your messages and send replies, and the Claude Code CLI installed on your Mac, which then talks to Anthropic the same way it does when you use it in Terminal.
+clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics, no crash upload and no automatic update check. It talks to exactly two things: Telegram's Bot API (`api.telegram.org`), to receive your messages and send replies, and the Claude Code CLI installed on your Mac, which then talks to Anthropic the same way it does when you use it in Terminal.
+
+The one exception is a button: **Settings → Check for updates** in the desktop app asks GitHub (`api.github.com`) for the latest clawdyX release, only when you click it. The request carries no account, token or Telegram data; GitHub sees your IP address and the app version in the User-Agent.
 
 ## What is stored where
 

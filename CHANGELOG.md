@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Desktop app shows its version.** The sidebar shows `v<version>` (click it for details). **Settings → About clawdyX** lists the app, worker and Claude Code versions, warns when the worker still runs an older version after an update, and links to this version's release notes and all releases. **Check for updates** asks GitHub for the latest release, only when clicked.
+
 ## 0.3.1 — 2026-10-17
 
 - **Fix: sessions could not be continued.** 0.3.0 started Claude with `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1`. On Claude Code 2.1.292 that variable also stops transcripts from being written, so every follow-up message in a session failed with `error_during_execution`. clawdyX no longer sets it. Sessions started on 0.3.0 have no transcript and cannot be resumed; start them again with `/new`.

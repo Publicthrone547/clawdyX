@@ -103,3 +103,21 @@ export interface SetupState {
     "suggestFolder": string;
     "configPath": string;
 }
+
+/**
+ * UpdateInfo is the result of a manual update check.
+ */
+export interface UpdateInfo {
+    "current": string;
+    "latest": string;
+
+    /**
+     * Latest is newer than Current
+     */
+    "newer": boolean;
+
+    /**
+     * release page of Latest
+     */
+    "url": string;
+}

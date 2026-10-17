@@ -18,5 +18,6 @@ export type {
     FinishResult,
     FolderCheck,
     ServiceInfo,
-    SetupState
+    SetupState,
+    UpdateInfo
 } from "./models.js";

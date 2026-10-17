@@ -191,6 +191,7 @@ var links = map[string]string{
 	"botfather":        "https://t.me/BotFather",
 	"docs":             "https://github.com/Publicthrone547/clawdyX#readme",
 	"license":          "https://polyformproject.org/licenses/noncommercial/1.0.0",
+	"releases":         releasesURL,
 }
 
 // Open opens one of the known links.
@@ -199,8 +200,10 @@ func (s *SystemService) Open(key string) error {
 	if !ok {
 		return fmt.Errorf("unknown link %q", key)
 	}
-	return exec.Command("/usr/bin/open", u).Run()
+	return openURL(u)
 }
+
+func openURL(u string) error { return exec.Command("/usr/bin/open", u).Run() }
 
 // RevealLogs opens the log folder in Finder.
 func (s *SystemService) RevealLogs() error {

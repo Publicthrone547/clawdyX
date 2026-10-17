@@ -31,7 +31,7 @@ The wizard asks for the bot token, your Telegram ID (or detects it from a messag
 | Sessions | new, new and forget, fresh context, switch, rename, archive, restore, forget (optionally delete the Claude Code history), tier/model/effort of the active session |
 | Jobs & processes | bot-owned Claude processes with memory and CPU, recent jobs with activity and result, other Claude Code sessions on the Mac |
 | Monitors | every display, capture one or all, preview, send a capture to Claude, the screen switch, permission help |
-| Settings | appearance, open at login, defaults, workspaces, limits, features, retention, the background worker |
+| Settings | app, worker and Claude Code versions, release notes, check for updates (only when clicked); appearance, open at login, defaults, workspaces, limits, features, retention, the background worker |
 | Diagnostics | health checks with fixes, the redacted log, a sanitized report you preview before saving |
 
 Closing the window hides it; the menu-bar item stays. **Quit clawdyX** asks whether to stop the bot too. ⌘1–7 switch screens, ⌘R refreshes.

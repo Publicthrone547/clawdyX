@@ -17,6 +17,14 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 import * as $models from "./models.js";
 
 /**
+ * CheckForUpdate asks GitHub for the latest published release. It runs only
+ * when the user clicks the button; nothing is sent besides the request itself.
+ */
+export function CheckForUpdate(): $CancellablePromise<$models.UpdateInfo> {
+    return $Call.ByID(1437184838);
+}
+
+/**
  * DiagnosticBundle builds a sanitized text report for preview: worker
  * status, diagnostics, settings and the log tail. Tokens are redacted, home
  * paths shortened, and Telegram IDs removed unless includeIDs.
@@ -44,6 +52,14 @@ export function InstallService(): $CancellablePromise<string> {
  */
 export function Open(key: string): $CancellablePromise<void> {
     return $Call.ByID(2176062200, key);
+}
+
+/**
+ * OpenRelease opens the release page of this version, or of the given
+ * version from a previous update check.
+ */
+export function OpenRelease(v: string): $CancellablePromise<void> {
+    return $Call.ByID(2706424341, v);
 }
 
 /**

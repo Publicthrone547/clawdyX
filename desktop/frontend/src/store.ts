@@ -41,6 +41,8 @@ export const store = reactive({
   tick: 0,
   sessionsTick: 0,
   ready: false,
+  // Version of this app build ("" until known).
+  appVersion: "",
 });
 
 let nextToast = 1;
@@ -92,6 +94,9 @@ function soon() {
 }
 
 export function initStore() {
+  System.Info()
+    .then((i) => (store.appVersion = i.version))
+    .catch(() => {});
   Events.On("worker:connection", (ev) => {
     const c = ev.data as D.Connection;
     store.connection = c;

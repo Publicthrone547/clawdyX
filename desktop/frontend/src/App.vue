@@ -55,7 +55,10 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
   <div class="flex h-full">
     <nav class="drag flex w-56 shrink-0 flex-col border-r border-line bg-surface pt-12 pb-4" aria-label="Main">
       <div class="px-4 pb-4">
-        <div class="text-base font-semibold tracking-tight">clawdyX</div>
+        <div class="flex items-baseline gap-2">
+          <span class="text-base font-semibold tracking-tight">clawdyX</span>
+          <button v-if="store.appVersion" class="nodrag text-xs text-muted hover:underline" title="Version and updates (Settings)" @click="store.view = 'settings'">v{{ store.appVersion }}</button>
+        </div>
         <div class="mt-1">
           <Badge v-if="!store.connection.connected" tone="danger" label="Worker not running" />
           <Badge v-else :tone="botTone(botState)" :label="'Bot ' + (botLabel[botState ?? 'stopped'] ?? botState).toLowerCase()" />
