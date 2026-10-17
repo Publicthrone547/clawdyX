@@ -1,7 +1,7 @@
 BIN     := bin/clawdyx
 GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
-VERSION := 0.3.0
+VERSION := 0.3.1
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
 
 .PHONY: check-all app dmg helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean

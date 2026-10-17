@@ -87,8 +87,8 @@ func TestChildEnvAllowlist(t *testing.T) {
 	if !strings.Contains(env, "PATH=/usr/bin") || !strings.Contains(env, "HOME=") {
 		t.Fatal("required vars missing")
 	}
-	if !strings.Contains(env, "CLAUDE_CODE_SKIP_PROMPT_HISTORY=1") {
-		t.Fatal("prompt history opt-out missing")
+	if strings.Contains(env, "CLAUDE_CODE_SKIP_PROMPT_HISTORY") {
+		t.Fatal("CLAUDE_CODE_SKIP_PROMPT_HISTORY disables transcripts and breaks --resume")
 	}
 }
 

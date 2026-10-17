@@ -52,8 +52,13 @@ func main() {
 	sid := arg(args, "--session-id")
 	if r := arg(args, "--resume"); r != "" {
 		sid = r
-		if strings.HasPrefix(r, "00000000") {
-			fmt.Fprintf(os.Stderr, "No conversation found with session ID: %s\n", r)
+		if strings.HasPrefix(r, "00000000") || strings.HasPrefix(r, "00000001") {
+			msg := "No conversation found with session ID: " + r
+			fmt.Fprintln(os.Stderr, msg)
+			if strings.HasPrefix(r, "00000001") { // 2.1.292 with --verbose: also an error result
+				emit(map[string]any{"type": "result", "subtype": "error_during_execution", "is_error": true, "num_turns": 0,
+					"session_id": r, "errors": []string{msg}})
+			}
 			os.Exit(1)
 		}
 	}

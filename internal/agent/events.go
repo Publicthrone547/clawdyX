@@ -92,6 +92,7 @@ type Result struct {
 	ModelUsage        map[string]ModelUsage `json:"modelUsage"`
 	PermissionDenials []Denial              `json:"permission_denials"`
 	APIErrorStatus    *int                  `json:"api_error_status"`
+	Errors            []string              `json:"errors"`
 }
 
 // Text returns the result text or "".
@@ -100,6 +101,14 @@ func (r *Result) Text() string {
 		return ""
 	}
 	return *r.Result
+}
+
+// ErrorText joins the error messages of an error result, or "".
+func (r *Result) ErrorText() string {
+	if r == nil {
+		return ""
+	}
+	return strings.Join(r.Errors, "; ")
 }
 
 // Event is a parsed stream-json line.

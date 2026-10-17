@@ -594,11 +594,19 @@ func (m *Manager) execute(j *store.Job, s *store.Session, spec agent.Spec) execO
 		default:
 			x.o.ErrorMessage = fmt.Sprintf("claude exited with code %d and no result", x.exitCode)
 		}
+	case result.IsError && strings.Contains(result.ErrorText()+stderr, "No conversation found"):
+		// CLI 2.1.292 reports a missing transcript as an error result as well.
+		x.o.State = store.JobFailed
+		x.o.SessionMissing = true
+		x.o.ErrorMessage = "the Claude session transcript no longer exists"
 	case result.IsError:
 		x.o.State = store.JobFailed
 		msg := result.Text()
 		if msg == "" {
-			msg = result.Subtype + " / " + result.TerminalReason
+			msg = result.ErrorText()
+		}
+		if msg == "" {
+			msg = strings.TrimSuffix(result.Subtype+" / "+result.TerminalReason, " / ")
 		}
 		x.o.ErrorMessage = observability.Truncate(observability.Redact(msg), 400)
 	default:

@@ -11,7 +11,7 @@ clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics,
 | Sessions, job history, aliases, audit log | `~/Library/Application Support/clawdyx/state.db` | 0600 SQLite, folder 0700 | stores a hash of each prompt, an optional short preview, a ≤ 2 KB preview of the reply, token counts and timings; never full prompts, full replies or secrets |
 | Logs | `~/Library/Logs/clawdyx/` | 0600, rotated at 20 MB × 5 | command categories, timings, states, redacted errors; no message bodies |
 | Backups | `~/Library/Application Support/clawdyx/backups/` | 0600 | copies of `state.db` only |
-| Claude transcripts | `~/.claude/projects/…` | owned by Claude Code | Claude Code keeps these under its own retention (`cleanupPeriodDays`, 30 days by default). clawdyX sets `CLAUDE_CODE_SKIP_PROMPT_HISTORY=1` for its jobs so prompts are not also added to Claude Code's global prompt history |
+| Claude transcripts | `~/.claude/projects/…` | owned by Claude Code | Claude Code keeps these under its own retention (`cleanupPeriodDays`, 30 days by default). They are what makes a session resumable. As with any Claude Code use, prompts are also added to Claude Code's global prompt history (`~/.claude/history.jsonl`) |
 | Screenshots | memory only | — | see below |
 
 ## The desktop app
@@ -37,5 +37,5 @@ The app stores only per-window conveniences (appearance, last screen) in its own
 
 - `clawdyx service uninstall --purge-state` stops the service and deletes the state folder and logs.
 - Delete `~/.config/clawdyx/` to remove the token and settings, then revoke the token in @BotFather.
-- One session's Claude Code history: `/forget S2 --delete` (or Delete history in the app) removes exactly that session's transcript file and folder after a confirmation that lists them. Claude Code documents that these files may be deleted by hand; clawdyX touches nothing else under `~/.claude`.
+- One session's Claude Code history: `/forget S2 --delete` (or Delete history in the app) removes exactly that session's transcript file and folder after a confirmation that lists them. Claude Code documents that these files may be deleted by hand; clawdyX touches nothing else under `~/.claude`, so the session's prompts remain in Claude Code's global prompt history (`~/.claude/history.jsonl`).
 - All history of a project folder: `claude purge <folder>` (Claude Code's own command).

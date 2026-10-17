@@ -273,6 +273,15 @@ func TestTimeoutWarningsMissingAndDenials(t *testing.T) {
 	if ms, _ := e.st.GetSession(miss.ID); ms.Status != "missing" {
 		t.Fatal("session not marked missing")
 	}
+	// The same, reported the 2.1.292 way: an error result with "errors".
+	miss2, _ := e.st.CreateSession(store.Session{ClaudeSessionID: "00000001-0000-4000-8000-000000000000", WorkspaceName: "w", WorkspacePath: e.ws, Mode: "observe", Started: true})
+	j5, _, _ := e.m.Submit(Request{Session: miss2, Prompt: "hi", UpdateID: 5})
+	if o5 := e.rec.wait(t, j5.ID); !o5.SessionMissing || o5.ErrorMessage != "the Claude session transcript no longer exists" {
+		t.Fatalf("missing (error result) %+v", o5)
+	}
+	if ms, _ := e.st.GetSession(miss2.ID); ms.Status != "missing" {
+		t.Fatal("session not marked missing (error result)")
+	}
 	j4, _, _ := e.m.Submit(Request{Session: s, Prompt: "FAIL", UpdateID: 4})
 	if o := e.rec.wait(t, j4.ID); o.State != store.JobFailed || !strings.Contains(o.ErrorMessage, "overloaded") {
 		t.Fatalf("fail %+v", o)
