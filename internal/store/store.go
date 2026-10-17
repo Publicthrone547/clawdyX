@@ -29,7 +29,7 @@ type Store struct {
 	path string
 }
 
-const schemaVersion = 2
+const schemaVersion = 3
 
 var migrations = []string{
 	// v1
@@ -110,6 +110,8 @@ var migrations = []string{
 		requester TEXT NOT NULL DEFAULT '',
 		job_id INTEGER
 	);`,
+	// v3: the Telegram chat each job reports to (several allowed users).
+	`ALTER TABLE jobs ADD COLUMN tg_chat_id INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating) the database at path with private permissions.
@@ -448,6 +450,7 @@ type Job struct {
 	TgUpdateID      int64
 	TgMessageID     int
 	TgAckMessageID  int
+	TgChatID        int64 // 0 = the owner's chat
 	PromptSHA256    string
 	PromptPreview   string
 	Model           string
@@ -475,7 +478,7 @@ type Job struct {
 // Label returns "j-<id>".
 func (j Job) Label() string { return fmt.Sprintf("j-%d", j.ID) }
 
-const jobCols = `id,session_id,kind,state,COALESCE(tg_update_id,0),tg_message_id,tg_ack_message_id,prompt_sha256,prompt_preview,model,effort,perm_mode,pid,proc_start_unix,created_at,started_at,finished_at,exit_code,terminal_reason,is_error,num_turns,in_tokens,out_tokens,cache_read_tokens,cache_create_tokens,cost_usd_est,resolved_model,result_preview,error_summary`
+const jobCols = `id,session_id,kind,state,COALESCE(tg_update_id,0),tg_message_id,tg_ack_message_id,prompt_sha256,prompt_preview,model,effort,perm_mode,pid,proc_start_unix,created_at,started_at,finished_at,exit_code,terminal_reason,is_error,num_turns,in_tokens,out_tokens,cache_read_tokens,cache_create_tokens,cost_usd_est,resolved_model,result_preview,error_summary,tg_chat_id`
 
 func ts(v int64) time.Time {
 	if v == 0 {
@@ -488,7 +491,7 @@ func scanJob(r interface{ Scan(...any) error }) (*Job, error) {
 	var j Job
 	var c, st, fin int64
 	var isErr int
-	if err := r.Scan(&j.ID, &j.SessionID, &j.Kind, &j.State, &j.TgUpdateID, &j.TgMessageID, &j.TgAckMessageID, &j.PromptSHA256, &j.PromptPreview, &j.Model, &j.Effort, &j.PermMode, &j.PID, &j.ProcStartUnix, &c, &st, &fin, &j.ExitCode, &j.TerminalReason, &isErr, &j.NumTurns, &j.InTokens, &j.OutTokens, &j.CacheReadTokens, &j.CacheCreate, &j.CostUSDEst, &j.ResolvedModel, &j.ResultPreview, &j.ErrorSummary); err != nil {
+	if err := r.Scan(&j.ID, &j.SessionID, &j.Kind, &j.State, &j.TgUpdateID, &j.TgMessageID, &j.TgAckMessageID, &j.PromptSHA256, &j.PromptPreview, &j.Model, &j.Effort, &j.PermMode, &j.PID, &j.ProcStartUnix, &c, &st, &fin, &j.ExitCode, &j.TerminalReason, &isErr, &j.NumTurns, &j.InTokens, &j.OutTokens, &j.CacheReadTokens, &j.CacheCreate, &j.CostUSDEst, &j.ResolvedModel, &j.ResultPreview, &j.ErrorSummary, &j.TgChatID); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -505,8 +508,8 @@ func (s *Store) InsertJob(j Job) (*Job, error) {
 	if j.TgUpdateID != 0 {
 		upd = j.TgUpdateID
 	}
-	res, err := s.db.Exec(`INSERT INTO jobs(session_id,kind,state,tg_update_id,tg_message_id,prompt_sha256,prompt_preview,model,effort,perm_mode,created_at)
-		VALUES(?,?,?,?,?,?,?,?,?,?,?)`, j.SessionID, orDefault(j.Kind, "prompt"), JobQueued, upd, j.TgMessageID, j.PromptSHA256, j.PromptPreview, j.Model, j.Effort, j.PermMode, now())
+	res, err := s.db.Exec(`INSERT INTO jobs(session_id,kind,state,tg_update_id,tg_message_id,tg_chat_id,prompt_sha256,prompt_preview,model,effort,perm_mode,created_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, j.SessionID, orDefault(j.Kind, "prompt"), JobQueued, upd, j.TgMessageID, j.TgChatID, j.PromptSHA256, j.PromptPreview, j.Model, j.Effort, j.PermMode, now())
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE") {
 			return nil, ErrDuplicate

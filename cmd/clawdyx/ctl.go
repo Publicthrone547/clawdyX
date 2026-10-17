@@ -23,6 +23,8 @@ var ctlMethods = []string{
 	"jobs.list {limit}", "jobs.cancel {id}", "jobs.events {id,limit}", "processes.list",
 	"claude.status", "claude.models", "model.set {session,model,default}", "effort.set {session,effort,default}", "mode.set {session,mode}",
 	"log.tail {lines,level}", "diagnostics.run",
+	"telegram.allowlist.get", "telegram.allowlist.set {users:[{id,label,role}]}", "telegram.detect.start {seconds}", "telegram.detect.result", "telegram.detect.stop",
+	"telegram.token.status", "telegram.token.test {token}", "telegram.token.set {token}",
 }
 
 func ctl(cfgPath string, args []string) int {

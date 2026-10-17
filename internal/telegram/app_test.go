@@ -24,6 +24,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/store"
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 const owner int64 = 111111111
@@ -31,6 +32,7 @@ const owner int64 = 111111111
 var fakeBin string
 
 func TestMain(m *testing.M) {
+	config.TokenVault = vault.NewMemory() // never touch the real Keychain
 	dir, _ := os.MkdirTemp("", "fakeclaude")
 	fakeBin = filepath.Join(dir, "claude")
 	if out, err := exec.Command("go", "build", "-o", fakeBin, "../agent/testdata/fakeclaude").CombinedOutput(); err != nil {

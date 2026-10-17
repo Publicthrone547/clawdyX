@@ -4,7 +4,7 @@ All commands run as the logged-in macOS user. Paths:
 
 | What | Where |
 | --- | --- |
-| Token | `~/.config/clawdyx/.env` (0600, only `TELEGRAM_BOT_TOKEN=`) |
+| Token | macOS login Keychain, item `clawdyx` (or `~/.config/clawdyx/.env`, 0600, with `setup -token-file`) |
 | Config | `~/.config/clawdyx/config.json` (0600) or `$CLAWDYX_CONFIG` |
 | State | `~/Library/Application Support/clawdyx/` (`state.db`, `bot.lock`, `backups/`) |
 | Logs | `~/Library/Logs/clawdyx/` (`bot.log` JSON, rotated 20 MB × 5; `stdout.log`, `stderr.log` from launchd) |
@@ -89,10 +89,22 @@ clawdyx backup        # VACUUM INTO ~/Library/Application Support/clawdyx/backup
 
 To restore: `launchctl bootout gui/$(id -u)/local.clawdyx`, copy a backup over `state.db` (delete `state.db-wal` and `state.db-shm`), then `clawdyx service install` or `launchctl bootstrap …`. Claude transcripts belong to Claude Code (`~/.claude/projects`) and are not copied.
 
+## Keep macOS permissions across rebuilds
+
+macOS ties Screen Recording and Accessibility grants to the binary's code signature. An unsigned (ad-hoc) Go build gets a new signature on every build, so the grants disappear after each `make install`. Sign it with a stable identity:
+
+```sh
+make identities                                  # lists usable identities, e.g. "Apple Development: …"
+export CLAWDYX_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)"
+make restart                                     # installs, signs, restarts
+```
+
+Grant the permissions once more after the first signed build; later signed builds keep them. A free Apple Development certificate (Xcode → Settings → Accounts) or a self-signed code-signing certificate (Keychain Access → Certificate Assistant) both work. The Keychain token is not affected by signing.
+
 ## Rotate or revoke the Telegram token
 
 1. @BotFather → `/revoke` (or `/token`) → new token.
-2. Run `make setup` and choose to replace the stored token (or edit `~/.config/clawdyx/.env`, keeping mode 0600).
+2. Run `make setup` and choose to replace the stored token, or `clawdyx ctl telegram.token.set '{"token":"…"}'` (checks it with Telegram first, stores it in the Keychain and restarts the worker).
 3. `make restart`.
 4. `/doctor` must show `Webhook: none`. At startup the bot deletes any webhook it finds and warns you, since a webhook set by someone else means the old token leaked.
 5. Look at the unauthorized-update counter in `/status`. Treat the bot as compromised for the whole exposure window. The owner-only gate still prevented other users from running anything.
@@ -116,7 +128,9 @@ To restore: `launchctl bootout gui/$(id -u)/local.clawdyx`, copy a backup over `
 ```sh
 clawdyx service uninstall                 # bootout + remove plist; state kept
 clawdyx service uninstall --purge-state   # also delete state dir and logs
-rm ~/.config/clawdyx/.env                 # then revoke the token in @BotFather
+rm -f ~/.config/clawdyx/.env              # token file, if you used -token-file
+security delete-generic-password -s clawdyx   # Keychain token (repeat until "could not be found")
+# then revoke the token in @BotFather
 ```
 
 Claude Code itself is never modified.

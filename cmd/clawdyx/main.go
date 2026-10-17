@@ -35,6 +35,7 @@ const (
 	exitError    = 1
 	exitConfig   = 2
 	exitLocked   = 3
+	exitRestart  = 75
 	serviceLabel = "local.clawdyx"
 )
 
@@ -55,7 +56,7 @@ Usage:
 
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
 Setup flags (optional, for scripts): -owner-id N -workspace DIR -browser NAME -claude-binary PATH
-                                     -token-stdin -force -no-check -yes
+                                     -token-stdin -token-file -migrate-token -force -no-check -yes
 `, version, config.DefaultPath(), config.DefaultEnvPath())
 }
 
@@ -76,6 +77,8 @@ func main() {
 	fs.StringVar(&so.Browser, "browser", "", "setup: browser app for /open")
 	fs.StringVar(&so.ClaudeBinary, "claude-binary", "", "setup: path of the claude CLI")
 	fs.BoolVar(&so.TokenStdin, "token-stdin", false, "setup: read the bot token from stdin (non-interactive)")
+	fs.BoolVar(&so.TokenFile, "token-file", false, "setup: keep the token in the 0600 .env file instead of the Keychain")
+	fs.BoolVar(&so.MigrateToken, "migrate-token", false, "setup: move the token from the .env file into the Keychain")
 	fs.BoolVar(&so.Force, "force", false, "setup: replace existing config and token files")
 	fs.BoolVar(&so.NoCheck, "no-check", false, "setup: skip the read-only checks at the end")
 	fs.BoolVar(&so.Yes, "yes", false, "setup: never prompt; use flags and defaults")
@@ -188,6 +191,9 @@ func run(cfgPath, envPath string) int {
 		log.Error("start telegram", "err", observability.Redact(err.Error()))
 		return exitError
 	}
+	if abs, err := filepath.Abs(cfgPath); err == nil {
+		app.ConfigPath = abs
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -209,6 +215,14 @@ func run(cfgPath, envPath string) int {
 		log.Error("run", "err", observability.Redact(err.Error()))
 		return exitError
 	}
+	select {
+	case <-app.RestartRequested:
+		// A non-zero exit makes launchd start the worker again (KeepAlive
+		// with SuccessfulExit=false); in a terminal, start it again by hand.
+		log.Info("stopped for a restart")
+		return exitRestart
+	default:
+	}
 	log.Info("stopped")
 	return exitOK
 }
@@ -228,7 +242,10 @@ func check(cfgPath, envPath string) int {
 		return exitConfig
 	}
 	line(true, "config %s (owner %d, %d workspace(s), default %s)", cfgPath, cfg.Telegram.OwnerUserID, len(cfg.Workspaces), cfg.DefaultWorkspace)
-	line(true, "token loaded (value not shown)")
+	line(true, "token loaded from %s (value not shown)", map[string]string{"keychain": "the macOS Keychain", "file": envPath, "env": "the TELEGRAM_BOT_TOKEN variable"}[cfg.TokenSource])
+	if cfg.TokenSource == "file" {
+		fmt.Println("       tip: clawdyx setup -migrate-token moves it into the Keychain")
+	}
 	_ = os.MkdirAll(cfg.StateDir, 0o700)
 	cli := agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)

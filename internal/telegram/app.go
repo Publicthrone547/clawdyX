@@ -76,13 +76,67 @@ type App struct {
 	ShutdownRequested chan struct{}
 	shutdownOnce      sync.Once
 
-	poll        poller
-	broker      *screen.Broker
-	quiet       quietJobs
-	events      atomic.Pointer[func(typ string, data any)]
-	nameMu      sync.Mutex
-	botUsername string
-	webhookGone bool
+	poll      poller
+	allow     atomic.Pointer[[]config.AllowedUser]
+	detect    detector
+	serverURL string
+
+	// ConfigPath is the config file the worker loaded (for allowlist edits
+	// and token replacement from the desktop app).
+	ConfigPath string
+	// RestartRequested is closed when the worker should exit so launchd
+	// starts it again (for example after the token was replaced).
+	RestartRequested chan struct{}
+	restartOnce      sync.Once
+	broker           *screen.Broker
+	quiet            quietJobs
+	events           atomic.Pointer[func(typ string, data any)]
+	nameMu           sync.Mutex
+	botUsername      string
+	webhookGone      bool
+}
+
+// roleOf is the gate's lookup; it reads the live allowlist (hot-reloadable).
+func (a *App) roleOf(id int64) string {
+	if l := a.allow.Load(); l != nil {
+		for _, u := range *l {
+			if u.ID == id {
+				return u.Role
+			}
+		}
+	}
+	return ""
+}
+
+// Allowlist returns the live allowlist (owner first).
+func (a *App) Allowlist() []config.AllowedUser {
+	if l := a.allow.Load(); l != nil {
+		return append([]config.AllowedUser(nil), (*l)...)
+	}
+	return nil
+}
+
+// SetAllowlist replaces the live allowlist after validating it.
+func (a *App) SetAllowlist(users []config.AllowedUser) error {
+	n, err := config.NormalizeAllowlist(0, users)
+	if err != nil {
+		return err
+	}
+	if n[0].ID != a.cfg.Telegram.OwnerUserID {
+		return errors.New("the owner cannot be changed while the worker runs; use clawdyx setup")
+	}
+	a.allow.Store(&n)
+	return nil
+}
+
+func (a *App) requestRestart() {
+	a.restartOnce.Do(func() {
+		close(a.RestartRequested)
+		go func() {
+			time.Sleep(500 * time.Millisecond) // let the reply reach the client
+			a.Stop()
+		}()
+	})
 }
 
 // SetEventSink receives worker events (the control server's Publish).
@@ -123,8 +177,13 @@ type Options struct {
 // New builds the app and connects to Telegram (getMe).
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*App, error) {
 	a := &App{cfg: cfg, st: st, log: log, counters: &observability.Counters{}, started: time.Now(),
-		confirms: NewConfirms(), ShutdownRequested: make(chan struct{})}
+		confirms: NewConfirms(), ShutdownRequested: make(chan struct{}), RestartRequested: make(chan struct{}), serverURL: opt.ServerURL}
 	a.sess = sessions.New(st, cfg)
+	users := cfg.Telegram.AllowedUsers
+	if len(users) == 0 && cfg.Telegram.OwnerUserID > 0 {
+		users = []config.AllowedUser{{ID: cfg.Telegram.OwnerUserID, Role: config.RoleOwner}}
+	}
+	a.allow.Store(&users)
 	a.cli = agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}
 	a.agents = processes.NewAgentsCache(a.cli)
 	a.streams = newStreams()
@@ -300,15 +359,28 @@ func (a *App) registerCommands() {
 		{Command: "pause", Description: "Stop accepting new prompts"},
 		{Command: "start", Description: "Menu; resume after /pause"},
 	}
-	_, err := a.b.SetMyCommands(a.ctx, &bot.SetMyCommandsParams{Commands: cmds, Scope: &models.BotCommandScopeChat{ChatID: a.cfg.Telegram.OwnerUserID}})
-	if err != nil {
-		a.log.Warn("setMyCommands failed", "err", observability.Redact(err.Error()))
+	var userCmds []models.BotCommand
+	for _, c := range cmds {
+		if userCommands[c.Command] {
+			userCmds = append(userCmds, c)
+		}
+	}
+	for _, u := range a.Allowlist() {
+		list := cmds
+		if u.Role != config.RoleOwner {
+			list = userCmds
+		}
+		if _, err := a.b.SetMyCommands(a.ctx, &bot.SetMyCommandsParams{Commands: list, Scope: &models.BotCommandScopeChat{ChatID: u.ID}}); err != nil {
+			a.log.Warn("setMyCommands failed", "err", observability.Redact(err.Error()))
+		}
 	}
 }
 
 // handle is the single entry point for every update.
 func (a *App) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
-	if !Authorize(u, a.cfg.Telegram.OwnerUserID) {
+	uid, role, ok := Authorize(u, a.roleOf)
+	if !ok {
+		a.detect.observe(u)
 		// Silent: no reply, no lookup, no log line with sender or content.
 		a.counters.Unauthorized.Add(1)
 		return
@@ -330,36 +402,36 @@ func (a *App) handle(ctx context.Context, _ *bot.Bot, u *models.Update) {
 	defer func() {
 		if r := recover(); r != nil {
 			a.log.Error("handler panic", "panic", fmt.Sprint(r))
-			a.reply(0, "⚠️ Internal error while handling that update. It was logged.")
+			a.replyIn(uid, 0, "⚠️ Internal error while handling that update. It was logged.")
 		}
 	}()
 
 	switch {
 	case u.CallbackQuery != nil:
-		a.onCallback(ctx, u.CallbackQuery)
+		a.onCallback(ctx, u.CallbackQuery, role)
 	case u.StoppedMessageGeneration != nil:
 		id := int64(u.StoppedMessageGeneration.DraftID)
-		if id > 0 {
+		if id > 0 && a.mayControlJob(uid, role, id) {
 			if _, err := a.jobs.Cancel(id); err == nil {
 				a.st.Audit("job", "stop_button", fmt.Sprintf("j-%d", id), "ok", id)
 			}
 		}
 	case u.Message != nil:
-		a.onMessage(ctx, u)
+		a.onMessage(ctx, u, role)
 	}
 }
 
-func (a *App) onMessage(ctx context.Context, u *models.Update) {
+func (a *App) onMessage(ctx context.Context, u *models.Update, role string) {
 	m := u.Message
 	text := strings.TrimSpace(m.Text)
 	if text == "" {
 		if m.Document != nil || len(m.Photo) > 0 || m.Voice != nil || m.Video != nil || m.Audio != nil || m.Sticker != nil {
-			a.reply(m.ID, "Attachments are not enabled. Put the file inside the workspace and mention its path instead.")
+			a.replyTo(m, "Attachments are not enabled. Put the file inside the workspace and mention its path instead.")
 		}
 		return
 	}
 	if strings.HasPrefix(text, "/") {
-		a.command(ctx, m, text)
+		a.command(ctx, m, text, role)
 		return
 	}
 	a.prompt(m, u.ID, text)
@@ -367,51 +439,80 @@ func (a *App) onMessage(ctx context.Context, u *models.Update) {
 
 func (a *App) prompt(m *models.Message, updateID int64, text string) {
 	if len(text) > MaxPromptBytes {
-		a.reply(m.ID, "That message is too long (over 32 KB). Put it in a file inside the workspace and reference the path.")
+		a.replyTo(m, "That message is too long (over 32 KB). Put it in a file inside the workspace and reference the path.")
 		return
 	}
 	s, created, err := a.sess.EnsureActive()
 	if err != nil {
-		a.reply(m.ID, "⚠️ Could not open a session: "+observability.Redact(err.Error()))
+		a.replyTo(m, "⚠️ Could not open a session: "+observability.Redact(err.Error()))
 		return
 	}
 	if created {
-		a.reply(0, fmt.Sprintf("Started session <b>%s</b> in workspace <code>%s</code> (%s mode).", s.Label(), Esc(s.WorkspaceName), s.Mode))
+		a.replyIn(m.Chat.ID, 0, fmt.Sprintf("Started session <b>%s</b> in workspace <code>%s</code> (%s mode).", s.Label(), Esc(s.WorkspaceName), s.Mode))
 	}
-	_, _, err = a.jobs.Submit(jobs.Request{Session: s, Prompt: text, UpdateID: updateID, MessageID: m.ID})
+	_, _, err = a.jobs.Submit(jobs.Request{Session: s, Prompt: text, UpdateID: updateID, MessageID: m.ID, ChatID: m.Chat.ID})
 	switch {
 	case err == nil:
 	case errors.Is(err, store.ErrDuplicate):
 	case errors.Is(err, jobs.ErrQueueFull):
-		a.reply(m.ID, fmt.Sprintf("Queue for %s is full (%d). Use /stop to clear it or wait.", s.Label(), a.cfg.Claude.MaxQueuePerSession))
+		a.replyTo(m, fmt.Sprintf("Queue for %s is full (%d). Use /stop to clear it or wait.", s.Label(), a.cfg.Claude.MaxQueuePerSession))
 	case errors.Is(err, jobs.ErrPaused):
-		a.reply(m.ID, "The bot is paused; prompts are not accepted. Send /start to resume.")
+		a.replyTo(m, "The bot is paused; prompts are not accepted. Send /start to resume.")
 	case errors.Is(err, jobs.ErrShutdown):
-		a.reply(m.ID, "The bot is shutting down; try again in a moment.")
+		a.replyTo(m, "The bot is shutting down; try again in a moment.")
 	default:
-		a.reply(m.ID, "⚠️ Could not queue the prompt: "+observability.Redact(err.Error()))
+		a.replyTo(m, "⚠️ Could not queue the prompt: "+observability.Redact(err.Error()))
 	}
 }
 
-// reply sends an HTML message directly (replyTo 0 = no reply).
-func (a *App) reply(replyTo int, html string) int {
+// replyIn sends an HTML message to chat (0 = the owner), optionally as a
+// reply to a message in that chat.
+func (a *App) replyIn(chat int64, replyTo int, html string) int {
 	ctx := a.ctx
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	id, err := a.send.Send(ctx, Out{HTML: html, ReplyTo: replyTo})
+	id, err := a.send.Send(ctx, Out{ChatID: chat, HTML: html, ReplyTo: replyTo})
 	if err != nil {
-		a.outbox.Push(Out{HTML: html, ReplyTo: replyTo})
+		a.outbox.Push(Out{ChatID: chat, HTML: html, ReplyTo: replyTo})
 	}
 	return id
 }
 
-// replyLong sends possibly long HTML lines, chunked on line boundaries.
-func (a *App) replyLong(replyTo int, html string) {
+// target is where an answer goes: a chat, the message it answers, and the
+// user who asked (for confirmations).
+type target struct {
+	chat int64
+	msg  int
+	uid  int64
+}
+
+func tgt(m *models.Message) target {
+	t := target{chat: m.Chat.ID, msg: m.ID}
+	if m.From != nil {
+		t.uid = m.From.ID
+	}
+	return t
+}
+
+// say answers a target.
+func (a *App) say(t target, html string) int { return a.replyIn(t.chat, t.msg, html) }
+
+// replyTo answers a message in its own chat.
+func (a *App) replyTo(m *models.Message, html string) int { return a.replyIn(m.Chat.ID, m.ID, html) }
+
+// notifyOwner sends an HTML message to the owner's chat.
+func (a *App) notifyOwner(html string) int { return a.replyIn(0, 0, html) }
+
+// replyLongTo answers with possibly long HTML, chunked on line boundaries.
+func (a *App) replyLongTo(m *models.Message, html string) { a.replyLongIn(m.Chat.ID, m.ID, html) }
+
+// replyLongIn sends possibly long HTML lines to chat, chunked on line boundaries.
+func (a *App) replyLongIn(chat int64, replyTo int, html string) {
 	var cur strings.Builder
 	for _, line := range strings.Split(html, "\n") {
 		if cur.Len()+len(line)+1 > 3900 && cur.Len() > 0 {
-			a.reply(replyTo, cur.String())
+			a.replyIn(chat, replyTo, cur.String())
 			cur.Reset()
 			replyTo = 0
 		}
@@ -421,7 +522,7 @@ func (a *App) replyLong(replyTo int, html string) {
 		cur.WriteString(line)
 	}
 	if cur.Len() > 0 {
-		a.reply(replyTo, cur.String())
+		a.replyIn(chat, replyTo, cur.String())
 	}
 }
 

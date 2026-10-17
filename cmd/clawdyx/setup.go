@@ -23,6 +23,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // setupOptions are the non-interactive inputs of `clawdyx setup`. Anything
@@ -33,6 +34,8 @@ type setupOptions struct {
 	Browser      string
 	ClaudeBinary string
 	TokenStdin   bool // read the token from the first line of stdin (implies Yes)
+	TokenFile    bool // keep the token in the 0600 .env file instead of the Keychain
+	MigrateToken bool // move an existing .env token into the Keychain and stop
 	Force        bool // replace existing files without asking
 	NoCheck      bool // skip the read-only checks at the end
 	Yes          bool // never prompt: use flags and defaults, fail when something is missing
@@ -122,14 +125,22 @@ var getMeFunc = func(ctx context.Context, token string) (string, error) {
 // token files, never prints the token, and ends with the read-only checks.
 func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writer) int {
 	w := &wizard{in: bufio.NewReader(in), out: out, yes: o.Yes || o.TokenStdin}
+	if o.MigrateToken {
+		return migrateToken(cfgPath, envPath, out)
+	}
 	if f, ok := in.(*os.File); ok && !o.TokenStdin && term.IsTerminal(int(f.Fd())) {
 		w.tty = f
 	}
-	w.say("clawdyX setup — writes %s and %s (private, mode 0600).", cfgPath, envPath)
+	where := "the macOS Keychain (item \"" + vault.Service + "\")"
+	if o.TokenFile {
+		where = envPath + " (mode 0600)"
+	}
+	w.say("clawdyX setup — writes %s (private, mode 0600) and stores the bot token in %s.", cfgPath, where)
 	w.say("Nothing leaves this Mac except one call to Telegram's Bot API to verify the token.")
 	w.say("")
 
-	cfgExists, envExists := fileExists(cfgPath), fileExists(envPath)
+	_, verr := config.StoredToken(cfgPath)
+	cfgExists, envExists := fileExists(cfgPath), fileExists(envPath) || verr == nil
 	keepConfig, keepToken := false, false
 	if cfgExists && !o.Force {
 		if w.yes {
@@ -140,7 +151,7 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 	}
 	if envExists && !o.Force {
 		if o.TokenStdin {
-			w.say("A bot token is already stored in %s; pass -force to replace it.", envPath)
+			w.say("A bot token is already stored; pass -force to replace it.")
 			return exitConfig
 		}
 		if w.yes {
@@ -152,7 +163,10 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 
 	var token string
 	if keepToken {
-		t, err := config.LoadToken(envPath)
+		t, err := config.StoredToken(cfgPath)
+		if err != nil {
+			t, err = config.LoadToken(envPath)
+		}
 		if err != nil {
 			w.say("The stored token cannot be used: %s", observability.Redact(err.Error()))
 			return exitConfig
@@ -240,11 +254,24 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 		w.say("✓ Wrote %s (owner %d, workspace %s)", cfgPath, owner, ws)
 	}
 	if !keepToken {
-		if err := writePrivate(envPath, []byte("TELEGRAM_BOT_TOKEN="+token+"\n")); err != nil {
-			w.say("write token file: %v", err)
-			return exitError
+		if o.TokenFile {
+			if err := writePrivate(envPath, []byte("TELEGRAM_BOT_TOKEN="+token+"\n")); err != nil {
+				w.say("write token file: %v", err)
+				return exitError
+			}
+			_ = config.DeleteStoredToken(cfgPath)
+			w.say("✓ Stored the token in %s (it is never shown again)", envPath)
+		} else {
+			if err := storeAndVerify(cfgPath, token); err != nil {
+				w.say("Could not store the token in the Keychain: %s. Rerun with -token-file to keep it in a private file instead.", observability.Redact(err.Error()))
+				return exitError
+			}
+			if fileExists(envPath) {
+				_ = os.Remove(envPath)
+				w.say("✓ Removed the old token file %s", envPath)
+			}
+			w.say("✓ Stored the token in the macOS Keychain (item %q; it is never shown again)", vault.Service)
 		}
-		w.say("✓ Stored the token in %s (it is never shown again)", envPath)
 	}
 	if !o.NoCheck {
 		w.say("\nRunning the read-only checks (claude auth status can take about 30 s)…")
@@ -583,4 +610,39 @@ func expandHome(p string) string {
 		}
 	}
 	return p
+}
+
+// storeAndVerify saves the token in the vault and reads it back.
+func storeAndVerify(cfgPath, token string) error {
+	if err := config.StoreToken(cfgPath, token); err != nil {
+		return err
+	}
+	got, err := config.StoredToken(cfgPath)
+	if err != nil {
+		return err
+	}
+	if got != token {
+		return errors.New("the token read back from the Keychain differs")
+	}
+	return nil
+}
+
+// migrateToken moves a token from the .env file into the Keychain. The file
+// is deleted only after the Keychain copy was read back successfully.
+func migrateToken(cfgPath, envPath string, out io.Writer) int {
+	tok, err := config.LoadToken(envPath)
+	if err != nil {
+		fmt.Fprintln(out, "No usable token file to migrate:", observability.Redact(err.Error()))
+		return exitConfig
+	}
+	if err := storeAndVerify(cfgPath, tok); err != nil {
+		fmt.Fprintln(out, "Not migrated; the token file is unchanged:", observability.Redact(err.Error()))
+		return exitError
+	}
+	if err := os.Remove(envPath); err != nil {
+		fmt.Fprintln(out, "The token is in the Keychain, but the old file could not be removed:", err)
+		return exitError
+	}
+	fmt.Fprintf(out, "✓ Moved the bot token into the macOS Keychain (item %q) and removed %s.\nRestart the worker to use it: make restart\n", vault.Service, envPath)
+	return exitOK
 }

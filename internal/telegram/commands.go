@@ -39,6 +39,14 @@ var (
 // Models documented without xhigh support (they fall back to high).
 var lacksXHigh = map[string]bool{"claude-opus-4-6": true, "claude-sonnet-4-6": true}
 
+const userHelpText = `<b>clawdyX</b> — send any message to talk to Claude in the active session.
+
+/status · /sessions · /switch S2 · /rename S2 name
+/new [name] · /newf [name] · /clear
+/model [name|reset] · /effort [level] — for the active session
+/aliases · /stop · /cancel j-ID — your own jobs
+<i>Sessions are shared with the bot's owner. Tiers, defaults, screens and the machine are owner-only.</i>`
+
 const helpText = `<b>Claude control center</b> — send any message to talk to Claude in the active session.
 
 <b>Sessions</b>
@@ -87,28 +95,71 @@ func takeFlag(args []string, name string) ([]string, string, bool) {
 	return args, "", false
 }
 
-func (a *App) command(ctx context.Context, m *models.Message, text string) {
+// userCommands are available to allowed users with the "user" role. The
+// owner can use every command. Users share the bot's sessions but cannot
+// change tiers, defaults, screen features, the machine, or delete anything.
+var userCommands = map[string]bool{
+	"start": true, "help": true, "status": true, "sessions": true, "new": true, "newf": true, "clear": true,
+	"switch": true, "resume": true, "rename": true, "model": true, "effort": true, "aliases": true,
+	"stop": true, "cancel": true, "confirm": true, "deny": true,
+}
+
+// ownerOnlyArgs reports flags or sub-commands of user commands that are owner-only.
+func ownerOnlyArgs(cmd string, args []string) bool {
+	for _, a := range args {
+		if a == "--default" || a == "--delete" || a == "--session" || a == "--ws" {
+			return true
+		}
+	}
+	switch cmd {
+	case "sessions":
+		return len(args) > 0 && args[0] != "all"
+	case "stop":
+		return len(args) > 0 && strings.EqualFold(args[0], "all")
+	}
+	return false
+}
+
+// mayControlJob: the owner may stop any job; a user only jobs from their chat.
+func (a *App) mayControlJob(uid int64, role string, jobID int64) bool {
+	if role == config.RoleOwner {
+		return true
+	}
+	j, err := a.st.GetJob(jobID)
+	return err == nil && j.TgChatID == uid
+}
+
+func (a *App) command(ctx context.Context, m *models.Message, text, role string) {
 	fields := strings.Fields(text)
 	cmd := strings.ToLower(strings.TrimPrefix(fields[0], "/"))
 	if i := strings.IndexByte(cmd, '@'); i >= 0 {
 		cmd = cmd[:i]
 	}
 	args := fields[1:]
-	a.st.Audit("command", cmd, "", "", 0)
+	a.st.Audit("command", cmd, "", role, 0)
+	if role != config.RoleOwner && (!userCommands[cmd] || ownerOnlyArgs(cmd, args)) {
+		a.replyTo(m, "Only the owner can do that. /help lists what you can use.")
+		return
+	}
+	isOwner := role == config.RoleOwner
 	defer a.emit("telegram.command", map[string]string{"command": cmd})
 	switch cmd {
 	case "start":
-		a.cmdStart(m)
+		a.cmdStart(m, isOwner)
 	case "help":
-		a.reply(m.ID, helpText)
+		if isOwner {
+			a.replyTo(m, helpText)
+		} else {
+			a.replyTo(m, userHelpText)
+		}
 	case "status":
 		a.cmdStatus(m)
 	case "usage":
 		a.cmdUsage(m)
 	case "stop":
-		a.cmdStop(m, args)
+		a.cmdStop(m, args, isOwner)
 	case "cancel":
-		a.cmdCancel(m, args)
+		a.cmdCancel(m, args, isOwner)
 	case "jobs":
 		a.cmdJobs(m, args)
 	case "logs":
@@ -153,27 +204,27 @@ func (a *App) command(ctx context.Context, m *models.Message, text string) {
 		a.cmdDoctor(m)
 	case "pause":
 		a.jobs.SetPaused(true)
-		a.reply(m.ID, "⏸ Paused. Running jobs continue; new prompts are refused. /start resumes.")
+		a.replyTo(m, "⏸ Paused. Running jobs continue; new prompts are refused. /start resumes.")
 	case "confirm":
 		if len(args) != 1 {
-			a.reply(m.ID, "Usage: /confirm TOKEN")
+			a.replyTo(m, "Usage: /confirm TOKEN")
 			return
 		}
-		a.confirm(m.ID, 0, args[0])
+		a.confirm(tgt(m), 0, args[0])
 	case "deny":
 		if len(args) != 1 {
-			a.reply(m.ID, "Usage: /deny TOKEN")
+			a.replyTo(m, "Usage: /deny TOKEN")
 			return
 		}
-		if a.confirms.Deny(args[0]) {
-			a.reply(m.ID, "OK, not doing it.")
+		if a.confirms.Deny(args[0], m.From.ID) {
+			a.replyTo(m, "OK, not doing it.")
 		} else {
-			a.reply(m.ID, "That confirmation is unknown, expired, or already used.")
+			a.replyTo(m, "That confirmation is unknown, expired, or already used.")
 		}
 	case "shutdown":
 		a.cmdShutdown(m)
 	default:
-		a.reply(m.ID, "Unknown command. /help lists the commands.")
+		a.replyTo(m, "Unknown command. /help lists the commands.")
 	}
 }
 
@@ -194,14 +245,14 @@ func (a *App) activeLine() string {
 		s.Label(), name, Esc(s.WorkspaceName), s.Mode, Esc(modelEffort(model, effort)), s.Turns, shortID(s.ClaudeSessionID))
 }
 
-func (a *App) cmdStart(m *models.Message) {
+func (a *App) cmdStart(m *models.Message, isOwner bool) {
 	resumed := ""
-	if a.jobs.Paused() {
+	if isOwner && a.jobs.Paused() {
 		a.jobs.SetPaused(false)
 		resumed = "▶️ Resumed: prompts are accepted again.\n\n"
 	}
 	a.registerCommands()
-	a.reply(m.ID, fmt.Sprintf("%s<b>clawdyx %s</b> · up %s\n%s\n\nSend a message to talk to Claude. /help for commands.", resumed, Esc(Version), dur(time.Since(a.started)), a.activeLine()))
+	a.replyTo(m, fmt.Sprintf("%s<b>clawdyx %s</b> · up %s\n%s\n\nSend a message to talk to Claude. /help for commands.", resumed, Esc(Version), dur(time.Since(a.started)), a.activeLine()))
 }
 
 func (a *App) cmdStatus(m *models.Message) {
@@ -253,7 +304,7 @@ func (a *App) cmdStatus(m *models.Message) {
 	} else {
 		sb.WriteString("Last error: none")
 	}
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 func (a *App) cmdUsage(m *models.Message) {
@@ -263,7 +314,7 @@ func (a *App) cmdUsage(m *models.Message) {
 	today, err1 := a.st.Stats(day)
 	week, err2 := a.st.Stats(time.Now().Add(-7 * 24 * time.Hour))
 	if err1 != nil || err2 != nil {
-		a.reply(m.ID, "⚠️ Could not read job statistics from the database.")
+		a.replyTo(m, "⚠️ Could not read job statistics from the database.")
 		return
 	}
 	active, total := a.st.CountSessions()
@@ -313,7 +364,7 @@ func (a *App) cmdUsage(m *models.Message) {
 	if sys.OK {
 		fmt.Fprintf(&sb, " · free+inactive %s of %s · load %.2f", gib(sys.MemFree), gib(sys.MemTotal), sys.Load1)
 	}
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 func (a *App) sessionCosts() (float64, int) {
@@ -349,12 +400,21 @@ func stateSummary(m map[string]int) string {
 
 // ---- /stop /cancel /jobs /logs ----
 
-func (a *App) cmdStop(m *models.Message, args []string) {
+func (a *App) cmdStop(m *models.Message, args []string, isOwner bool) {
 	act := a.jobs.ActiveJobs()
+	if !isOwner {
+		var own []jobs.Active
+		for _, x := range act {
+			if a.mayControlJob(m.From.ID, config.RoleUser, x.JobID) {
+				own = append(own, x)
+			}
+		}
+		act = own
+	}
 	if len(args) == 0 {
 		s, _ := a.sess.Active()
 		if s == nil {
-			a.reply(m.ID, "No active session; nothing to stop.")
+			a.replyTo(m, "No active session; nothing to stop.")
 			return
 		}
 		var stopped []string
@@ -366,17 +426,17 @@ func (a *App) cmdStop(m *models.Message, args []string) {
 			}
 		}
 		if len(stopped) == 0 {
-			a.reply(m.ID, fmt.Sprintf("Nothing is running in %s. The bot itself keeps running.", s.Label()))
+			a.replyTo(m, fmt.Sprintf("Nothing is running in %s. The bot itself keeps running.", s.Label()))
 			return
 		}
-		a.reply(m.ID, fmt.Sprintf("⛔ Stopping in %s: %s.", s.Label(), strings.Join(stopped, ", ")))
+		a.replyTo(m, fmt.Sprintf("⛔ Stopping in %s: %s.", s.Label(), strings.Join(stopped, ", ")))
 		return
 	}
 	arg := args[0]
 	switch {
 	case strings.EqualFold(arg, "all"):
 		if len(act) == 0 {
-			a.reply(m.ID, "No jobs are running or queued.")
+			a.replyTo(m, "No jobs are running or queued.")
 			return
 		}
 		ids := make([]string, len(act))
@@ -384,19 +444,19 @@ func (a *App) cmdStop(m *models.Message, args []string) {
 			ids[i] = strconv.FormatInt(x.JobID, 10)
 		}
 		if len(act) == 1 {
-			a.stopJobs(m.ID, ids)
+			a.stopJobs(tgt(m), ids)
 			return
 		}
-		tok := a.confirms.New("stop_all", strings.Join(ids, ","))
+		tok := a.confirms.New(m.From.ID, "stop_all", strings.Join(ids, ","))
 		labels := make([]string, len(act))
 		for i, x := range act {
 			labels[i] = fmt.Sprintf("j-%d (S%d, %s)", x.JobID, x.SessionID, x.State)
 		}
-		a.askConfirm(m.ID, fmt.Sprintf("Stop %d jobs: %s?", len(act), strings.Join(labels, ", ")), tok, "Stop them", "Keep running")
+		a.askConfirm(tgt(m), fmt.Sprintf("Stop %d jobs: %s?", len(act), strings.Join(labels, ", ")), tok, "Stop them", "Keep running")
 	case isSessionRef(arg):
 		s, err := a.sess.Resolve(arg)
 		if err != nil {
-			a.reply(m.ID, "No such session: "+Esc(arg))
+			a.replyTo(m, "No such session: "+Esc(arg))
 			return
 		}
 		var ids []string
@@ -406,20 +466,20 @@ func (a *App) cmdStop(m *models.Message, args []string) {
 			}
 		}
 		if len(ids) == 0 {
-			a.reply(m.ID, fmt.Sprintf("Nothing is running or queued in %s.", s.Label()))
+			a.replyTo(m, fmt.Sprintf("Nothing is running or queued in %s.", s.Label()))
 			return
 		}
-		a.stopJobs(m.ID, ids)
+		a.stopJobs(tgt(m), ids)
 	default:
 		if id, ok := parseJobRef(arg); ok {
-			a.cancelOne(m.ID, id)
+			a.cancelOne(tgt(m), id)
 			return
 		}
-		a.reply(m.ID, "Usage: /stop [j-ID | S-ID | all]. Without an argument it stops the active session's job.")
+		a.replyTo(m, "Usage: /stop [j-ID | S-ID | all]. Without an argument it stops the active session's job.")
 	}
 }
 
-func (a *App) stopJobs(replyTo int, ids []string) {
+func (a *App) stopJobs(t target, ids []string) {
 	var done []string
 	for _, s := range ids {
 		id, _ := strconv.ParseInt(s, 10, 64)
@@ -428,37 +488,41 @@ func (a *App) stopJobs(replyTo int, ids []string) {
 		}
 	}
 	if len(done) == 0 {
-		a.reply(replyTo, "Those jobs already finished.")
+		a.say(t, "Those jobs already finished.")
 		return
 	}
-	a.reply(replyTo, "⛔ Stopping: "+strings.Join(done, ", ")+".")
+	a.say(t, "⛔ Stopping: "+strings.Join(done, ", ")+".")
 }
 
-func (a *App) cancelOne(replyTo int, id int64) {
+func (a *App) cancelOne(t target, id int64) {
 	prev, err := a.jobs.Cancel(id)
 	if err == nil {
-		a.reply(replyTo, fmt.Sprintf("⛔ Cancelling j-%d (was %s).", id, prev))
+		a.say(t, fmt.Sprintf("⛔ Cancelling j-%d (was %s).", id, prev))
 		return
 	}
 	j, gerr := a.st.GetJob(id)
 	if gerr != nil {
-		a.reply(replyTo, fmt.Sprintf("No job j-%d.", id))
+		a.say(t, fmt.Sprintf("No job j-%d.", id))
 		return
 	}
-	a.reply(replyTo, fmt.Sprintf("j-%d already %s %s.", id, j.State, ago(j.FinishedAt)))
+	a.say(t, fmt.Sprintf("j-%d already %s %s.", id, j.State, ago(j.FinishedAt)))
 }
 
-func (a *App) cmdCancel(m *models.Message, args []string) {
+func (a *App) cmdCancel(m *models.Message, args []string, isOwner bool) {
 	if len(args) != 1 {
-		a.reply(m.ID, "Usage: /cancel j-ID")
+		a.replyTo(m, "Usage: /cancel j-ID")
 		return
 	}
 	id, ok := parseJobRef(args[0])
 	if !ok {
-		a.reply(m.ID, "Usage: /cancel j-ID")
+		a.replyTo(m, "Usage: /cancel j-ID")
 		return
 	}
-	a.cancelOne(m.ID, id)
+	if !isOwner && !a.mayControlJob(m.From.ID, config.RoleUser, id) {
+		a.replyTo(m, "You can only cancel your own jobs.")
+		return
+	}
+	a.cancelOne(tgt(m), id)
 }
 
 func (a *App) cmdJobs(m *models.Message, args []string) {
@@ -470,11 +534,11 @@ func (a *App) cmdJobs(m *models.Message, args []string) {
 	}
 	list, err := a.st.ListJobs(n)
 	if err != nil {
-		a.reply(m.ID, "⚠️ Could not read jobs.")
+		a.replyTo(m, "⚠️ Could not read jobs.")
 		return
 	}
 	if len(list) == 0 {
-		a.reply(m.ID, "No jobs yet.")
+		a.replyTo(m, "No jobs yet.")
 		return
 	}
 	var sb strings.Builder
@@ -490,17 +554,17 @@ func (a *App) cmdJobs(m *models.Message, args []string) {
 		}
 		fmt.Fprintf(&sb, "%s %s %s · S%d · %s%s · in %s/out %s · %s\n", icon, j.Label(), j.State, j.SessionID, Esc(modelEffort(j.Model, j.Effort)), d, tokens(j.InTokens), tokens(j.OutTokens), ago(j.CreatedAt))
 	}
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 func (a *App) cmdLogs(m *models.Message, args []string) {
 	if len(args) < 1 {
-		a.reply(m.ID, "Usage: /logs j-ID [lines]")
+		a.replyTo(m, "Usage: /logs j-ID [lines]")
 		return
 	}
 	id, ok := parseJobRef(args[0])
 	if !ok {
-		a.reply(m.ID, "Usage: /logs j-ID [lines]")
+		a.replyTo(m, "Usage: /logs j-ID [lines]")
 		return
 	}
 	lines := 40
@@ -511,7 +575,7 @@ func (a *App) cmdLogs(m *models.Message, args []string) {
 	}
 	j, err := a.st.GetJob(id)
 	if err != nil {
-		a.reply(m.ID, fmt.Sprintf("No job j-%d.", id))
+		a.replyTo(m, fmt.Sprintf("No job j-%d.", id))
 		return
 	}
 	evs, _ := a.st.JobEvents(id, lines)
@@ -530,7 +594,7 @@ func (a *App) cmdLogs(m *models.Message, args []string) {
 	if j.ResultPreview != "" {
 		sb.WriteString("Result preview:\n<pre>" + Esc(observability.Truncate(j.ResultPreview, 1500)) + "</pre>")
 	}
-	a.replyLong(m.ID, sb.String())
+	a.replyLongTo(m, sb.String())
 }
 
 // ---- /processes ----
@@ -618,7 +682,7 @@ func (a *App) cmdProcesses(m *models.Message) {
 		fmt.Fprintf(&sb, "System · load %.2f / %.2f / %.2f · free+inactive %s of %s\n", sys.Load1, sys.Load5, sys.Load15, gib(sys.MemFree), gib(sys.MemTotal))
 	}
 	sb.WriteString("CPU is ps's decaying average, not an instantaneous reading. Stop a bot job: /cancel j-ID")
-	a.replyLong(m.ID, sb.String())
+	a.replyLongTo(m, sb.String())
 }
 
 // ---- /model /effort /aliases ----
@@ -710,57 +774,57 @@ func (a *App) cmdModel(m *models.Message, args []string) {
 		}
 		sb.WriteString("Set: /model NAME · chat default: /model NAME --default · clear the session override: /model reset\n")
 		sb.WriteString("<i>This is the primary model. The separate --advisor model is never changed by the bot.</i>")
-		a.reply(m.ID, sb.String())
+		a.replyTo(m, sb.String())
 		return
 	}
 	if len(args) != 1 {
-		a.reply(m.ID, "Usage: /model [NAME|reset] [--default] [--session S-ID]")
+		a.replyTo(m, "Usage: /model [NAME|reset] [--default] [--session S-ID]")
 		return
 	}
 	var target *store.Session
 	if hasSess {
 		s, err := a.sess.Resolve(sessRef)
 		if err != nil {
-			a.reply(m.ID, "No such session: "+Esc(sessRef))
+			a.replyTo(m, "No such session: "+Esc(sessRef))
 			return
 		}
 		target = s
 	} else if !isDefault {
 		s, _, err := a.sess.EnsureActive()
 		if err != nil {
-			a.reply(m.ID, "⚠️ No session available.")
+			a.replyTo(m, "⚠️ No session available.")
 			return
 		}
 		target = s
 	}
 	if strings.EqualFold(args[0], "reset") {
 		if target == nil {
-			a.reply(m.ID, "reset clears a session override; it has no meaning with --default.")
+			a.replyTo(m, "reset clears a session override; it has no meaning with --default.")
 			return
 		}
 		_ = a.st.SetSessionField(target.ID, "model", "")
-		a.reply(m.ID, fmt.Sprintf("Model override for %s cleared; it now uses the chat default %s.", target.Label(), Esc(a.sess.DefaultModel())))
+		a.replyTo(m, fmt.Sprintf("Model override for %s cleared; it now uses the chat default %s.", target.Label(), Esc(a.sess.DefaultModel())))
 		return
 	}
 	model, via, err := a.resolveModelName(args[0])
 	if err != nil {
-		a.reply(m.ID, "❌ Not changed. "+Esc(err.Error()))
+		a.replyTo(m, "❌ Not changed. "+Esc(err.Error()))
 		return
 	}
 	scope := "chat default for new sessions"
 	if target != nil {
 		scope = target.Label()
 	}
-	ack := a.reply(m.ID, fmt.Sprintf("Validating %s…", Esc(model)))
+	ack := a.replyTo(m, fmt.Sprintf("Validating %s…", Esc(model)))
 	a.go_(func() {
 		ctx, cancel := context.WithTimeout(a.ctx, 2*time.Minute)
 		defer cancel()
 		canon, cached, err := a.validateModel(ctx, model)
 		edit := func(html string) {
 			if ack != 0 {
-				_ = a.send.Edit(a.ctx, ack, html, nil)
+				_ = a.send.Edit(a.ctx, m.Chat.ID, ack, html, nil)
 			} else {
-				a.reply(m.ID, html)
+				a.replyTo(m, html)
 			}
 		}
 		if err != nil {
@@ -810,23 +874,23 @@ func (a *App) cmdEffort(m *models.Message, args []string) {
 		fmt.Fprintf(&sb, "Chat default: %s\n", Esc(def))
 		sb.WriteString("Levels accepted by the installed CLI: low, medium, high, xhigh, max. <b>auto</b> = pass no --effort (Claude Code settings or the model's default decide).\n")
 		sb.WriteString("Set: /effort LEVEL · chat default: /effort LEVEL --default")
-		a.reply(m.ID, sb.String())
+		a.replyTo(m, sb.String())
 		return
 	}
 	lvl := strings.ToLower(args[0])
 	if len(args) != 1 || !config.IsEffort(lvl) {
-		a.reply(m.ID, "Usage: /effort [low|medium|high|xhigh|max|auto] [--default]")
+		a.replyTo(m, "Usage: /effort [low|medium|high|xhigh|max|auto] [--default]")
 		return
 	}
 	if isDefault {
 		_ = a.sess.SetDefaultEffort(lvl)
-		a.reply(m.ID, fmt.Sprintf("✅ Chat default effort set to %s.", lvl))
+		a.replyTo(m, fmt.Sprintf("✅ Chat default effort set to %s.", lvl))
 		return
 	}
 	if s == nil {
 		var err error
 		if s, _, err = a.sess.EnsureActive(); err != nil {
-			a.reply(m.ID, "⚠️ No session available.")
+			a.replyTo(m, "⚠️ No session available.")
 			return
 		}
 	}
@@ -837,17 +901,17 @@ func (a *App) cmdEffort(m *models.Message, args []string) {
 		note = fmt.Sprintf(" Note: %s does not support xhigh; Claude Code runs it as high.", Esc(canon))
 	}
 	a.st.Audit("effort", "set", s.Label(), lvl, 0)
-	a.reply(m.ID, fmt.Sprintf("✅ Effort for %s set to <b>%s</b>. Applies to the next message.%s", s.Label(), lvl, note))
+	a.replyTo(m, fmt.Sprintf("✅ Effort for %s set to <b>%s</b>. Applies to the next message.%s", s.Label(), lvl, note))
 }
 
 func (a *App) cmdAliases(m *models.Message) {
 	al, err := a.st.ListAliases()
 	if err != nil {
-		a.reply(m.ID, "⚠️ Could not read aliases.")
+		a.replyTo(m, "⚠️ Could not read aliases.")
 		return
 	}
 	if len(al) == 0 {
-		a.reply(m.ID, "No custom aliases. Create one: /alias set fast haiku")
+		a.replyTo(m, "No custom aliases. Create one: /alias set fast haiku")
 		return
 	}
 	var sb strings.Builder
@@ -855,36 +919,36 @@ func (a *App) cmdAliases(m *models.Message) {
 	for _, x := range al {
 		fmt.Fprintf(&sb, "• %s → %s → %s (verified %s)\n", Esc(x.Name), Esc(x.Model), Esc(x.Canonical), x.CreatedAt.Format("Jan 2"))
 	}
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 func (a *App) cmdAlias(m *models.Message, args []string) {
 	if len(args) == 2 && args[0] == "rm" {
 		if err := a.st.DeleteAlias(strings.ToLower(args[1])); err != nil {
-			a.reply(m.ID, "No such alias.")
+			a.replyTo(m, "No such alias.")
 			return
 		}
-		a.reply(m.ID, "Alias removed.")
+		a.replyTo(m, "Alias removed.")
 		return
 	}
 	if len(args) != 3 || args[0] != "set" {
-		a.reply(m.ID, "Usage: /alias set NAME MODEL · /alias rm NAME")
+		a.replyTo(m, "Usage: /alias set NAME MODEL · /alias rm NAME")
 		return
 	}
 	name := strings.ToLower(args[1])
 	if !aliasNameRe.MatchString(name) || config.IsEffort(name) || name == "reset" {
-		a.reply(m.ID, "Alias names must match [a-z0-9_-]{1,24} and must not be an effort level or 'reset'.")
+		a.replyTo(m, "Alias names must match [a-z0-9_-]{1,24} and must not be an effort level or 'reset'.")
 		return
 	}
 	for _, b := range BuiltinModelAliases {
 		if name == b {
-			a.reply(m.ID, "That name is a built-in alias; pick another.")
+			a.replyTo(m, "That name is a built-in alias; pick another.")
 			return
 		}
 	}
 	model := strings.ToLower(args[2])
 	if _, err := a.st.GetAlias(model); err == nil {
-		a.reply(m.ID, "An alias cannot point to another alias.")
+		a.replyTo(m, "An alias cannot point to another alias.")
 		return
 	}
 	builtin := false
@@ -892,20 +956,20 @@ func (a *App) cmdAlias(m *models.Message, args []string) {
 		builtin = builtin || model == b
 	}
 	if !builtin && !fullModelRe.MatchString(model) {
-		a.reply(m.ID, "The target must be a built-in alias or a claude-* model ID.")
+		a.replyTo(m, "The target must be a built-in alias or a claude-* model ID.")
 		return
 	}
-	ack := a.reply(m.ID, fmt.Sprintf("Validating %s…", Esc(model)))
+	ack := a.replyTo(m, fmt.Sprintf("Validating %s…", Esc(model)))
 	a.go_(func() {
 		ctx, cancel := context.WithTimeout(a.ctx, 2*time.Minute)
 		defer cancel()
 		canon, _, err := a.validateModel(ctx, model)
 		if err != nil {
-			_ = a.send.Edit(a.ctx, ack, "❌ Alias not created: "+Esc(observability.Truncate(observability.Redact(err.Error()), 200)), nil)
+			_ = a.send.Edit(a.ctx, m.Chat.ID, ack, "❌ Alias not created: "+Esc(observability.Truncate(observability.Redact(err.Error()), 200)), nil)
 			return
 		}
 		_ = a.st.SetAlias(store.Alias{Name: name, Model: model, Canonical: canon})
-		_ = a.send.Edit(a.ctx, ack, fmt.Sprintf("✅ Alias %s → %s → %s. Use /model %s.", Esc(name), Esc(model), Esc(canon), Esc(name)), nil)
+		_ = a.send.Edit(a.ctx, m.Chat.ID, ack, fmt.Sprintf("✅ Alias %s → %s → %s. Use /model %s.", Esc(name), Esc(model), Esc(canon), Esc(name)), nil)
 	})
 }
 
@@ -915,40 +979,40 @@ func (a *App) cmdSessions(m *models.Message, args []string) {
 	if len(args) == 2 && args[0] == "restore" {
 		x, err := a.sess.Restore(args[1])
 		if err != nil {
-			a.reply(m.ID, "⚠️ "+Esc(err.Error()))
+			a.replyTo(m, "⚠️ "+Esc(err.Error()))
 			return
 		}
 		a.sessionsChanged("restore")
-		a.reply(m.ID, fmt.Sprintf("%s restored. /switch %s makes it active.", x.Label(), x.Label()))
+		a.replyTo(m, fmt.Sprintf("%s restored. /switch %s makes it active.", x.Label(), x.Label()))
 		return
 	}
 	if len(args) == 2 && args[0] == "archive" {
 		s, err := a.sess.Resolve(args[1])
 		if err != nil {
-			a.reply(m.ID, "No such session.")
+			a.replyTo(m, "No such session.")
 			return
 		}
 		for _, x := range a.jobs.ActiveJobs() {
 			if x.SessionID == s.ID {
-				a.reply(m.ID, fmt.Sprintf("%s has active jobs; stop them first (/stop %s).", s.Label(), s.Label()))
+				a.replyTo(m, fmt.Sprintf("%s has active jobs; stop them first (/stop %s).", s.Label(), s.Label()))
 				return
 			}
 		}
 		if err := a.sess.Archive(s); err != nil {
-			a.reply(m.ID, "⚠️ Could not archive.")
+			a.replyTo(m, "⚠️ Could not archive.")
 			return
 		}
-		a.reply(m.ID, fmt.Sprintf("%s archived. Its Claude transcript is untouched.", s.Label()))
+		a.replyTo(m, fmt.Sprintf("%s archived. Its Claude transcript is untouched.", s.Label()))
 		return
 	}
 	all := len(args) == 1 && args[0] == "all"
 	list, err := a.st.ListSessions(all, 20)
 	if err != nil {
-		a.reply(m.ID, "⚠️ Could not read sessions.")
+		a.replyTo(m, "⚠️ Could not read sessions.")
 		return
 	}
 	if len(list) == 0 {
-		a.reply(m.ID, "No sessions yet. Send a message or use /new.")
+		a.replyTo(m, "No sessions yet. Send a message or use /new.")
 		return
 	}
 	active, _ := a.sess.Active()
@@ -971,7 +1035,7 @@ func (a *App) cmdSessions(m *models.Message, args []string) {
 		fmt.Fprintf(&sb, "%s%s%s · ws %s · %s · %s · %d turns · %s · <code>%s</code>%s\n", s.Label(), star, name, Esc(s.WorkspaceName), s.Mode, Esc(modelEffort(mo, ef)), s.Turns, ago(s.LastUsedAt), shortID(s.ClaudeSessionID), status)
 	}
 	sb.WriteString("* = active · /switch S-ID · /new [name] · /newf · /clear · /forget S-ID")
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 func (a *App) cmdNew(m *models.Message, args []string) {
@@ -980,30 +1044,30 @@ func (a *App) cmdNew(m *models.Message, args []string) {
 	if hasWS {
 		w, ok := a.cfg.Workspace(wsName)
 		if !ok {
-			a.reply(m.ID, "Unknown workspace. /cwd lists them.")
+			a.replyTo(m, "Unknown workspace. /cwd lists them.")
 			return
 		}
 		ws = w
 	}
 	name := ""
 	if len(args) > 1 {
-		a.reply(m.ID, "Usage: /new [name] [--ws workspace]")
+		a.replyTo(m, "Usage: /new [name] [--ws workspace]")
 		return
 	}
 	if len(args) == 1 {
 		name = args[0]
 		if !sessions.ValidName(name) {
-			a.reply(m.ID, "Session names may use letters, digits, '_' and '-' (max 32).")
+			a.replyTo(m, "Session names may use letters, digits, '_' and '-' (max 32).")
 			return
 		}
 	}
 	s, err := a.sess.Create(name, ws)
 	if err != nil {
-		a.reply(m.ID, "⚠️ "+Esc(err.Error()))
+		a.replyTo(m, "⚠️ "+Esc(err.Error()))
 		return
 	}
 	mo, ef := a.sess.Effective(s)
-	a.reply(m.ID, fmt.Sprintf("🆕 Session <b>%s</b>%s created and active · ws <code>%s</code> · %s · %s", s.Label(), func() string {
+	a.replyTo(m, fmt.Sprintf("🆕 Session <b>%s</b>%s created and active · ws <code>%s</code> · %s · %s", s.Label(), func() string {
 		if name == "" {
 			return ""
 		}
@@ -1013,27 +1077,27 @@ func (a *App) cmdNew(m *models.Message, args []string) {
 
 func (a *App) cmdSwitch(m *models.Message, args []string) {
 	if len(args) != 1 {
-		a.reply(m.ID, "Usage: /switch S-ID|name")
+		a.replyTo(m, "Usage: /switch S-ID|name")
 		return
 	}
 	if _, err := a.sess.Switch(args[0]); err != nil {
 		if errors.Is(err, sessions.ErrNoSession) {
-			a.reply(m.ID, "No such session. /sessions lists them. (Attaching external Claude sessions is not enabled yet.)")
+			a.replyTo(m, "No such session. /sessions lists them. (Attaching external Claude sessions is not enabled yet.)")
 			return
 		}
-		a.reply(m.ID, "⚠️ "+Esc(err.Error()))
+		a.replyTo(m, "⚠️ "+Esc(err.Error()))
 		return
 	}
-	a.reply(m.ID, "Switched. "+a.activeLine())
+	a.replyTo(m, "Switched. "+a.activeLine())
 }
 
 func (a *App) cmdCwd(m *models.Message, args []string) {
 	if len(args) == 1 {
 		if err := a.sess.SetDefaultWorkspace(args[0]); err != nil {
-			a.reply(m.ID, "Unknown workspace. Only configured workspaces are allowed; /cwd lists them.")
+			a.replyTo(m, "Unknown workspace. Only configured workspaces are allowed; /cwd lists them.")
 			return
 		}
-		a.reply(m.ID, fmt.Sprintf("New sessions will use <code>%s</code>. Existing sessions keep their workspace; /new starts one here.", Esc(args[0])))
+		a.replyTo(m, fmt.Sprintf("New sessions will use <code>%s</code>. Existing sessions keep their workspace; /new starts one here.", Esc(args[0])))
 		return
 	}
 	def := a.sess.DefaultWorkspace()
@@ -1050,7 +1114,7 @@ func (a *App) cmdCwd(m *models.Message, args []string) {
 		fmt.Fprintf(&sb, "Active session %s works in <code>%s</code>.\n", s.Label(), Esc(s.WorkspacePath))
 	}
 	sb.WriteString("* = default for /new · change: /cwd NAME")
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 var modeHelp = map[string]string{
@@ -1064,7 +1128,7 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		s, _ := a.sess.Active()
 		if s == nil {
 			ws := a.sess.DefaultWorkspace()
-			a.reply(m.ID, fmt.Sprintf("No active session. New sessions in <code>%s</code> start in <b>%s</b> — %s.", Esc(ws.Name), ws.DefaultMode, modeHelp[ws.DefaultMode]))
+			a.replyTo(m, fmt.Sprintf("No active session. New sessions in <code>%s</code> start in <b>%s</b> — %s.", Esc(ws.Name), ws.DefaultMode, modeHelp[ws.DefaultMode]))
 			return
 		}
 		ws, _ := a.cfg.Workspace(s.WorkspaceName)
@@ -1072,7 +1136,7 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		if ws != nil && len(ws.AllowedCommands) > 0 {
 			allow = strings.Join(ws.AllowedCommands, ", ")
 		}
-		a.reply(m.ID, fmt.Sprintf("Tier for %s: <b>%s</b> — %s.\nAssisted command allowlist: <code>%s</code>\nChange: /mode observe | /mode assisted. Bypass mode is never used.", s.Label(), s.Mode, modeHelp[s.Mode], Esc(allow)))
+		a.replyTo(m, fmt.Sprintf("Tier for %s: <b>%s</b> — %s.\nAssisted command allowlist: <code>%s</code>\nChange: /mode observe | /mode assisted. Bypass mode is never used.", s.Label(), s.Mode, modeHelp[s.Mode], Esc(allow)))
 		return
 	}
 	mode := strings.ToLower(args[0])
@@ -1080,62 +1144,62 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 	case config.ModeObserve, config.ModeAssisted:
 		s, _, err := a.sess.EnsureActive()
 		if err != nil {
-			a.reply(m.ID, "⚠️ No session available.")
+			a.replyTo(m, "⚠️ No session available.")
 			return
 		}
 		_ = a.st.SetSessionField(s.ID, "mode", mode)
 		a.st.Audit("mode", "set", s.Label(), mode, 0)
-		a.reply(m.ID, fmt.Sprintf("✅ %s tier set to <b>%s</b>: %s. Applies to the next message.", s.Label(), mode, modeHelp[mode]))
+		a.replyTo(m, fmt.Sprintf("✅ %s tier set to <b>%s</b>: %s. Applies to the next message.", s.Label(), mode, modeHelp[mode]))
 	case config.ModeAutomation:
 		if !a.cfg.Modes.AutomationEnabled {
-			a.reply(m.ID, "The automation tier is not enabled. Set \"modes\": {\"automation_enabled\": true} in ~/.config/clawdyx/config.json and restart the bot.")
+			a.replyTo(m, "The automation tier is not enabled. Set \"modes\": {\"automation_enabled\": true} in ~/.config/clawdyx/config.json and restart the bot.")
 			return
 		}
 		s, _, err := a.sess.EnsureActive()
 		if err != nil {
-			a.reply(m.ID, "⚠️ No session available.")
+			a.replyTo(m, "⚠️ No session available.")
 			return
 		}
 		if s.Mode == config.ModeAutomation {
-			a.reply(m.ID, fmt.Sprintf("%s is already in automation.", s.Label()))
+			a.replyTo(m, fmt.Sprintf("%s is already in automation.", s.Label()))
 			return
 		}
-		tok := a.confirms.New("mode_automation", strconv.FormatInt(s.ID, 10))
+		tok := a.confirms.New(m.From.ID, "mode_automation", strconv.FormatInt(s.ID, 10))
 		extra := ""
 		if a.cfg.Desktop.ScreenControl {
 			extra = " It will also see your screen and use the mouse and keyboard."
 		}
-		a.askConfirm(m.ID, fmt.Sprintf("Switch %s to automation? Claude will %s.%s Switch back any time with /mode observe.", s.Label(), modeHelp[config.ModeAutomation], extra), tok, "Enable automation", "Keep current tier")
+		a.askConfirm(tgt(m), fmt.Sprintf("Switch %s to automation? Claude will %s.%s Switch back any time with /mode observe.", s.Label(), modeHelp[config.ModeAutomation], extra), tok, "Enable automation", "Keep current tier")
 	default:
-		a.reply(m.ID, "Usage: /mode [observe|assisted|automation]")
+		a.replyTo(m, "Usage: /mode [observe|assisted|automation]")
 	}
 }
 
 // ---- confirmations ----
 
-func (a *App) askConfirm(replyTo int, question, tok, yes, no string) {
+func (a *App) askConfirm(t target, question, tok, yes, no string) {
 	markup := &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{{
 		{Text: yes, CallbackData: "y:" + tok}, {Text: no, CallbackData: "n:" + tok},
 	}}}
-	_, err := a.send.Send(a.ctx, Out{HTML: Esc(question) + fmt.Sprintf("\n<i>Expires in %ds. Text fallback: /confirm %s</i>", int(ConfirmTTL.Seconds()), tok), ReplyTo: replyTo, Markup: markup})
+	_, err := a.send.Send(a.ctx, Out{HTML: Esc(question) + fmt.Sprintf("\n<i>Expires in %ds. Text fallback: /confirm %s</i>", int(ConfirmTTL.Seconds()), tok), ChatID: t.chat, ReplyTo: t.msg, Markup: markup})
 	if err != nil {
 		a.log.Warn("confirmation prompt failed")
 	}
 }
 
 // confirm executes a confirmed action. editID is the prompt message (0 if text).
-func (a *App) confirm(replyTo, editID int, tok string) {
-	action, args, err := a.confirms.Take(tok, "")
+func (a *App) confirm(t target, editID int, tok string) {
+	action, args, err := a.confirms.Take(tok, "", t.uid)
 	if err != nil {
 		a.st.Audit("confirm", "reject", "", err.Error(), 0)
-		a.reply(replyTo, "That confirmation is unknown, expired, or already used. Nothing was done.")
+		a.say(t, "That confirmation is unknown, expired, or already used. Nothing was done.")
 		return
 	}
 	a.st.Audit("confirm", action, args, "accepted", 0)
 	if editID != 0 {
-		_ = a.send.Edit(a.ctx, editID, "Confirmed.", noMarkup())
+		_ = a.send.Edit(a.ctx, t.chat, editID, "Confirmed.", noMarkup())
 	}
-	if a.confirmLifecycle(replyTo, action, args) {
+	if a.confirmLifecycle(t, action, args) {
 		return
 	}
 	switch action {
@@ -1143,16 +1207,16 @@ func (a *App) confirm(replyTo, editID int, tok string) {
 		id, _ := strconv.ParseInt(args, 10, 64)
 		s, err := a.st.GetSession(id)
 		if err != nil || !a.cfg.Modes.AutomationEnabled {
-			a.reply(replyTo, "Not changed: the session is gone or automation was disabled.")
+			a.say(t, "Not changed: the session is gone or automation was disabled.")
 			return
 		}
 		_ = a.st.SetSessionField(s.ID, "mode", config.ModeAutomation)
 		a.st.Audit("mode", "set", s.Label(), config.ModeAutomation, 0)
-		a.reply(replyTo, fmt.Sprintf("🤖 %s is now in <b>automation</b>. Ask for things like \"open YouTube in Firefox\". /mode observe switches back.", s.Label()))
+		a.say(t, fmt.Sprintf("🤖 %s is now in <b>automation</b>. Ask for things like \"open YouTube in Firefox\". /mode observe switches back.", s.Label()))
 	case "stop_all":
-		a.stopJobs(replyTo, strings.Split(args, ","))
+		a.stopJobs(t, strings.Split(args, ","))
 	case "shutdown":
-		a.reply(replyTo, "Shutting down gracefully. launchd will not restart a clean exit; start it again with: launchctl kickstart gui/$(id -u)/local.clawdyx")
+		a.say(t, "Shutting down gracefully. launchd will not restart a clean exit; start it again with: launchctl kickstart gui/$(id -u)/local.clawdyx")
 		a.shutdownOnce.Do(func() { close(a.ShutdownRequested) })
 		go func() {
 			time.Sleep(time.Second)
@@ -1161,13 +1225,24 @@ func (a *App) confirm(replyTo, editID int, tok string) {
 	}
 }
 
-func (a *App) onCallback(ctx context.Context, cq *models.CallbackQuery) {
+func (a *App) onCallback(ctx context.Context, cq *models.CallbackQuery, role string) {
 	data := cq.Data
 	msgID := 0
+	var chat int64
 	if cq.Message.Message != nil {
-		msgID = cq.Message.Message.ID
+		msgID, chat = cq.Message.Message.ID, cq.Message.Message.Chat.ID
 	}
+	t := target{chat: chat, msg: msgID, uid: cq.From.ID}
 	switch {
+	case strings.HasPrefix(data, "c:") && role != config.RoleOwner && !a.mayControlJob(cq.From.ID, role, func() int64 {
+		parts := strings.Split(data, ":")
+		if len(parts) == 3 {
+			id, _ := strconv.ParseInt(parts[1], 10, 64)
+			return id
+		}
+		return 0
+	}()):
+		a.send.Answer(ctx, cq.ID, "You can only cancel your own jobs")
 	case strings.HasPrefix(data, "c:"):
 		parts := strings.Split(data, ":")
 		if len(parts) != 3 {
@@ -1188,11 +1263,11 @@ func (a *App) onCallback(ctx context.Context, cq *models.CallbackQuery) {
 		a.send.Answer(ctx, cq.ID, fmt.Sprintf("Cancelling j-%d", id))
 	case strings.HasPrefix(data, "y:"):
 		a.send.Answer(ctx, cq.ID, "")
-		a.confirm(msgID, msgID, strings.TrimPrefix(data, "y:"))
+		a.confirm(t, msgID, strings.TrimPrefix(data, "y:"))
 	case strings.HasPrefix(data, "n:"):
 		a.send.Answer(ctx, cq.ID, "")
-		if a.confirms.Deny(strings.TrimPrefix(data, "n:")) {
-			_ = a.send.Edit(ctx, msgID, "OK, nothing was done.", noMarkup())
+		if a.confirms.Deny(strings.TrimPrefix(data, "n:"), cq.From.ID) {
+			_ = a.send.Edit(ctx, chat, msgID, "OK, nothing was done.", noMarkup())
 		}
 	default:
 		a.send.Answer(ctx, cq.ID, "Unknown button")
@@ -1201,17 +1276,17 @@ func (a *App) onCallback(ctx context.Context, cq *models.CallbackQuery) {
 
 func (a *App) cmdShutdown(m *models.Message) {
 	if !a.cfg.ShutdownCommandEnabled {
-		a.reply(m.ID, "/shutdown is disabled (shutdown_command_enabled is false). Stop the service from macOS: launchctl bootout gui/$(id -u)/local.clawdyx")
+		a.replyTo(m, "/shutdown is disabled (shutdown_command_enabled is false). Stop the service from macOS: launchctl bootout gui/$(id -u)/local.clawdyx")
 		return
 	}
-	tok := a.confirms.New("shutdown", "")
-	a.askConfirm(m.ID, "Shut the bot down? Running jobs will be stopped. You will need macOS (launchctl) to start it again.", tok, "Shut down", "Cancel")
+	tok := a.confirms.New(m.From.ID, "shutdown", "")
+	a.askConfirm(tgt(m), "Shut the bot down? Running jobs will be stopped. You will need macOS (launchctl) to start it again.", tok, "Shut down", "Cancel")
 }
 
 // ---- /doctor ----
 
 func (a *App) cmdDoctor(m *models.Message) {
-	ack := a.reply(m.ID, "🩺 Running read-only diagnostics (about 30–45 s; claude auth status and claude agents are slow)…")
+	ack := a.replyTo(m, "🩺 Running read-only diagnostics (about 30–45 s; claude auth status and claude agents are slow)…")
 	a.go_(func() {
 		ctx, cancel := context.WithTimeout(a.ctx, 2*time.Minute)
 		defer cancel()
@@ -1301,9 +1376,9 @@ func (a *App) cmdDoctor(m *models.Message) {
 			sb.WriteString("\n❌ claude doctor: " + Esc(observability.Redact(docErr.Error())))
 		}
 		if ack != 0 {
-			_ = a.send.Edit(a.ctx, ack, "🩺 Diagnostics finished.", nil)
+			_ = a.send.Edit(a.ctx, m.Chat.ID, ack, "🩺 Diagnostics finished.", nil)
 		}
-		a.replyLong(m.ID, sb.String())
+		a.replyLongTo(m, sb.String())
 	})
 }
 

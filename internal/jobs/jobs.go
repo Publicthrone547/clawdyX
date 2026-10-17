@@ -193,6 +193,7 @@ type Request struct {
 	Prompt    string
 	UpdateID  int64
 	MessageID int
+	ChatID    int64         // Telegram chat that asked (0 = the owner / the app)
 	Images    []agent.Image // optional screen captures sent with the prompt
 	Kind      string        // "prompt" (default) or "look"
 	// Registered runs with the new job before any notification is sent.
@@ -217,7 +218,7 @@ func (m *Manager) Submit(r Request) (*store.Job, int, error) {
 	}
 	sum := sha256.Sum256([]byte(r.Prompt))
 	model, effort := m.sess.Effective(r.Session)
-	j, err := m.st.InsertJob(store.Job{SessionID: r.Session.ID, Kind: r.Kind, TgUpdateID: r.UpdateID, TgMessageID: r.MessageID,
+	j, err := m.st.InsertJob(store.Job{SessionID: r.Session.ID, Kind: r.Kind, TgUpdateID: r.UpdateID, TgMessageID: r.MessageID, TgChatID: r.ChatID,
 		PromptSHA256: hex.EncodeToString(sum[:]), Model: model, Effort: effort, PermMode: r.Session.Mode})
 	if err != nil {
 		m.mu.Unlock()

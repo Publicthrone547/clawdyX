@@ -78,25 +78,25 @@ func openURL(ctx context.Context, app, u string) error {
 
 func (a *App) cmdOpen(m *models.Message, args []string) {
 	if !a.cfg.Desktop.OpenEnabled() {
-		a.reply(m.ID, "/open is disabled in the config (desktop.open_urls).")
+		a.replyTo(m, "/open is disabled in the config (desktop.open_urls).")
 		return
 	}
 	if len(args) != 1 {
-		a.reply(m.ID, "Usage: /open ADDRESS — for example /open youtube.com")
+		a.replyTo(m, "Usage: /open ADDRESS — for example /open youtube.com")
 		return
 	}
 	u, err := NormalizeURL(args[0])
 	if err != nil {
-		a.reply(m.ID, "Not opened: "+Esc(err.Error())+".")
+		a.replyTo(m, "Not opened: "+Esc(err.Error())+".")
 		return
 	}
 	app := a.cfg.Desktop.BrowserApp
 	parsed, _ := url.Parse(u)
 	if err := a.opener(a.ctx, app, u); err != nil {
 		a.st.Audit("desktop", "open", parsed.Hostname(), "failed", 0)
-		a.reply(m.ID, fmt.Sprintf("❌ Could not open it in %s: %s", Esc(app), Esc(err.Error())))
+		a.replyTo(m, fmt.Sprintf("❌ Could not open it in %s: %s", Esc(app), Esc(err.Error())))
 		return
 	}
 	a.st.Audit("desktop", "open", parsed.Hostname(), "ok", 0)
-	a.reply(m.ID, fmt.Sprintf("🌐 Opened %s in %s on the Mac.", Esc(u), Esc(app)))
+	a.replyTo(m, fmt.Sprintf("🌐 Opened %s in %s on the Mac.", Esc(u), Esc(app)))
 }

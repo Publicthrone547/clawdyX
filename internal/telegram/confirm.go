@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/base32"
 	"errors"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ var (
 )
 
 type pendingConfirm struct {
+	who     int64 // Telegram user who asked; only they may confirm
 	action  string
 	args    string
 	mac     []byte
@@ -46,26 +48,26 @@ func NewConfirms() *Confirms {
 	return &Confirms{key: k, m: map[string]*pendingConfirm{}, now: time.Now}
 }
 
-func (c *Confirms) mac(token, action, args string) []byte {
+func (c *Confirms) mac(token string, who int64, action, args string) []byte {
 	h := hmac.New(sha256.New, c.key)
-	h.Write([]byte(token + "\x00" + action + "\x00" + args))
+	h.Write([]byte(token + "\x00" + strconv.FormatInt(who, 10) + "\x00" + action + "\x00" + args))
 	return h.Sum(nil)
 }
 
-// New issues a token for action+args.
-func (c *Confirms) New(action, args string) string {
+// New issues a token for action+args that only user who can confirm.
+func (c *Confirms) New(who int64, action, args string) string {
 	b := make([]byte, 5)
 	_, _ = rand.Read(b)
 	tok := strings.TrimRight(base32.StdEncoding.EncodeToString(b), "=")[:6]
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.m[tok] = &pendingConfirm{action: action, args: args, mac: c.mac(tok, action, args), expires: c.now().Add(ConfirmTTL)}
+	c.m[tok] = &pendingConfirm{who: who, action: action, args: args, mac: c.mac(tok, who, action, args), expires: c.now().Add(ConfirmTTL)}
 	return tok
 }
 
-// Take consumes a token. If action is non-empty it must match. It returns
-// the bound action and arguments.
-func (c *Confirms) Take(token, action string) (string, string, error) {
+// Take consumes a token for user who. If action is non-empty it must match.
+// It returns the bound action and arguments.
+func (c *Confirms) Take(token, action string, who int64) (string, string, error) {
 	token = strings.ToUpper(strings.TrimSpace(token))
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -77,23 +79,23 @@ func (c *Confirms) Take(token, action string) (string, string, error) {
 	if p.used {
 		return "", "", ErrConfirmUsed
 	}
-	if action != "" && action != p.action {
+	if (action != "" && action != p.action) || who != p.who {
 		return "", "", ErrConfirmMismatch
 	}
-	if !hmac.Equal(p.mac, c.mac(token, p.action, p.args)) {
+	if !hmac.Equal(p.mac, c.mac(token, who, p.action, p.args)) {
 		return "", "", ErrConfirmMismatch
 	}
 	p.used = true
 	return p.action, p.args, nil
 }
 
-// Deny discards a token.
-func (c *Confirms) Deny(token string) bool {
+// Deny discards a token (only the user who asked can deny it).
+func (c *Confirms) Deny(token string, who int64) bool {
 	token = strings.ToUpper(strings.TrimSpace(token))
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	p, ok := c.m[token]
-	if !ok || p.used {
+	if !ok || p.used || p.who != who {
 		return false
 	}
 	p.used = true

@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // Modes of a session.
@@ -48,11 +50,92 @@ func (d Duration) MarshalJSON() ([]byte, error) { return json.Marshal(d.String()
 
 // Telegram settings.
 type Telegram struct {
-	// OwnerUserID is the only Telegram user the bot serves. It is set locally
-	// (clawdyx setup) and must be a positive numeric user ID; the bot fails
-	// closed when it is missing. Usernames and lists are never accepted.
-	OwnerUserID        int64 `json:"owner_user_id"`
-	PollTimeoutSeconds int   `json:"poll_timeout_seconds"`
+	// OwnerUserID is the owner's numeric Telegram user ID. It is set locally
+	// (clawdyx setup or the app) and must be positive; the bot fails closed
+	// when no owner is configured. Usernames are never accepted.
+	OwnerUserID int64 `json:"owner_user_id,omitempty"`
+	// AllowedUsers lists every numeric ID the bot serves, with exactly one
+	// owner. When empty it is derived from OwnerUserID.
+	AllowedUsers       []AllowedUser `json:"allowed_users,omitempty"`
+	PollTimeoutSeconds int           `json:"poll_timeout_seconds"`
+}
+
+// Roles of allowed Telegram users.
+const (
+	RoleOwner = "owner"
+	RoleUser  = "user"
+)
+
+// MaxAllowedUsers bounds the allowlist.
+const MaxAllowedUsers = 20
+
+// AllowedUser is one numeric Telegram user ID with a local label and role.
+// The label is only a reminder for the owner; it never authorizes anything.
+type AllowedUser struct {
+	ID    int64  `json:"id"`
+	Label string `json:"label,omitempty"`
+	Role  string `json:"role"`
+}
+
+var labelRe = regexp.MustCompile(`^[\p{L}\p{N} ._'@()-]{0,32}$`)
+
+// NormalizeAllowlist validates the allowlist (and the legacy owner field)
+// and returns it with the owner first. It fails closed.
+func NormalizeAllowlist(owner int64, users []AllowedUser) ([]AllowedUser, error) {
+	if len(users) == 0 {
+		if owner <= 0 {
+			return nil, errors.New("telegram: no owner configured; set your numeric Telegram user ID (run `clawdyx setup`)")
+		}
+		return []AllowedUser{{ID: owner, Role: RoleOwner}}, nil
+	}
+	if len(users) > MaxAllowedUsers {
+		return nil, fmt.Errorf("telegram.allowed_users: at most %d entries", MaxAllowedUsers)
+	}
+	seen := map[int64]bool{}
+	var out []AllowedUser
+	var ownerEntry *AllowedUser
+	for i := range users {
+		u := users[i]
+		u.Label = strings.TrimSpace(u.Label)
+		if u.ID <= 0 {
+			return nil, fmt.Errorf("telegram.allowed_users: %d is not a positive numeric user ID", u.ID)
+		}
+		if seen[u.ID] {
+			return nil, fmt.Errorf("telegram.allowed_users: %d is listed twice", u.ID)
+		}
+		seen[u.ID] = true
+		if !labelRe.MatchString(u.Label) {
+			return nil, fmt.Errorf("telegram.allowed_users: label %q must be at most 32 letters, digits, spaces or ._'@()-", u.Label)
+		}
+		switch u.Role {
+		case RoleOwner:
+			if ownerEntry != nil {
+				return nil, errors.New("telegram.allowed_users: exactly one owner is allowed")
+			}
+			ownerEntry = &u
+		case RoleUser:
+			out = append(out, u)
+		default:
+			return nil, fmt.Errorf("telegram.allowed_users: role of %d must be owner or user", u.ID)
+		}
+	}
+	if ownerEntry == nil {
+		return nil, errors.New("telegram.allowed_users: one entry must have role owner")
+	}
+	if owner > 0 && owner != ownerEntry.ID {
+		return nil, errors.New("telegram: owner_user_id and the owner in allowed_users differ")
+	}
+	return append([]AllowedUser{*ownerEntry}, out...), nil
+}
+
+// Role returns the role of a Telegram user ID ("" if not allowed).
+func (t Telegram) Role(id int64) string {
+	for _, u := range t.AllowedUsers {
+		if u.ID == id {
+			return u.Role
+		}
+	}
+	return ""
 }
 
 // Claude CLI settings.
@@ -254,7 +337,47 @@ func Parse(data []byte) (*Config, error) {
 	return &c, nil
 }
 
-// Load reads the config file and the token. Both files must be private (0600).
+// TokenVault is where the bot token is kept (macOS login Keychain by
+// default). Tests replace it. CLAWDYX_TOKEN_STORE=file skips it.
+var TokenVault vault.Store = vault.Keychain{}
+
+func vaultEnabled() bool { return TokenVault != nil && os.Getenv("CLAWDYX_TOKEN_STORE") != "file" }
+
+// StoredToken returns the token kept in the vault for a config file.
+func StoredToken(configPath string) (string, error) {
+	if !vaultEnabled() {
+		return "", vault.ErrNotFound
+	}
+	return TokenVault.Get(vault.TokenAccount(configPath))
+}
+
+// StoreToken validates tok and saves it in the vault for a config file.
+func StoreToken(configPath, tok string) error {
+	tok = strings.TrimSpace(tok)
+	if !ValidToken(tok) {
+		return errors.New("config: that does not look like a Telegram bot token")
+	}
+	if !vaultEnabled() {
+		return errors.New("config: the Keychain is disabled (CLAWDYX_TOKEN_STORE=file)")
+	}
+	return TokenVault.Set(vault.TokenAccount(configPath), tok)
+}
+
+// DeleteStoredToken removes the vault item for a config file.
+func DeleteStoredToken(configPath string) error {
+	if !vaultEnabled() {
+		return nil
+	}
+	err := TokenVault.Delete(vault.TokenAccount(configPath))
+	if errors.Is(err, vault.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
+// Load reads the config file and the token: the TELEGRAM_BOT_TOKEN
+// environment variable (development), else the Keychain item, else the
+// private .env file. The config file must be private (0600).
 func Load(configPath, envPath string) (*Config, error) {
 	if err := checkPrivate(configPath); err != nil {
 		return nil, err
@@ -267,15 +390,27 @@ func Load(configPath, envPath string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+	if env := strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")); env != "" {
+		if !tokenRe.MatchString(env) {
+			return nil, errors.New("config: TELEGRAM_BOT_TOKEN has an invalid format")
+		}
+		c.Token, c.TokenSource = env, "env"
+		return c, nil
+	}
+	if tok, err := StoredToken(configPath); err == nil {
+		if !tokenRe.MatchString(tok) {
+			return nil, errors.New("config: the token stored in the Keychain has an invalid format; run `clawdyx setup` to replace it")
+		}
+		c.Token, c.TokenSource = tok, "keychain"
+		return c, nil
+	} else if !errors.Is(err, vault.ErrNotFound) {
+		return nil, fmt.Errorf("config: reading the bot token from the Keychain failed: %v", err)
+	}
 	tok, err := LoadToken(envPath)
 	if err != nil {
-		return nil, err
+		return nil, errors.New(err.Error() + " — run `clawdyx setup` to store one")
 	}
-	c.Token = tok
-	c.TokenSource = "file"
-	if strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")) != "" {
-		c.TokenSource = "env"
-	}
+	c.Token, c.TokenSource = tok, "file"
 	return c, nil
 }
 
@@ -357,8 +492,11 @@ func (c *Config) validate() error {
 	var errs []string
 	add := func(f string, a ...any) { errs = append(errs, fmt.Sprintf(f, a...)) }
 
-	if c.Telegram.OwnerUserID <= 0 {
-		add("telegram.owner_user_id must be your positive numeric Telegram user ID (run `clawdyx setup`)")
+	if users, err := NormalizeAllowlist(c.Telegram.OwnerUserID, c.Telegram.AllowedUsers); err != nil {
+		add("%s", err.Error())
+	} else {
+		c.Telegram.AllowedUsers = users
+		c.Telegram.OwnerUserID = users[0].ID
 	}
 	if c.Telegram.PollTimeoutSeconds < 5 || c.Telegram.PollTimeoutSeconds > 50 {
 		add("telegram.poll_timeout_seconds must be 5..50")
@@ -505,3 +643,52 @@ func ValidToken(s string) bool { return tokenRe.MatchString(strings.TrimSpace(s)
 
 // ControlSocket is the worker's local control socket.
 func (c *Config) ControlSocket() string { return filepath.Join(c.StateDir, "control.sock") }
+
+// Rewrite applies mutate to the config file at path, validates the result
+// like Parse, and replaces the file atomically (mode 0600). Defaults that
+// were implicit are written explicitly.
+func Rewrite(path string, mutate func(*Config) error) (*Config, error) {
+	if err := checkPrivate(path); err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	c, err := Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if err := mutate(c); err != nil {
+		return nil, err
+	}
+	out, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, '\n')
+	nc, err := Parse(out)
+	if err != nil {
+		return nil, err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".config-*")
+	if err != nil {
+		return nil, err
+	}
+	name := tmp.Name()
+	if err := tmp.Chmod(0o600); err == nil {
+		_, err = tmp.Write(out)
+	}
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(name)
+		return nil, err
+	}
+	if err := os.Rename(name, path); err != nil {
+		_ = os.Remove(name)
+		return nil, err
+	}
+	return nc, nil
+}

@@ -6,8 +6,8 @@ clawdyX runs entirely on your Mac. It has no server, no telemetry, no analytics,
 
 | Data | Where | Protection | Notes |
 | --- | --- | --- | --- |
-| Telegram bot token | `~/.config/clawdyx/.env` | file mode 0600 in a 0700 folder | never logged; redacted from every message and diagnostic |
-| Your Telegram user ID, workspaces, settings | `~/.config/clawdyx/config.json` | 0600 | never sent anywhere |
+| Telegram bot token | macOS login Keychain, item `clawdyx` (created through Apple's `security` tool; `-token-file` keeps it in `~/.config/clawdyx/.env` instead) | Keychain encryption; readable by programs running as your macOS user | never logged; redacted from every message and diagnostic; shown only as its last four characters |
+| Allowed Telegram IDs with labels and roles, workspaces, settings | `~/.config/clawdyx/config.json` | 0600 | never sent anywhere |
 | Sessions, job history, aliases, audit log | `~/Library/Application Support/clawdyx/state.db` | 0600 SQLite, folder 0700 | stores a hash of each prompt, an optional short preview, a ≤ 2 KB preview of the reply, token counts and timings; never full prompts, full replies or secrets |
 | Logs | `~/Library/Logs/clawdyx/` | 0600, rotated at 20 MB × 5 | command categories, timings, states, redacted errors; no message bodies |
 | Backups | `~/Library/Application Support/clawdyx/backups/` | 0600 | copies of `state.db` only |

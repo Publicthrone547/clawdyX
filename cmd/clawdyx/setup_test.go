@@ -76,11 +76,14 @@ func TestSetupNonInteractive(t *testing.T) {
 	if strings.Contains(out.String(), token) {
 		t.Fatal("the token was echoed")
 	}
-	for _, p := range []string{cfgPath, envPath} {
-		st, err := os.Stat(p)
-		if err != nil || st.Mode().Perm() != 0o600 {
-			t.Fatalf("%s: want mode 0600, got %v (%v)", p, st, err)
-		}
+	if st, err := os.Stat(cfgPath); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatalf("%s: want mode 0600, got %v (%v)", cfgPath, st, err)
+	}
+	if fileExists(envPath) {
+		t.Fatal("by default the token must go to the Keychain, not a file")
+	}
+	if tok, err := config.StoredToken(cfgPath); err != nil || tok != token {
+		t.Fatalf("token not in the vault: %v", err)
 	}
 	if st, _ := os.Stat(filepath.Dir(cfgPath)); st.Mode().Perm() != 0o700 {
 		t.Fatalf("config dir mode %v want 0700", st.Mode().Perm())
@@ -89,7 +92,7 @@ func TestSetupNonInteractive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("written files do not load: %v", err)
 	}
-	if c.Token != token || c.Telegram.OwnerUserID != 111111111 || c.Workspaces[0].Canonical == "" {
+	if c.Token != token || c.TokenSource != "keychain" || c.Telegram.OwnerUserID != 111111111 || c.Workspaces[0].Canonical == "" {
 		t.Fatalf("unexpected loaded config: owner %d", c.Telegram.OwnerUserID)
 	}
 
@@ -133,5 +136,50 @@ func TestSetupRejectsBadInputWithoutWriting(t *testing.T) {
 				t.Fatal("nothing must be written when input is rejected")
 			}
 		})
+	}
+}
+
+func TestSetupTokenFileAndMigration(t *testing.T) {
+	old := getMeFunc
+	getMeFunc = func(context.Context, string) (string, error) { return "testbot", nil }
+	defer func() { getMeFunc = old }()
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	dir, ws, bin := t.TempDir(), t.TempDir(), fakeClaude(t)
+	cfgPath, envPath := filepath.Join(dir, "config.json"), filepath.Join(dir, ".env")
+	token := "123456789:" + strings.Repeat("B", 35)
+	var out bytes.Buffer
+	opts := setupOptions{OwnerID: 111111111, Workspace: ws, ClaudeBinary: bin, TokenStdin: true, TokenFile: true, NoCheck: true}
+	if code := runSetup(cfgPath, envPath, opts, strings.NewReader(token+"\n"), &out); code != exitOK {
+		t.Fatalf("%d %s", code, out.String())
+	}
+	if st, err := os.Stat(envPath); err != nil || st.Mode().Perm() != 0o600 {
+		t.Fatal("token file missing or not private")
+	}
+	if c, err := config.Load(cfgPath, envPath); err != nil || c.TokenSource != "file" {
+		t.Fatalf("load: %v", err)
+	}
+	out.Reset()
+	if code := runSetup(cfgPath, envPath, setupOptions{MigrateToken: true}, strings.NewReader(""), &out); code != exitOK {
+		t.Fatalf("migrate: %d %s", code, out.String())
+	}
+	if fileExists(envPath) || strings.Contains(out.String(), token) {
+		t.Fatal("file kept or token echoed")
+	}
+	c, err := config.Load(cfgPath, envPath)
+	if err != nil || c.TokenSource != "keychain" || c.Token != token {
+		t.Fatalf("after migration: %v %+v", err, c)
+	}
+	// The environment variable wins (development).
+	t.Setenv("TELEGRAM_BOT_TOKEN", "987654321:"+strings.Repeat("C", 35))
+	if c, _ := config.Load(cfgPath, envPath); c.TokenSource != "env" {
+		t.Fatal("env must win")
+	}
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	// Migrating again without a file fails without touching the vault.
+	if code := runSetup(cfgPath, envPath, setupOptions{MigrateToken: true}, strings.NewReader(""), &out); code == exitOK {
+		t.Fatal("migration without a file succeeded")
+	}
+	if tok, _ := config.StoredToken(cfgPath); tok != token {
+		t.Fatal("vault changed")
 	}
 }

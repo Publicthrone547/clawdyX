@@ -11,7 +11,8 @@ There is no bug bounty. Reports are handled on a best-effort basis by the mainta
 ## In scope
 
 - The Telegram authorization gate: any update from a sender who is not on the configured allowlist, from a group, or with a forged callback that causes a reply, a lookup, a job, a capture or any other side effect.
-- Token handling: the bot token appearing in logs, replies, diagnostics, child-process environments, crash output or files other than its configured store.
+- Token handling: the bot token appearing in logs, replies, diagnostics, child-process environments, crash output or anywhere other than its configured store (the Keychain item or the 0600 token file).
+- Roles: a `user`-role account running an owner-only command, confirming someone else's confirmation, or stopping someone else's job.
 - Permission tiers: a way to run commands, edit files, read secret paths (`~/.ssh`, `~/.aws`, keychains, browser profiles, `~/.claude`, clawdyX's own state) or reach bypass-permissions mode beyond what the selected tier documents.
 - Path handling: workspace escapes through `..`, symlinks or races.
 - Screen features: any capture that happens without an explicit action by the owner, or a capture reaching a destination other than the one documented.
@@ -28,5 +29,5 @@ There is no bug bounty. Reports are handled on a best-effort basis by the mainta
 ## Hardening notes for operators
 
 - Keep the bot in `observe` unless you need more; enable `automation` and screen control only when you use them.
-- If the token leaks, revoke it in @BotFather (`/token`) and run `make setup` to store the new one. A webhook appearing on your bot, or a "duplicate poller" warning in `/status`, means someone else has the token.
+- If the token leaks, revoke it in @BotFather (`/token`) and store the new one with `make setup` or `clawdyx ctl telegram.token.set`. A webhook appearing on your bot, or a "duplicate poller" warning in `/status`, means someone else has the token.
 - Sign the binary with a stable code-signing identity if you grant it Screen Recording or Accessibility (see `docs/RUNBOOK.md`).

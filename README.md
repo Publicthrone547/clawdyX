@@ -2,7 +2,7 @@
 
 A private, single-operator Telegram bot that drives the **Claude Code CLI already installed and logged in on this Mac**. It runs `claude -p` as a child process per message (stream-json output, `--resume` for continuity), so it reuses your existing claude.ai login. It never uses an API key and never bypasses Claude Code's permission system.
 
-Only the Telegram user whose numeric ID you enter during setup is served, and only in a private chat. Every other update is dropped silently before any lookup or side effect.
+Only the Telegram users on your local allowlist are served (by numeric ID, in their own private chat): you as the owner, plus anyone you deliberately add. Every other update is dropped silently before any lookup or side effect.
 
 Design and verified CLI facts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Operations: [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Tests: [`docs/TESTING.md`](docs/TESTING.md). Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md). Security reports: [`SECURITY.md`](SECURITY.md).
 
@@ -25,7 +25,7 @@ Then open Telegram and send `/start` to your bot.
 | `make doctor` | read-only checks: config, token, Claude CLI, login, Telegram |
 | `make help` | list these commands |
 
-The wizard can detect your Telegram ID: leave the ID empty, send any message to your bot, press Enter. Everything it writes stays on this Mac in `~/.config/clawdyx/` (mode 0600). Manual setup without the wizard is described in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
+The wizard can detect your Telegram ID: leave the ID empty, send any message to your bot, press Enter. The bot token goes into the macOS login Keychain (item `clawdyx`); settings go to `~/.config/clawdyx/config.json` (mode 0600). `-token-file` keeps the token in a 0600 file instead. Manual setup without the wizard is described in [`docs/RUNBOOK.md`](docs/RUNBOOK.md).
 
 ## What it does
 
@@ -54,6 +54,17 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | `/rename S2 name` | changes the label only | untouched |
 
 clawdyX never deletes anything else under `~/.claude`. To erase all Claude Code history for a folder, Claude Code itself offers `claude purge <folder>`.
+
+## More than one Telegram user
+
+The owner can allow other numeric Telegram IDs (`clawdyx ctl telegram.allowlist.set`, or the desktop app). Each entry has a role:
+
+| Role | Can | Cannot |
+| --- | --- | --- |
+| `owner` (exactly one) | everything | — |
+| `user` | chat with Claude, list/create/switch/rename sessions, `/new`, `/newf`, `/clear`, set model and effort for the active session, stop or cancel their own jobs | change tiers or defaults, use screens or `/open`, forget sessions or delete history, `/doctor`, `/processes`, `/logs`, pause, shut down, stop other people's jobs |
+
+Users share the bot's sessions and workspaces with the owner and get answers in their own chat. Confirmation buttons work only for the person who asked. To find someone's ID, arm detection (`clawdyx ctl telegram.detect.start`), let them message the bot, then read `telegram.detect.result`; nothing is recorded unless detection is armed, and nobody gets a reply.
 
 ## Permission tiers
 

@@ -424,3 +424,53 @@ type EnabledParams struct {
 type AuthorizeParams struct {
 	Display string `json:"display"`
 }
+
+// AllowedUserInfo is one allowlist entry.
+type AllowedUserInfo struct {
+	ID    int64  `json:"id"`
+	Label string `json:"label,omitempty"`
+	Role  string `json:"role"`
+}
+
+// AllowlistParams replaces the allowlist (the owner entry must stay).
+type AllowlistParams struct {
+	Users []AllowedUserInfo `json:"users"`
+}
+
+// TokenStatus describes the stored bot token without revealing it.
+type TokenStatus struct {
+	Source      string `json:"source"` // keychain | file | env
+	Hint        string `json:"hint"`
+	BotUsername string `json:"botUsername,omitempty"`
+}
+
+// TokenParams carries a candidate bot token (only over the local socket).
+type TokenParams struct {
+	Token string `json:"token"`
+}
+
+// TokenTestResult reports a getMe check.
+type TokenTestResult struct {
+	BotUsername string `json:"botUsername"`
+	BotID       int64  `json:"botId"`
+}
+
+// DetectParams arms sender detection for a number of seconds (max 300).
+type DetectParams struct {
+	Seconds int `json:"seconds"`
+}
+
+// DetectedSender is a private-chat sender seen while detection was armed.
+type DetectedSender struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"firstName"`
+	Username  string `json:"username,omitempty"`
+	SeenAt    int64  `json:"seenAt"`
+}
+
+// DetectResult lists detected senders.
+type DetectResult struct {
+	Armed   bool             `json:"armed"`
+	Until   int64            `json:"until"`
+	Senders []DetectedSender `json:"senders"`
+}

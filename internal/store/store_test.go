@@ -156,7 +156,7 @@ func TestMigrateV1ToV2KeepsDataAndBacksUp(t *testing.T) {
 	if err != nil || x.Name != "old" || !x.ForgottenAt.IsZero() {
 		t.Fatalf("session after migration: %v %+v", err, x)
 	}
-	bk, _ := filepath.Glob(filepath.Join(dir, "backups", "state-pre-v2-*.db"))
+	bk, _ := filepath.Glob(filepath.Join(dir, "backups", "state-pre-v3-*.db"))
 	if len(bk) != 1 {
 		t.Fatalf("expected one pre-migration backup, got %v", bk)
 	}

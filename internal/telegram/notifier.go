@@ -19,6 +19,7 @@ import (
 type stream struct {
 	mu        sync.Mutex
 	jobID     int64
+	chat      int64 // Telegram chat of the job (0 = owner)
 	ackID     int
 	replyTo   int
 	nonce     string
@@ -85,14 +86,14 @@ func (a *App) JobQueued(j *store.Job, s *store.Session, position int) {
 	if a.quiet.has(j.ID) {
 		return
 	}
-	st := &stream{jobID: j.ID, replyTo: j.TgMessageID, nonce: nonce(), header: header(j, s), draftOK: true}
+	st := &stream{jobID: j.ID, chat: j.TgChatID, replyTo: j.TgMessageID, nonce: nonce(), header: header(j, s), draftOK: true}
 	a.streams.put(st)
 	state := "queued"
 	if position > 0 {
 		state = fmt.Sprintf("queued (position %d)", position)
 	}
 	text := fmt.Sprintf("⏳ <b>%s</b> %s · %s", j.Label(), state, st.header)
-	id, err := a.send.Send(a.ctx, Out{HTML: text, ReplyTo: j.TgMessageID, Markup: cancelMarkup(st)})
+	id, err := a.send.Send(a.ctx, Out{ChatID: j.TgChatID, HTML: text, ReplyTo: j.TgMessageID, Markup: cancelMarkup(st)})
 	if err == nil {
 		st.mu.Lock()
 		st.ackID = id
@@ -113,9 +114,10 @@ func (a *App) JobStarted(j *store.Job, s *store.Session) {
 	st.typingEnd = make(chan struct{})
 	ack, end := st.ackID, st.typingEnd
 	st.mu.Unlock()
-	_ = a.send.Edit(a.ctx, ack, fmt.Sprintf("▶️ <b>%s</b> running · %s", j.Label(), st.header), cancelMarkup(st))
+	_ = a.send.Edit(a.ctx, st.chat, ack, fmt.Sprintf("▶️ <b>%s</b> running · %s", j.Label(), st.header), cancelMarkup(st))
+	chat := st.chat
 	go func() {
-		a.send.Typing(a.ctx)
+		a.send.Typing(a.ctx, chat)
 		t := time.NewTicker(4 * time.Second)
 		defer t.Stop()
 		for {
@@ -125,7 +127,7 @@ func (a *App) JobStarted(j *store.Job, s *store.Session) {
 			case <-a.ctx.Done():
 				return
 			case <-t.C:
-				a.send.Typing(a.ctx)
+				a.send.Typing(a.ctx, chat)
 			}
 		}
 	}()
@@ -171,7 +173,7 @@ func (a *App) JobProgress(j *store.Job, p jobs.Progress) {
 			if tool != "" {
 				txt += "\n\n" + tool
 			}
-			sent, err := a.send.TryDraft(a.ctx, j.ID, txt)
+			sent, err := a.send.TryDraft(a.ctx, st.chat, j.ID, txt)
 			if sent && err != nil {
 				a.log.Info("draft streaming unavailable; falling back to edits", "err", observability.Truncate(observability.Redact(err.Error()), 160))
 				st.mu.Lock()
@@ -197,7 +199,7 @@ func (a *App) JobProgress(j *store.Job, p jobs.Progress) {
 		if p.Text != "" {
 			body += "\n\n" + Esc(render.Tail(p.Text, 2500))
 		}
-		_, _ = a.send.TryEdit(a.ctx, ack, body, cancelMarkup(st))
+		_, _ = a.send.TryEdit(a.ctx, st.chat, ack, body, cancelMarkup(st))
 	}()
 }
 
@@ -235,7 +237,7 @@ func (a *App) JobFinished(j *store.Job, s *store.Session, o jobs.Outcome) {
 		if s != nil {
 			status += " · " + header(j, s)
 		}
-		_ = a.send.Edit(a.ctx, ack, status, noMarkup())
+		_ = a.send.Edit(a.ctx, j.TgChatID, ack, status, noMarkup())
 	}
 
 	var parts []string
@@ -323,7 +325,7 @@ func (a *App) JobFinished(j *store.Job, s *store.Session, o jobs.Outcome) {
 		if i == 0 {
 			rt = replyTo
 		}
-		a.outbox.Push(Out{HTML: p, ReplyTo: rt})
+		a.outbox.Push(Out{ChatID: j.TgChatID, HTML: p, ReplyTo: rt})
 	}
 }
 

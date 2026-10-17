@@ -2,7 +2,7 @@ BIN   := bin/clawdyx
 GOBIN := $(shell go env GOPATH)/bin
 PKG   := ./...
 
-.PHONY: notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -63,8 +63,19 @@ check: lint test check-secrets
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh
 
+# CLAWDYX_SIGN_IDENTITY="Apple Development: …" (or a self-signed code-signing
+# certificate's name) gives the binary a stable identity, so macOS keeps the
+# Screen Recording and Accessibility grants across rebuilds.
 install: build
 	install -m 0755 $(BIN) $(GOBIN)/clawdyx
+	@if [ -n "$$CLAWDYX_SIGN_IDENTITY" ]; then \
+		codesign --force --identifier io.github.publicthrone547.clawdyx --sign "$$CLAWDYX_SIGN_IDENTITY" $(GOBIN)/clawdyx && echo "signed with $$CLAWDYX_SIGN_IDENTITY"; \
+	else \
+		echo "note: unsigned build; macOS Screen Recording and Accessibility grants for clawdyx reset after each rebuild (set CLAWDYX_SIGN_IDENTITY to keep them)"; \
+	fi
+
+identities: ## list code-signing identities usable for CLAWDYX_SIGN_IDENTITY
+	@security find-identity -v -p codesigning
 
 clean:
 	rm -rf bin coverage.out

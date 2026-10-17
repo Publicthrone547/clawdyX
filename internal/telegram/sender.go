@@ -30,7 +30,15 @@ type Sender struct {
 	last   time.Time
 }
 
-// NewSender returns a sender bound to one chat.
+// chat returns c, or the owner's chat when c is 0.
+func (s *Sender) chat(c int64) int64 {
+	if c != 0 {
+		return c
+	}
+	return s.chatID
+}
+
+// NewSender returns a sender whose default chat is the owner's.
 func NewSender(b *bot.Bot, chatID int64, log *slog.Logger, c *observability.Counters) *Sender {
 	return &Sender{b: b, chatID: chatID, log: log, counters: c, tokens: 3, last: time.Now()}
 }
@@ -76,6 +84,7 @@ func (s *Sender) try() bool {
 
 // Out is an outgoing message.
 type Out struct {
+	ChatID  int64 // 0 = the owner's chat
 	HTML    string
 	Plain   string // used when Telegram rejects the HTML; defaults to StripHTML(HTML)
 	ReplyTo int
@@ -138,7 +147,11 @@ func (s *Sender) callPaced(ctx context.Context, fn func() error, haveToken bool)
 
 // Send sends a message and returns its ID.
 func (s *Sender) Send(ctx context.Context, o Out) (int, error) {
-	params := &bot.SendMessageParams{ChatID: s.chatID, Text: o.HTML, ParseMode: models.ParseModeHTML, ReplyMarkup: o.Markup,
+	chat := o.ChatID
+	if chat == 0 {
+		chat = s.chatID
+	}
+	params := &bot.SendMessageParams{ChatID: chat, Text: o.HTML, ParseMode: models.ParseModeHTML, ReplyMarkup: o.Markup,
 		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: bot.True()}}
 	if o.ReplyTo != 0 {
 		params.ReplyParameters = &models.ReplyParameters{MessageID: o.ReplyTo, AllowSendingWithoutReply: true}
@@ -168,11 +181,11 @@ func (s *Sender) Send(ctx context.Context, o Out) (int, error) {
 }
 
 // Edit replaces a message's text and markup. "not modified" is not an error.
-func (s *Sender) Edit(ctx context.Context, msgID int, html string, markup models.ReplyMarkup) error {
+func (s *Sender) Edit(ctx context.Context, chat int64, msgID int, html string, markup models.ReplyMarkup) error {
 	if msgID == 0 {
 		return nil
 	}
-	params := &bot.EditMessageTextParams{ChatID: s.chatID, MessageID: msgID, Text: html, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
+	params := &bot.EditMessageTextParams{ChatID: s.chat(chat), MessageID: msgID, Text: html, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
 		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: bot.True()}}
 	err := s.call(ctx, func() error { _, e := s.b.EditMessageText(ctx, params); return e })
 	if isParseErr(err) {
@@ -186,11 +199,11 @@ func (s *Sender) Edit(ctx context.Context, msgID int, html string, markup models
 }
 
 // TryEdit edits only if a rate token is available right now.
-func (s *Sender) TryEdit(ctx context.Context, msgID int, html string, markup models.ReplyMarkup) (bool, error) {
+func (s *Sender) TryEdit(ctx context.Context, chat int64, msgID int, html string, markup models.ReplyMarkup) (bool, error) {
 	if msgID == 0 || !s.try() {
 		return false, nil
 	}
-	params := &bot.EditMessageTextParams{ChatID: s.chatID, MessageID: msgID, Text: html, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
+	params := &bot.EditMessageTextParams{ChatID: s.chat(chat), MessageID: msgID, Text: html, ParseMode: models.ParseModeHTML, ReplyMarkup: markup,
 		LinkPreviewOptions: &models.LinkPreviewOptions{IsDisabled: bot.True()}}
 	err := s.callPaced(ctx, func() error { _, e := s.b.EditMessageText(ctx, params); return e }, true)
 	if isNotModified(err) {
@@ -200,23 +213,23 @@ func (s *Sender) TryEdit(ctx context.Context, msgID int, html string, markup mod
 }
 
 // TryDraft streams a draft preview (plain text) if a token is available.
-func (s *Sender) TryDraft(ctx context.Context, draftID int64, text string) (bool, error) {
+func (s *Sender) TryDraft(ctx context.Context, chat int64, draftID int64, text string) (bool, error) {
 	if !s.try() {
 		return false, nil
 	}
-	_, err := s.b.SendMessageDraft(ctx, &bot.SendMessageDraftParams{ChatID: s.chatID, DraftID: strconv.FormatInt(draftID, 10), Text: text, CanStop: true})
+	_, err := s.b.SendMessageDraft(ctx, &bot.SendMessageDraftParams{ChatID: s.chat(chat), DraftID: strconv.FormatInt(draftID, 10), Text: text, CanStop: true})
 	return true, err
 }
 
 // Typing shows the typing indicator (lasts about 5 s). It bypasses the
 // message bucket because chat actions are not messages.
-func (s *Sender) Typing(ctx context.Context) {
-	_, _ = s.b.SendChatAction(ctx, &bot.SendChatActionParams{ChatID: s.chatID, Action: models.ChatActionTyping})
+func (s *Sender) Typing(ctx context.Context, chat int64) {
+	_, _ = s.b.SendChatAction(ctx, &bot.SendChatActionParams{ChatID: s.chat(chat), Action: models.ChatActionTyping})
 }
 
 // Photo sends a JPEG photo with an optional caption.
-func (s *Sender) Photo(ctx context.Context, jpeg []byte, caption string, replyTo int) error {
-	params := &bot.SendPhotoParams{ChatID: s.chatID, Photo: &models.InputFileUpload{Filename: "screen.jpg", Data: bytes.NewReader(jpeg)}, Caption: caption}
+func (s *Sender) Photo(ctx context.Context, chat int64, jpeg []byte, caption string, replyTo int) error {
+	params := &bot.SendPhotoParams{ChatID: s.chat(chat), Photo: &models.InputFileUpload{Filename: "screen.jpg", Data: bytes.NewReader(jpeg)}, Caption: caption}
 	if replyTo != 0 {
 		params.ReplyParameters = &models.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
 	}

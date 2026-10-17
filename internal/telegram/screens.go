@@ -77,11 +77,11 @@ func (a *App) screenStatus() (s struct {
 func (a *App) screenOffReply(m *models.Message, err error) {
 	switch {
 	case !a.cfg.Desktop.ScreenControl:
-		a.reply(m.ID, "Screen features are off. Set \"desktop\": {\"screen_control\": true} in ~/.config/clawdyx/config.json and restart the bot.")
+		a.replyTo(m, "Screen features are off. Set \"desktop\": {\"screen_control\": true} in ~/.config/clawdyx/config.json and restart the bot.")
 	case errors.Is(err, screen.ErrScreenOff):
-		a.reply(m.ID, "Screen features are switched off. Switch them on in the clawdyX app (Monitors) or with: clawdyx ctl screens.enabled.set '{\"enabled\":true}'")
+		a.replyTo(m, "Screen features are switched off. Switch them on in the clawdyX app (Monitors) or with: clawdyx ctl screens.enabled.set '{\"enabled\":true}'")
 	default:
-		a.reply(m.ID, "❌ "+Esc(err.Error()))
+		a.replyTo(m, "❌ "+Esc(err.Error()))
 	}
 }
 
@@ -95,7 +95,7 @@ func (a *App) cmdScreens(m *models.Message) {
 	defer cancel()
 	ds, err := a.broker.Displays(ctx)
 	if err != nil {
-		a.reply(m.ID, "❌ Could not list displays: "+Esc(err.Error()))
+		a.replyTo(m, "❌ Could not list displays: "+Esc(err.Error()))
 		return
 	}
 	var sb strings.Builder
@@ -121,7 +121,7 @@ func (a *App) cmdScreens(m *models.Message) {
 		fmt.Fprintf(&sb, "Screen Recording: <b>not granted</b> to the clawdyX worker (last attempt %s). System Settings → Privacy & Security → Screen &amp; System Audio Recording.\n", ago(at))
 	}
 	sb.WriteString("/screen N sends you a photo of display N · /screen all · /look N [question] asks Claude about it · /screen off")
-	a.reply(m.ID, sb.String())
+	a.replyTo(m, sb.String())
 }
 
 // cmdScreen: /screen [N|all|off], /screenshot [N].
@@ -132,11 +132,11 @@ func (a *App) cmdScreen(m *models.Message, args []string) {
 	}
 	if sel == "off" {
 		a.SetScreenEnabled(false)
-		a.reply(m.ID, "🔒 Screen features switched off: no captures from Telegram, the app or Claude's screenshot tool. Switch them on again in the clawdyX app on the Mac.")
+		a.replyTo(m, "🔒 Screen features switched off: no captures from Telegram, the app or Claude's screenshot tool. Switch them on again in the clawdyX app on the Mac.")
 		return
 	}
 	if sel == "on" {
-		a.reply(m.ID, "Screen features can only be switched on from the Mac (clawdyX app → Monitors, or clawdyX ctl screens.enabled.set).")
+		a.replyTo(m, "Screen features can only be switched on from the Mac (clawdyX app → Monitors, or clawdyX ctl screens.enabled.set).")
 		return
 	}
 	if err := a.screenAllowed(); err != nil {
@@ -148,35 +148,35 @@ func (a *App) cmdScreen(m *models.Message, args []string) {
 		defer cancel()
 		caps, err := a.broker.Capture(ctx, sel, "telegram", "telegram-owner")
 		if err != nil && len(caps) == 0 {
-			a.reply(m.ID, "❌ Screenshot failed: "+Esc(err.Error()))
+			a.replyTo(m, "❌ Screenshot failed: "+Esc(err.Error()))
 			return
 		}
 		for _, c := range caps {
 			enc, eerr := screen.EncodeJPEG(c.PNG, screen.TelegramMaxEdge, 80)
 			a.broker.Discard(c.ID)
 			if eerr != nil {
-				a.reply(m.ID, "❌ Could not encode the screenshot.")
+				a.replyTo(m, "❌ Could not encode the screenshot.")
 				continue
 			}
 			caption := fmt.Sprintf("Display %d · %s · %d×%d · %s · sent only to you", c.Display.Index, c.Display.Name, enc.SrcW, enc.SrcH, c.TakenAt.Format("15:04:05"))
-			if err := a.send.Photo(ctx, enc.JPEG, caption, m.ID); err != nil {
-				a.reply(m.ID, "❌ Could not send the screenshot to Telegram.")
+			if err := a.send.Photo(ctx, m.Chat.ID, enc.JPEG, caption, m.ID); err != nil {
+				a.replyTo(m, "❌ Could not send the screenshot to Telegram.")
 			}
 		}
 		if err != nil {
-			a.reply(m.ID, "⚠️ "+Esc(err.Error()))
+			a.replyTo(m, "⚠️ "+Esc(err.Error()))
 		}
-		a.reminderNote(m.ID)
+		a.reminderNote(m)
 	})
 }
 
 // reminderNote explains the macOS monthly screen-access dialog once.
-func (a *App) reminderNote(replyTo int) {
+func (a *App) reminderNote(m *models.Message) {
 	if a.st.Setting(keyScreenNote, "") != "" {
 		return
 	}
 	_ = a.st.SetSetting(keyScreenNote, "1")
-	a.reply(replyTo, "ℹ️ macOS asks about once a month whether clawdyX may keep capturing the screen. The dialog appears on the Mac itself; until someone answers it there, screenshots from Telegram fail.")
+	a.replyTo(m, "ℹ️ macOS asks about once a month whether clawdyX may keep capturing the screen. The dialog appears on the Mac itself; until someone answers it there, screenshots from Telegram fail.")
 }
 
 // cmdLook: /look [N] [question] — capture display N and ask Claude about it.
@@ -194,16 +194,16 @@ func (a *App) cmdLook(m *models.Message, args []string) {
 		text = DefaultLookPrompt
 	}
 	if len(text) > MaxPromptBytes {
-		a.reply(m.ID, "That question is too long.")
+		a.replyTo(m, "That question is too long.")
 		return
 	}
 	s, created, err := a.sess.EnsureActive()
 	if err != nil {
-		a.reply(m.ID, "⚠️ Could not open a session.")
+		a.replyTo(m, "⚠️ Could not open a session.")
 		return
 	}
 	if created {
-		a.reply(0, fmt.Sprintf("Started session <b>%s</b> in workspace <code>%s</code> (%s mode).", s.Label(), Esc(s.WorkspaceName), s.Mode))
+		a.replyIn(m.Chat.ID, 0, fmt.Sprintf("Started session <b>%s</b> in workspace <code>%s</code> (%s mode).", s.Label(), Esc(s.WorkspaceName), s.Mode))
 	}
 	a.go_(func() {
 		ctx, cancel := context.WithTimeout(a.ctx, 60*time.Second)
@@ -213,18 +213,18 @@ func (a *App) cmdLook(m *models.Message, args []string) {
 			if err == nil {
 				err = errors.New("nothing captured")
 			}
-			a.reply(m.ID, "❌ Screenshot failed: "+Esc(err.Error()))
+			a.replyTo(m, "❌ Screenshot failed: "+Esc(err.Error()))
 			return
 		}
 		c := caps[0]
 		defer a.broker.Discard(c.ID)
 		prompt := lookPrompt(c.Display, text)
-		a.reply(m.ID, fmt.Sprintf("👀 Looking at display %d (%s). The image goes to Claude as part of your prompt; it is not stored.", c.Display.Index, Esc(c.Display.Name)))
-		if _, _, err := a.jobs.Submit(jobs.Request{Session: s, Prompt: prompt, MessageID: m.ID, Kind: "look",
+		a.replyTo(m, fmt.Sprintf("👀 Looking at display %d (%s). The image goes to Claude as part of your prompt; it is not stored.", c.Display.Index, Esc(c.Display.Name)))
+		if _, _, err := a.jobs.Submit(jobs.Request{Session: s, Prompt: prompt, MessageID: m.ID, ChatID: m.Chat.ID, Kind: "look",
 			Images: []agent.Image{{MediaType: "image/jpeg", Data: c.Preview.JPEG}}}); err != nil {
-			a.submitErr(m.ID, s, err)
+			a.submitErr(m, s, err)
 		}
-		a.reminderNote(m.ID)
+		a.reminderNote(m)
 	})
 }
 
@@ -244,16 +244,16 @@ func isDisplayRef(s string) bool {
 	return s != "" && len(s) <= 2
 }
 
-func (a *App) submitErr(replyTo int, s *store.Session, err error) {
+func (a *App) submitErr(m *models.Message, s *store.Session, err error) {
 	switch {
 	case errors.Is(err, jobs.ErrQueueFull):
-		a.reply(replyTo, fmt.Sprintf("Queue for %s is full (%d). Use /stop to clear it or wait.", s.Label(), a.cfg.Claude.MaxQueuePerSession))
+		a.replyTo(m, fmt.Sprintf("Queue for %s is full (%d). Use /stop to clear it or wait.", s.Label(), a.cfg.Claude.MaxQueuePerSession))
 	case errors.Is(err, jobs.ErrPaused):
-		a.reply(replyTo, "The bot is paused; prompts are not accepted. Send /start to resume.")
+		a.replyTo(m, "The bot is paused; prompts are not accepted. Send /start to resume.")
 	case errors.Is(err, jobs.ErrShutdown):
-		a.reply(replyTo, "The bot is shutting down; try again in a moment.")
+		a.replyTo(m, "The bot is shutting down; try again in a moment.")
 	default:
-		a.reply(replyTo, "⚠️ Could not queue the prompt.")
+		a.replyTo(m, "⚠️ Could not queue the prompt.")
 	}
 }
 

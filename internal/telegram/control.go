@@ -269,6 +269,7 @@ func (a *App) RegisterControl(srv *control.Server) {
 	}))
 	h("diagnostics.run", 150*time.Second, typed(func(ctx context.Context, _ none) (any, error) { return a.diagnostics(ctx), nil }))
 	a.registerScreenControl(srv)
+	a.registerTelegramControl(srv)
 }
 
 func homeRels(ps []string) []string {
@@ -331,7 +332,7 @@ func (a *App) Status() control.Status {
 	return st
 }
 
-func (a *App) allowedCount() int { return 1 }
+func (a *App) allowedCount() int { return len(a.Allowlist()) }
 
 // tokenHint is a masked fingerprint: the last four characters only.
 func tokenHint(tok string) string {
