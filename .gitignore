@@ -1,0 +1,32 @@
+# Secrets and local configuration (never commit)
+.env
+*.env
+!.env.example
+*.token
+config.json
+!config.example.json
+secrets/
+
+# Local state, databases, logs
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.log
+state/
+tmp/
+backups/
+
+# Build and test artifacts
+bin/
+dist/
+coverage.out
+*.test
+*.prof
+
+# Machine / editor files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+.claude/settings.local.json

@@ -1,0 +1,278 @@
+// Command clawdyx is a private Telegram control plane for the locally
+// installed and authenticated Claude Code CLI.
+package main
+
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"sort"
+	"syscall"
+	"time"
+
+	"github.com/go-telegram/bot"
+	"github.com/gofrs/flock"
+
+	"github.com/Publicthrone547/clawdyX/internal/agent"
+	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/screen"
+	"github.com/Publicthrone547/clawdyX/internal/store"
+	"github.com/Publicthrone547/clawdyX/internal/telegram"
+)
+
+// version is overridden at build time with -ldflags "-X main.version=...".
+var version = "0.2.0"
+
+const (
+	exitOK       = 0
+	exitError    = 1
+	exitConfig   = 2
+	exitLocked   = 3
+	serviceLabel = "local.clawdyx"
+)
+
+func usage() {
+	fmt.Fprintf(os.Stderr, `clawdyx %s — Telegram control plane for the local Claude Code CLI
+
+Usage:
+  clawdyx setup                     guided first-time setup: token, your Telegram ID, project folder
+  clawdyx run                       run the bot in the foreground (Ctrl-C stops it)
+  clawdyx service start|stop|restart|status
+                                    background service (LaunchAgent) that also starts at login
+  clawdyx check                     validate config, token, CLI, auth and Telegram (read-only)
+  clawdyx service uninstall [--purge-state]
+  clawdyx backup                    write a consistent copy of the state database
+  clawdyx version
+
+Flags (all commands): -config PATH (default %s), -env PATH (default %s)
+Setup flags (optional, for scripts): -owner-id N -workspace DIR -browser NAME -claude-binary PATH
+                                     -token-stdin -force -no-check -yes
+`, version, config.DefaultPath(), config.DefaultEnvPath())
+}
+
+func main() {
+	telegram.Version = version
+	if len(os.Args) < 2 {
+		usage()
+		os.Exit(exitConfig)
+	}
+	cmd, rest := os.Args[1], os.Args[2:]
+	fs := flag.NewFlagSet(cmd, flag.ExitOnError)
+	cfgPath := fs.String("config", config.DefaultPath(), "config file")
+	envPath := fs.String("env", config.DefaultEnvPath(), "secrets file with TELEGRAM_BOT_TOKEN")
+	purge := fs.Bool("purge-state", false, "service uninstall: also delete state and logs")
+	var so setupOptions
+	fs.Int64Var(&so.OwnerID, "owner-id", 0, "setup: your numeric Telegram user ID")
+	fs.StringVar(&so.Workspace, "workspace", "", "setup: project folder Claude may work in")
+	fs.StringVar(&so.Browser, "browser", "", "setup: browser app for /open")
+	fs.StringVar(&so.ClaudeBinary, "claude-binary", "", "setup: path of the claude CLI")
+	fs.BoolVar(&so.TokenStdin, "token-stdin", false, "setup: read the bot token from stdin (non-interactive)")
+	fs.BoolVar(&so.Force, "force", false, "setup: replace existing config and token files")
+	fs.BoolVar(&so.NoCheck, "no-check", false, "setup: skip the read-only checks at the end")
+	fs.BoolVar(&so.Yes, "yes", false, "setup: never prompt; use flags and defaults")
+	sub := ""
+	if cmd == "service" && len(rest) > 0 {
+		sub, rest = rest[0], rest[1:]
+	}
+	_ = fs.Parse(rest)
+
+	switch cmd {
+	case "setup":
+		os.Exit(runSetup(*cfgPath, *envPath, so, os.Stdin, os.Stdout))
+	case "run":
+		os.Exit(run(*cfgPath, *envPath))
+	case "check":
+		os.Exit(check(*cfgPath, *envPath))
+	case "service":
+		os.Exit(service(sub, *cfgPath, *purge))
+	case "backup":
+		os.Exit(backup(*cfgPath))
+	case "mcp-screen":
+		// Started by claude (via --mcp-config) for automation sessions with
+		// screen control. Speaks MCP on stdin/stdout.
+		srv := &screen.Server{D: screen.Mac{TmpDir: os.TempDir()}, Version: version}
+		if err := srv.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {
+			os.Exit(exitError)
+		}
+	case "version", "-v", "--version":
+		fmt.Println("clawdyx", version)
+	case "help", "-h", "--help":
+		usage()
+	default:
+		usage()
+		os.Exit(exitConfig)
+	}
+}
+
+func loadConfigOnly(path string) (*config.Config, error) {
+	st, err := os.Stat(path)
+	if err != nil {
+		return nil, err
+	}
+	if st.Mode().Perm()&0o077 != 0 {
+		return nil, fmt.Errorf("%s must not be readable by group or others (chmod 600)", path)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	return config.Parse(b)
+}
+
+func run(cfgPath, envPath string) int {
+	cfg, err := config.Load(cfgPath, envPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, observability.Redact(err.Error()))
+		fmt.Fprintln(os.Stderr, "Run `clawdyx setup` (or `make setup`) to create the configuration.")
+		return exitConfig
+	}
+	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, "state dir:", err)
+		return exitError
+	}
+	_ = os.Chmod(cfg.StateDir, 0o700)
+	logFile, err := observability.OpenRotating(filepath.Join(cfg.LogDir, "bot.log"), 20<<20, 5)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "log file:", err)
+		return exitError
+	}
+	defer logFile.Close()
+	log := observability.NewLogger(io.MultiWriter(os.Stderr, logFile), cfg.Logging.Level)
+
+	lock := flock.New(filepath.Join(cfg.StateDir, "bot.lock"))
+	locked, err := lock.TryLock()
+	if err != nil || !locked {
+		log.Error("another clawdyx instance is running (state lock held); exiting")
+		return exitLocked
+	}
+	defer lock.Unlock()
+
+	if os.Getenv("ANTHROPIC_API_KEY") != "" || os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != "" {
+		log.Warn("an Anthropic credential variable is set in the bot environment; it is NOT passed to claude (the bot uses the local claude.ai login only)")
+	}
+
+	st, err := store.Open(filepath.Join(cfg.StateDir, "state.db"))
+	if err != nil {
+		log.Error("open state database", "err", err)
+		return exitError
+	}
+	defer st.Close()
+
+	app, err := telegram.New(cfg, st, log, telegram.Options{})
+	if err != nil {
+		log.Error("start telegram", "err", observability.Redact(err.Error()))
+		return exitError
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	if err := app.Run(ctx); err != nil {
+		log.Error("run", "err", observability.Redact(err.Error()))
+		return exitError
+	}
+	log.Info("stopped")
+	return exitOK
+}
+
+func check(cfgPath, envPath string) int {
+	failed := false
+	line := func(ok bool, format string, a ...any) {
+		mark := "OK  "
+		if !ok {
+			mark, failed = "FAIL", true
+		}
+		fmt.Printf("[%s] %s\n", mark, fmt.Sprintf(format, a...))
+	}
+	cfg, err := config.Load(cfgPath, envPath)
+	if err != nil {
+		line(false, "config: %s", observability.Redact(err.Error()))
+		return exitConfig
+	}
+	line(true, "config %s (owner %d, %d workspace(s), default %s)", cfgPath, cfg.Telegram.OwnerUserID, len(cfg.Workspaces), cfg.DefaultWorkspace)
+	line(true, "token loaded (value not shown)")
+	_ = os.MkdirAll(cfg.StateDir, 0o700)
+	cli := agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	v, err := cli.Version(ctx)
+	line(err == nil, "claude %s version %s %v", cfg.Claude.Binary, v, errString(err))
+	fmt.Println("       checking claude auth status (can take ~30 s)…")
+	a, err := cli.AuthStatus(ctx)
+	if err != nil {
+		line(false, "claude auth status: %s", observability.Redact(err.Error()))
+	} else {
+		line(a.LoggedIn, "claude auth: loggedIn=%v method=%s provider=%s subscription=%s", a.LoggedIn, a.AuthMethod, a.APIProvider, a.SubscriptionType)
+	}
+	b, err := bot.New(cfg.Token, bot.WithSkipGetMe())
+	if err == nil {
+		me, err := b.GetMe(ctx)
+		if err != nil {
+			line(false, "telegram getMe: %s", observability.Redact(err.Error()))
+		} else {
+			line(true, "telegram bot @%s (id %d)", me.Username, me.ID)
+		}
+		if info, err := b.GetWebhookInfo(ctx); err == nil {
+			line(info.URL == "", "telegram webhook: %s", map[bool]string{true: "none (long polling ready)", false: "SET — 'run' will delete it"}[info.URL == ""])
+		}
+	} else {
+		line(false, "telegram client: %s", observability.Redact(err.Error()))
+	}
+	lock := flock.New(filepath.Join(cfg.StateDir, "bot.lock"))
+	if ok, _ := lock.TryLock(); ok {
+		_ = lock.Unlock()
+		line(true, "no running instance holds the state lock")
+	} else {
+		fmt.Println("[INFO] a running instance holds the state lock")
+	}
+	if failed {
+		return exitError
+	}
+	return exitOK
+}
+
+func errString(err error) string {
+	if err == nil {
+		return ""
+	}
+	return "(" + observability.Redact(err.Error()) + ")"
+}
+
+func backup(cfgPath string) int {
+	cfg, err := loadConfigOnly(cfgPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, observability.Redact(err.Error()))
+		return exitConfig
+	}
+	st, err := store.Open(filepath.Join(cfg.StateDir, "state.db"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "open:", err)
+		return exitError
+	}
+	defer st.Close()
+	dir := filepath.Join(cfg.StateDir, "backups")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitError
+	}
+	out := filepath.Join(dir, "state-"+time.Now().Format("20060102-150405")+".db")
+	if err := st.Backup(context.Background(), out); err != nil {
+		fmt.Fprintln(os.Stderr, "backup:", err)
+		return exitError
+	}
+	files, _ := filepath.Glob(filepath.Join(dir, "state-*.db"))
+	sort.Strings(files)
+	for len(files) > 7 {
+		_ = os.Remove(files[0])
+		files = files[1:]
+	}
+	fmt.Println("backup written:", out)
+	return exitOK
+}
+
+var errNoSub = errors.New("usage: clawdyx service start|stop|restart|status|uninstall")

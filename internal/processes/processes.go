@@ -1,0 +1,193 @@
+// Package processes provides read-only process and system visibility:
+// per-PID resource sampling, a system summary, and a cached view of Claude
+// Code sessions from `claude agents --json`.
+package processes
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"golang.org/x/sys/unix"
+
+	"github.com/Publicthrone547/clawdyX/internal/agent"
+)
+
+// Stat is a sample of one process.
+type Stat struct {
+	PID   int
+	RSSKB int64
+	CPU   float64 // ps %cpu (decaying average, not instantaneous)
+}
+
+// Sample returns ps stats for the given PIDs (others are ignored). It never
+// requests process arguments or environments.
+func Sample(ctx context.Context, pids []int) map[int]Stat {
+	out := map[int]Stat{}
+	if len(pids) == 0 {
+		return out
+	}
+	ids := make([]string, len(pids))
+	for i, p := range pids {
+		ids[i] = strconv.Itoa(p)
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, "/bin/ps", "-o", "pid=,rss=,pcpu=", "-p", strings.Join(ids, ",")).Output()
+	if err != nil && len(b) == 0 {
+		return out
+	}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	for sc.Scan() {
+		f := strings.Fields(sc.Text())
+		if len(f) != 3 {
+			continue
+		}
+		pid, _ := strconv.Atoi(f[0])
+		rss, _ := strconv.ParseInt(f[1], 10, 64)
+		cpu, _ := strconv.ParseFloat(f[2], 64)
+		out[pid] = Stat{PID: pid, RSSKB: rss, CPU: cpu}
+	}
+	return out
+}
+
+// RSSKB returns one process's resident size in KiB, or 0.
+func RSSKB(pid int) int64 { return Sample(context.Background(), []int{pid})[pid].RSSKB }
+
+// CountClaude returns the number of processes whose command name is "claude".
+func CountClaude(ctx context.Context) int {
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, "/bin/ps", "-axo", "comm=").Output()
+	if err != nil {
+		return -1
+	}
+	n := 0
+	for _, l := range strings.Split(string(b), "\n") {
+		l = strings.TrimSpace(l)
+		if l == "claude" || strings.HasSuffix(l, "/claude") {
+			n++
+		}
+	}
+	return n
+}
+
+// System is a cheap machine summary.
+type System struct {
+	Load1, Load5, Load15 float64
+	MemTotal             uint64
+	MemFree              uint64 // free + inactive pages (reclaimable estimate)
+	OK                   bool
+}
+
+// SystemSummary reads load average and memory from sysctl/vm_stat.
+func SystemSummary(ctx context.Context) System {
+	var s System
+	if la, err := unix.SysctlRaw("vm.loadavg"); err == nil && len(la) >= 24 {
+		// struct loadavg { fixpt_t ldavg[3]; long fscale; } with 32-bit fixpt_t on darwin.
+		get := func(i int) uint32 {
+			return uint32(la[i*4]) | uint32(la[i*4+1])<<8 | uint32(la[i*4+2])<<16 | uint32(la[i*4+3])<<24
+		}
+		scale := float64(uint64(la[16]) | uint64(la[17])<<8 | uint64(la[18])<<16 | uint64(la[19])<<24)
+		if scale > 0 {
+			s.Load1, s.Load5, s.Load15 = float64(get(0))/scale, float64(get(1))/scale, float64(get(2))/scale
+		}
+	}
+	if total, err := unix.SysctlUint64("hw.memsize"); err == nil {
+		s.MemTotal = total
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	b, err := exec.CommandContext(ctx, "/usr/bin/vm_stat").Output()
+	if err == nil {
+		page := uint64(16384)
+		var free, inactive uint64
+		for _, l := range strings.Split(string(b), "\n") {
+			if strings.Contains(l, "page size of") {
+				for _, f := range strings.Fields(l) {
+					if v, err := strconv.ParseUint(f, 10, 64); err == nil {
+						page = v
+					}
+				}
+			}
+			k, v, ok := strings.Cut(l, ":")
+			if !ok {
+				continue
+			}
+			n, _ := strconv.ParseUint(strings.TrimSuffix(strings.TrimSpace(v), "."), 10, 64)
+			switch strings.TrimSpace(k) {
+			case "Pages free":
+				free = n
+			case "Pages inactive":
+				inactive = n
+			}
+		}
+		s.MemFree = (free + inactive) * page
+		s.OK = s.MemTotal > 0
+	}
+	return s
+}
+
+// AgentsCache keeps the last `claude agents --json` result, refreshed in the
+// background because one call takes 10-15 s.
+type AgentsCache struct {
+	mu      sync.Mutex
+	cli     agent.CLI
+	entries []agent.AgentEntry
+	at      time.Time
+	err     error
+	busy    bool
+}
+
+// NewAgentsCache returns a cache.
+func NewAgentsCache(cli agent.CLI) *AgentsCache { return &AgentsCache{cli: cli} }
+
+// Get returns the cached entries, their age, and the last error.
+func (a *AgentsCache) Get() ([]agent.AgentEntry, time.Time, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]agent.AgentEntry(nil), a.entries...), a.at, a.err
+}
+
+// Refresh runs the CLI once (skips if a refresh is already running).
+func (a *AgentsCache) Refresh(ctx context.Context) {
+	a.mu.Lock()
+	if a.busy {
+		a.mu.Unlock()
+		return
+	}
+	a.busy = true
+	a.mu.Unlock()
+	e, err := a.cli.Agents(ctx)
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.busy = false
+	if err != nil {
+		a.err = err
+		return
+	}
+	a.entries, a.at, a.err = e, time.Now(), nil
+}
+
+// Run refreshes periodically until ctx ends. skip reports whether to skip a
+// round (e.g. when the job slots are all busy).
+func (a *AgentsCache) Run(ctx context.Context, every time.Duration, skip func() bool) {
+	a.Refresh(ctx)
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if skip == nil || !skip() {
+				a.Refresh(ctx)
+			}
+		}
+	}
+}

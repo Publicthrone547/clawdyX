@@ -1,0 +1,58 @@
+{
+  "telegram": {
+    "owner_user_id": 0,
+    "poll_timeout_seconds": 30
+  },
+  "claude": {
+    "binary": "/opt/homebrew/bin/claude",
+    "default_model": "fable",
+    "default_effort": "auto",
+    "setting_sources": "user",
+    "strict_mcp_config": true,
+    "job_timeout": "15m",
+    "max_turns": 60,
+    "max_budget_usd": 0,
+    "max_concurrent_jobs": 2,
+    "max_queue_per_session": 5,
+    "max_output_bytes": 1048576,
+    "max_child_rss_mb": 2048,
+    "bg_wait_ceiling_ms": 60000,
+    "child_path": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "extra_disallowed_tools": []
+  },
+  "workspaces": [
+    {
+      "name": "my-project",
+      "path": "/Users/you/projects/my-project",
+      "default_mode": "observe",
+      "allowed_commands": [
+        "Bash(git status *)",
+        "Bash(git diff *)",
+        "Bash(git log *)",
+        "Bash(make test *)",
+        "Bash(go test *)",
+        "Bash(go build *)",
+        "Bash(go vet *)"
+      ],
+      "denied_commands": [
+        "Bash(rm *)",
+        "Bash(rmdir *)",
+        "Bash(sudo *)",
+        "Bash(git push *)",
+        "Bash(git remote *)",
+        "Bash(curl *)",
+        "Bash(wget *)",
+        "Bash(brew *)",
+        "Bash(claude *)"
+      ]
+    }
+  ],
+  "default_workspace": "my-project",
+  "shutdown_command_enabled": false,
+  "modes": { "automation_enabled": false },
+  "desktop": { "open_urls": true, "browser_app": "Safari", "screen_control": false },
+  "state_dir": "",
+  "log_dir": "",
+  "logging": { "level": "info" },
+  "retention": { "jobs_days": 90, "job_events_days": 14, "processed_updates_days": 7, "audit_days": 180 }
+}

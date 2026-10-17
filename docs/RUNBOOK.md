@@ -1,0 +1,106 @@
+# clawdyx runbook
+
+All commands run as the logged-in macOS user. Paths:
+
+| What | Where |
+| --- | --- |
+| Token | `~/.config/clawdyx/.env` (0600, only `TELEGRAM_BOT_TOKEN=`) |
+| Config | `~/.config/clawdyx/config.json` (0600) or `$CLAWDYX_CONFIG` |
+| State | `~/Library/Application Support/clawdyx/` (`state.db`, `bot.lock`, `backups/`) |
+| Logs | `~/Library/Logs/clawdyx/` (`bot.log` JSON, rotated 20 MB × 5; `stdout.log`, `stderr.log` from launchd) |
+| LaunchAgent | `~/Library/LaunchAgents/local.clawdyx.plist`, label `local.clawdyx` |
+
+## Install and first run
+
+```sh
+make setup      # token, your Telegram ID, project folder → ~/.config/clawdyx/{.env,config.json} (0600); then the read-only checks
+make start      # background service (LaunchAgent): starts now and at every login
+```
+
+`make setup` asks for the bot token (hidden input) and your numeric Telegram user ID. If you leave the ID empty, send any message to the bot and press Enter: the wizard reads the sender ID from Telegram and acknowledges the pending updates so they are not replayed as prompts later. It then verifies the token (`getMe`), writes the private files and runs `clawdyx check`.
+
+Scripted setup: `printf '%s\n' "$TOKEN" | bin/clawdyx setup -token-stdin -owner-id 123456789 -workspace ~/projects/app [-browser Safari] [-no-check] [-force]`.
+
+### Manual setup (without the wizard)
+
+1. Create the bot in Telegram with @BotFather (`/newbot`) and copy the token. Never paste it into chats, issues, config.json or the repository.
+2. Store it:
+   ```sh
+   mkdir -p ~/.config/clawdyx && chmod 700 ~/.config/clawdyx
+   printf 'TELEGRAM_BOT_TOKEN=%s\n' '<token>' > ~/.config/clawdyx/.env && chmod 600 ~/.config/clawdyx/.env
+   cp config.example.json ~/.config/clawdyx/config.json && chmod 600 ~/.config/clawdyx/config.json
+   ```
+3. Edit config.json: set `telegram.owner_user_id` to your numeric Telegram user ID (the bot refuses to start while it is 0) and list your `workspaces`. Only directories listed there can ever be used. Avoid `~/Desktop`, `~/Documents` and `~/Downloads`: macOS privacy protection can block a launchd-started process there.
+4. `make doctor` validates the config and token format, runs `claude --version` and `claude auth status` (about 30 s), calls Telegram `getMe`/`getWebhookInfo`, and checks the instance lock. It changes nothing.
+5. `make run` runs the bot in the foreground; send `/start` from the owner account.
+
+## Background service (LaunchAgent)
+
+```sh
+make start      # installs the binary to $(go env GOPATH)/bin, writes the plist, loads it; restarts an already running service
+make stop       # bootout + disable: stays off until make start
+make restart    # rebuild, reinstall, restart
+make status     # running under launchd / running in the foreground / stopped
+make logs
+```
+
+`make start` refuses to run while a foreground `clawdyx run` holds the state lock; stop that one with Ctrl-C first. The plist is regenerated on every start from the installed binary path and the config path, so manual edits to it do not survive. Advanced: `launchctl print gui/$(id -u)/local.clawdyx`.
+
+The agent runs only in the logged-in GUI (Aqua) session. That is required, because the claude.ai login lives in your login keychain. It starts at login and restarts after a crash, but not after a clean exit (`/shutdown`). It does not run while you are logged out. If the bot is offline, a Telegram command cannot wake it. Use `launchctl kickstart` from the Mac or log in again.
+
+### macOS permissions for screen control (service)
+
+Under launchd, macOS checks the `clawdyx` program itself, not your terminal. In System Settings → Privacy & Security, add `~/go/bin/clawdyx` to both **Accessibility** (mouse and keyboard) and **Screen & System Audio Recording** (screenshots). Click **+**, press Cmd-Shift-G and paste the path. Then run `launchctl kickstart -k gui/$(id -u)/local.clawdyx`. Do not grant iTerm, because that would give every program started in iTerm the same control.
+
+macOS ties these grants to the exact binary. After `make install` installs a new build, remove `clawdyx` from both lists, add it again, and restart the service.
+
+## Inspect
+
+- Telegram: `/status`, `/doctor`, `/processes`, `/usage`, `/jobs`, `/logs j-ID`.
+- Logs: `tail -f ~/Library/Logs/clawdyx/bot.log | jq .`
+- launchd: `launchctl print gui/$(id -u)/local.clawdyx | head -40`
+
+## Update
+
+- **Claude Code**: `brew upgrade --cask claude-code` in Terminal. Within an hour, or at restart, the bot sees the new version, clears its model-validation cache, runs one smoke probe and reports the result. If the probe fails with an authentication error, check whether `claude -p` changed its default to bare mode. The docs announce that bare mode will become the default for `-p`, and it ignores the claude.ai login. If that happened, pin the previous cask version until the bot passes the documented opt-out.
+- **Bot**: `make restart`.
+
+## Back up and restore
+
+```sh
+clawdyx backup        # VACUUM INTO ~/Library/Application Support/clawdyx/backups/state-<time>.db (keeps 7)
+```
+
+To restore: `launchctl bootout gui/$(id -u)/local.clawdyx`, copy a backup over `state.db` (delete `state.db-wal` and `state.db-shm`), then `clawdyx service install` or `launchctl bootstrap …`. Claude transcripts belong to Claude Code (`~/.claude/projects`) and are not copied.
+
+## Rotate or revoke the Telegram token
+
+1. @BotFather → `/revoke` (or `/token`) → new token.
+2. Run `make setup` and choose to replace the stored token (or edit `~/.config/clawdyx/.env`, keeping mode 0600).
+3. `make restart`.
+4. `/doctor` must show `Webhook: none`. At startup the bot deletes any webhook it finds and warns you, since a webhook set by someone else means the old token leaked.
+5. Look at the unauthorized-update counter in `/status`. Treat the bot as compromised for the whole exposure window. The owner-only gate still prevented other users from running anything.
+
+## Troubleshoot Claude authentication
+
+`/doctor` shows `loggedIn=false`, or jobs fail with an authentication error. In Terminal run `claude auth status`, and if needed `claude auth login`. The bot never logs in, never reads the keychain, and never falls back to an API key. If `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN` is set in the bot's environment, it logs a warning and does not pass the value to `claude`.
+
+## Common problems
+
+| Symptom | Cause / fix |
+| --- | --- |
+| `another clawdyx instance is running` (exit 3) | A second copy is running. `launchctl print` the agent, or stop the foreground copy. |
+| `/status` shows "Duplicate poller detected" | Another process polls with the same token: a second instance, or a leaked token. Rotate the token if it is not yours. |
+| Jobs show "N tool call(s) denied" | Expected in `observe`. Use `/mode assisted` if edits are wanted, or add a specific rule to `allowed_commands`. |
+| "Claude session transcript no longer exists" | Claude Code deleted the transcript (for example via `cleanupPeriodDays`). Start fresh with `/new`. |
+| Replies arrive slowly in bursts | The bot paces itself to about 1 message/s per chat, as Telegram requires. |
+
+## Uninstall / revert
+
+```sh
+clawdyx service uninstall                 # bootout + remove plist; state kept
+clawdyx service uninstall --purge-state   # also delete state dir and logs
+rm ~/.config/clawdyx/.env                 # then revoke the token in @BotFather
+```
+
+Claude Code itself is never modified.
