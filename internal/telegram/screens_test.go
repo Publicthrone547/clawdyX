@@ -113,6 +113,26 @@ func TestLookSendsImageToClaude(t *testing.T) {
 	}
 }
 
+func TestLookAllSendsEveryDisplay(t *testing.T) {
+	h := startFull(t, screenOn, nil, fakeDesk{})
+	h.tg.push(msg(owner, owner, "private", "/look all which screen shows an error?"))
+	h.tg.waitFor(t, "Looking at all 2 displays")
+	h.tg.waitFor(t, "— j-1")
+	b, _ := os.ReadFile(filepath.Join(h.ws, ".fakeclaude-stdin"))
+	in := string(b)
+	if n := strings.Count(in, `"type":"image"`); n != 2 {
+		t.Fatalf("%d images sent, want 2", n)
+	}
+	for _, want := range []string{"screenshots of all displays", "1. display 1", "2. display 2 (Side, 300×200)", "which screen shows an error?"} {
+		if !strings.Contains(in, want) {
+			t.Errorf("prompt lacks %q", want)
+		}
+	}
+	if h.app.broker.Held() != 0 {
+		t.Fatal("captures kept after /look all")
+	}
+}
+
 func TestAppCaptureUseIsQuietOnTelegram(t *testing.T) {
 	h := startFull(t, screenOn, nil, fakeDesk{})
 	c := withControl(t, h)

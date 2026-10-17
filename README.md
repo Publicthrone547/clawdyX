@@ -68,7 +68,7 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | Claude settings | `/model [name\|alias\|reset] [--default]` `/effort [low\|medium\|high\|xhigh\|max\|auto] [--default]` `/mode observe\|assisted` `/aliases` `/alias set fast haiku` |
 | Jobs | `/stop [j-ID\|S-ID\|all]` `/cancel j-ID` `/jobs [n]` `/logs j-ID [lines]` |
 | Machine | `/processes` `/usage` `/doctor` `/open youtube.com` (opens a website in the Mac's browser; typed by you, never by Claude) |
-| Screens | `/screens` (list displays, no capture) · `/screen 2` · `/screen all` (photos sent only to you) · `/look 2 what is wrong here?` (Claude looks at display 2) · `/screen off` |
+| Screens | `/screens` (list displays, no capture) · `/screen 2` · `/screen all` (photos sent only to you) · `/look 2 what is wrong here?` (Claude looks at display 2) · `/look all question` (Claude looks at every display at once) · `/screen off` |
 | Bot | `/start` (resume) `/pause` `/confirm` `/deny` `/shutdown` (disabled by default) |
 
 `/model fable` sets the **primary** model (`fable` resolves to `claude-fable-5-1` on CLI 2.1.292). Every model change is validated with a one-turn probe before it is saved. The separate `--advisor` model is never touched.
@@ -114,8 +114,8 @@ With `"desktop": {"screen_control": true}` in config.json:
 
 - **`/screens`** lists every connected display (number, name, resolution). It never captures.
 - **`/screen N`** sends you a photo of display N (1 is the main display); **`/screen all`** sends one photo per display. Photos go only to the private chat that asked.
-- **`/look N question`** captures display N and asks Claude about it in the active session. The image goes to Claude as part of the prompt (in memory, through Claude Code's normal request flow) and is not stored.
-- **Automation sessions** also get screen tools from the bot's own MCP server (`clawdyx mcp-screen`): `screenshot` (optional `display` number), `click`, `move_mouse`, `scroll`, `type_text`, `press_key`, `wait`. Before each screenshot the tool asks the worker whether screen features are still on.
+- **`/look N question`** captures display N and asks Claude about it in the active session. Without N it uses the main display; **`/look all question`** sends one image per display in a single prompt. The image goes to Claude as part of the prompt (in memory, through Claude Code's normal request flow) and is not stored.
+- **Automation sessions** also get screen tools from the bot's own MCP server (`clawdyx mcp-screen`): `list_displays` (no capture), `screenshot` (optional `display` number), `click`, `move_mouse`, `scroll`, `type_text`, `press_key`, `wait`. Before each screenshot the tool asks the worker whether screen features are still on.
 - **`/screen off`** switches every capture path off at once (Telegram, the desktop app, Claude's screenshot tool). It can be switched on again only from the Mac: the clawdyX app, or `clawdyx ctl screens.enabled.set '{"enabled":true}'`.
 
 Nothing is captured at startup or on a timer. Captures stay in memory for at most five minutes; every capture is recorded in the audit table (display, size, destination; never pixels).

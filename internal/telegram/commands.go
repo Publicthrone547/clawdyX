@@ -64,7 +64,7 @@ const helpText = `<b>Claude control center</b> — send any message to talk to C
 /stop [j-ID|S-ID|all] · /cancel j-ID · /jobs [n] · /logs j-ID [lines]
 <b>Machine</b>
 /processes · /usage · /doctor · /open youtube.com — open a website in the Mac's browser
-/screens — list displays · /screen [N|all] — photo of display N · /look [N] [question] — ask Claude about display N · /screen off
+/screens — list displays · /screen [N|all] — photo of display N · /look [N|all] [question] — ask Claude about display N or all of them · /screen off
 <b>Bot</b>
 /pause · /start (resume) · /confirm TOKEN · /deny TOKEN`
 

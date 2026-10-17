@@ -46,6 +46,7 @@ func main() {
 		_ = os.WriteFile(".fakeclaude-args", b, 0o600)
 	}
 	in, _ := io.ReadAll(os.Stdin)
+	_ = os.WriteFile(".fakeclaude-stdin", in, 0o600)
 	prompt := string(in)
 	_ = os.WriteFile(".fakeclaude-env", []byte(strings.Join(os.Environ(), "\n")), 0o600)
 

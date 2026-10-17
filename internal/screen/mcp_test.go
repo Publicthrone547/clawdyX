@@ -85,7 +85,7 @@ func TestHandshakeAndTools(t *testing.T) {
 		t.Fatal("protocol version not echoed")
 	}
 	tools := out[1]["result"].(map[string]any)["tools"].([]any)
-	if len(tools) != 7 {
+	if len(tools) != 8 {
 		t.Fatalf("tools %d", len(tools))
 	}
 	if out[2]["error"] == nil || out[3]["error"] == nil {
@@ -165,5 +165,25 @@ func TestScreenshotOnSecondDisplayMapsGlobalPoints(t *testing.T) {
 	s.Authorize = func(context.Context, string) error { return ErrScreenOff }
 	if r := s.call(ctx, "screenshot", nil); !r.IsError {
 		t.Fatal("screenshot must fail when the worker says no")
+	}
+}
+
+func TestListDisplays(t *testing.T) {
+	s := &Server{D: &fakeDesk{}}
+	if r := s.call(context.Background(), "list_displays", nil); !r.IsError {
+		t.Fatal("list_displays without a display source must fail")
+	}
+	s.Displays = func(context.Context) ([]Display, error) {
+		return []Display{{Index: 1, Name: "Built-in", PixelW: 3024, PixelH: 1964, Main: true}, {Index: 2, Name: "BenQ", PixelW: 1920, PixelH: 1080}}, nil
+	}
+	r := s.call(context.Background(), "list_displays", nil)
+	if r.IsError || len(r.Content) != 1 {
+		t.Fatalf("list_displays: %+v", r)
+	}
+	txt := r.Content[0].Text
+	for _, want := range []string{"2 display(s)", "1 · Built-in · 3024×1964 · main", "2 · BenQ · 1920×1080"} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("missing %q in %q", want, txt)
+		}
 	}
 }

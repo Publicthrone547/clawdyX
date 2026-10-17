@@ -110,7 +110,7 @@ func main() {
 				mac.Helper = screen.FindHelper(exe)
 			}
 		}
-		srv := &screen.Server{D: mac, Version: version}
+		srv := &screen.Server{D: mac, Version: version, Displays: mac.Displays}
 		if sock := os.Getenv("CLAWDYX_CONTROL_SOCKET"); sock != "" {
 			// Ask the worker before every screenshot: the owner may have
 			// switched screen features off since this job started.

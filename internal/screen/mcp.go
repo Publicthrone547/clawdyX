@@ -9,6 +9,7 @@ import (
 	"io"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,6 +21,8 @@ type Server struct {
 	// Authorize, when set, asks the worker whether a capture is allowed now
 	// (screen features switched off, permission) and records it.
 	Authorize func(ctx context.Context, display string) error
+	// Displays lists the connected displays for list_displays (captures nothing).
+	Displays func(ctx context.Context) ([]Display, error)
 
 	mu   sync.Mutex
 	last *Shot // last screenshot, used to map image pixels to screen points
@@ -69,7 +72,9 @@ var num = map[string]any{"type": "number"}
 // Tools is the advertised tool list.
 func Tools() []map[string]any {
 	return []map[string]any{
-		{"name": "screenshot", "description": "Take a screenshot of one of the Mac's displays (display 1 is the main display; omit display for it). Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for the other tools are pixels in the most recent screenshot, on the display it shows.",
+		{"name": "list_displays", "description": "List the Mac's connected displays (number, name, resolution, which one is main). Captures nothing. Call it first when the user may mean a display other than the main one, or asks about all screens.",
+			"inputSchema": obj(map[string]any{})},
+		{"name": "screenshot", "description": "Take a screenshot of one of the Mac's displays (display 1 is the main display; omit display for it). The Mac may have several displays: use list_displays to see them, and take one screenshot per display to look at all of them. Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for the other tools are pixels in the most recent screenshot, on the display it shows.",
 			"inputSchema": obj(map[string]any{"display": map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "1 = main display (default), 2… = other displays"}})},
 		{"name": "click", "description": "Click at a point given in pixels of the most recent screenshot.",
 			"inputSchema": obj(map[string]any{"x": num, "y": num,
@@ -184,6 +189,23 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		return s.toScreen(*a.X, *a.Y)
 	}
 	switch name {
+	case "list_displays":
+		if s.Displays == nil {
+			return fail("the display list is not available")
+		}
+		ds, err := s.Displays(ctx)
+		if err != nil {
+			return fail("could not list displays: %v", err)
+		}
+		if len(ds) == 0 {
+			return fail("no display is connected")
+		}
+		var b strings.Builder
+		fmt.Fprintf(&b, "%d display(s). Pass the number as display to screenshot.\n", len(ds))
+		for _, d := range ds {
+			b.WriteString(d.Label() + "\n")
+		}
+		return okText(strings.TrimSpace(b.String()))
 	case "screenshot":
 		sel := ""
 		if a.Display > 0 {

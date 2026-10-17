@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Claude can look at every display.** `/look all question` sends a screenshot of each display in one prompt; `/look question` still uses the main display and `/look N` one display.
+- **Screen tools know about all displays.** Automation sessions get `list_displays` (captures nothing) and are told to list the displays and take one screenshot per display when the request is not about a specific one. Before, Claude rarely looked beyond the main display because it did not know the others existed.
+
 ## 0.3.2 — 2026-10-17
 
 - **Desktop app shows its version.** The sidebar shows `v<version>` (click it for details). **Settings → About clawdyX** lists the app, worker and Claude Code versions, warns when the worker still runs an older version after an update, and links to this version's release notes and all releases. **Check for updates** asks GitHub for the latest release, only when clicked.
