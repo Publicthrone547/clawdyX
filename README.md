@@ -1,10 +1,34 @@
-# clawdyX — Telegram control plane for local Claude Code
+<p align="center">
+  <img src="desktop/build/appicon.png" alt="clawdyX app icon" width="112" height="112">
+</p>
+
+<h1 align="center">clawdyX</h1>
+
+<p align="center"><b>Control Claude Code on your Mac from Telegram.</b><br>A private bot and a desktop control panel for the Claude Code you already use.</p>
+
+<p align="center">
+  <a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><img alt="Download for Mac" src="https://img.shields.io/badge/Download_for_Mac-c2410c?style=for-the-badge&logo=apple&logoColor=white" height="44"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Publicthrone547/clawdyX?style=flat-square&label=latest%20release&color=c2410c"></a>
+  <a href="https://github.com/Publicthrone547/clawdyX/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/Publicthrone547/clawdyX/total?style=flat-square&label=downloads&color=2f2f33"></a>
+  <img alt="macOS 14+ on Apple silicon" src="https://img.shields.io/badge/macOS-14%2B%20%C2%B7%20Apple%20silicon-111111?style=flat-square&logo=apple&logoColor=white">
+  <a href="LICENSE"><img alt="License: PolyForm Noncommercial 1.0.0" src="https://img.shields.io/badge/license-PolyForm%20Noncommercial-555555?style=flat-square"></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><b>Latest release</b></a> ·
+  <a href="https://github.com/Publicthrone547/clawdyX/releases"><b>All releases</b></a> ·
+  <a href="CHANGELOG.md"><b>What's new</b></a> ·
+  <a href="#download">Install guide</a>
+</p>
+
+---
 
 A private, single-operator Telegram bot that drives the **Claude Code CLI already installed and logged in on this Mac**. It runs `claude -p` as a child process per message (stream-json output, `--resume` for continuity), so it reuses your existing claude.ai login. It never uses an API key and never bypasses Claude Code's permission system.
 
 Only the Telegram users on your local allowlist are served (by numeric ID, in their own private chat): you as the owner, plus anyone you deliberately add. Every other update is dropped silently before any lookup or side effect.
-
-**Download:** [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest) (`clawdyX-<version>.dmg` for the desktop app, or the worker alone as a `.tar.gz`; Apple silicon, macOS 14 or later) · [all releases](https://github.com/Publicthrone547/clawdyX/releases) · [changelog](CHANGELOG.md).
 
 Design and verified CLI facts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Operations: [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Tests: [`docs/TESTING.md`](docs/TESTING.md). Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md). Security reports: [`SECURITY.md`](SECURITY.md).
 
@@ -12,7 +36,7 @@ Design and verified CLI facts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). O
 
 clawdyX.app is the control panel: first-run setup, Start/Stop, sessions, jobs and processes, monitors, settings and diagnostics, plus a menu-bar item. It does not run the bot itself. The bot runs in a small background worker (a LaunchAgent that starts at login), so closing the window or quitting the app never stops Telegram. The app talks to the worker over a private Unix socket.
 
-Download `clawdyX-<version>.dmg` from the [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest), open it and drag clawdyX to Applications. Release builds are not notarized: on first launch, allow the app in System Settings → Privacy & Security → **Open Anyway**.
+Install it from the [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest) (see [Download](#download)).
 
 Or build and install it from source (macOS 14 or later, Xcode command-line tools, Go, Node.js):
 
@@ -127,6 +151,33 @@ Nothing is captured at startup or on a timer. Captures stay in memory for at mos
 - **Limits:** clicks are coordinate-based, so expect occasional misses.
 
 Every job also passes `--settings` that disables bypass and auto modes and blocks file-tool reads outside the working directory. Secret locations are denied in every tier: `~/.ssh`, `~/.aws`, `~/.config`, `~/.claude`, keychains, and browser profiles. One consequence is that Claude Code's auto-memory cannot write under `~/.claude`. Claude reports those writes as denied and carries on.
+
+## Download
+
+<table>
+  <tr>
+    <th align="left">File</th>
+    <th align="left">For</th>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><code>clawdyX-&lt;version&gt;.dmg</code></a></td>
+    <td>The desktop app with the bot inside. Open it and drag clawdyX to Applications; the setup wizard runs on first launch.</td>
+  </tr>
+  <tr>
+    <td><a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><code>clawdyx-&lt;version&gt;-darwin-arm64.tar.gz</code></a></td>
+    <td>The bot only, for the terminal: <code>clawdyx setup</code>, then <code>clawdyx service start</code>.</td>
+  </tr>
+  <tr>
+    <td><code>SHA256SUMS</code></td>
+    <td>Checksums: <code>shasum -a 256 -c SHA256SUMS</code>.</td>
+  </tr>
+</table>
+
+Requirements: macOS 14 or later on Apple silicon, and [Claude Code](https://claude.com/claude-code) installed and signed in. Release builds are not notarized yet: on first launch, open **System Settings → Privacy & Security** and click **Open Anyway** for clawdyX. In the app, **Settings → About clawdyX** shows the version you run and checks for a newer one when you click.
+
+<p align="center">
+  <a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><img alt="Download the latest release" src="https://img.shields.io/badge/Download_the_latest_release-c2410c?style=for-the-badge&logo=github&logoColor=white" height="36"></a>
+</p>
 
 ## Layout
 

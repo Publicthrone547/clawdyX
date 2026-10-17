@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.3.3 — 2026-10-17
 
 - **Claude can look at every display.** `/look all question` sends a screenshot of each display in one prompt; `/look question` still uses the main display and `/look N` one display.
 - **Screen tools know about all displays.** Automation sessions get `list_displays` (captures nothing) and are told to list the displays and take one screenshot per display when the request is not about a specific one. Before, Claude rarely looked beyond the main display because it did not know the others existed.
+- **README:** a download button, release badges and a Download section.
 
 ## 0.3.2 — 2026-10-17
 
