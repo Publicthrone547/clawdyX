@@ -204,6 +204,13 @@ func service(sub, cfgPath string, purge bool) int {
 		default:
 			fmt.Println("stopped")
 		}
+		if bs := workerBotState(cfg.ControlSocket()); bs != "" {
+			fmt.Printf("telegram polling: %s", bs)
+			if bs == "stopped" {
+				fmt.Print(" (start it from the clawdyX app or: clawdyx ctl bot.start)")
+			}
+			fmt.Println()
+		}
 		fmt.Printf("logs: %s\ndetails: launchctl print %s\n", cfg.LogDir, target())
 		if loaded {
 			return exitOK

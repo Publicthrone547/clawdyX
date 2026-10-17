@@ -81,6 +81,7 @@ func header(j *store.Job, s *store.Session) string {
 
 // JobQueued implements jobs.Notifier: the acknowledgement message.
 func (a *App) JobQueued(j *store.Job, s *store.Session, position int) {
+	a.emit("job.queued", map[string]any{"job": jobInfo(j, true), "position": position})
 	st := &stream{jobID: j.ID, replyTo: j.TgMessageID, nonce: nonce(), header: header(j, s), draftOK: true}
 	a.streams.put(st)
 	state := "queued"
@@ -99,6 +100,7 @@ func (a *App) JobQueued(j *store.Job, s *store.Session, position int) {
 
 // JobStarted implements jobs.Notifier.
 func (a *App) JobStarted(j *store.Job, s *store.Session) {
+	a.emit("job.started", jobInfo(j, true))
 	st := a.streams.get(j.ID)
 	if st == nil {
 		return
@@ -129,6 +131,12 @@ func (a *App) JobStarted(j *store.Job, s *store.Session) {
 // JobProgress implements jobs.Notifier. It never blocks the job: updates
 // are skipped while a previous one is in flight or no rate token is free.
 func (a *App) JobProgress(j *store.Job, p jobs.Progress) {
+	tail := p.Text
+	if len(tail) > 600 {
+		tail = tail[len(tail)-600:]
+	}
+	a.emit("job.progress", map[string]any{"id": j.ID, "elapsedMs": p.Elapsed.Milliseconds(), "tools": p.Tools, "denials": p.Denials,
+		"lastTool": observability.Redact(p.LastTool), "textTail": observability.Redact(tail)})
 	st := a.streams.get(j.ID)
 	if st == nil {
 		return
@@ -196,6 +204,7 @@ var stateIcon = map[string]string{
 
 // JobFinished implements jobs.Notifier.
 func (a *App) JobFinished(j *store.Job, s *store.Session, o jobs.Outcome) {
+	a.emit("job.finished", map[string]any{"job": jobInfo(j, false), "state": o.State, "durationMs": o.Duration.Milliseconds(), "error": o.ErrorMessage})
 	st := a.streams.get(j.ID)
 	a.streams.drop(j.ID)
 	replyTo := j.TgMessageID

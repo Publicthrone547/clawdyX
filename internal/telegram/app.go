@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -74,6 +75,34 @@ type App struct {
 	// ShutdownRequested is closed when /shutdown was confirmed.
 	ShutdownRequested chan struct{}
 	shutdownOnce      sync.Once
+
+	poll        poller
+	events      atomic.Pointer[func(typ string, data any)]
+	nameMu      sync.Mutex
+	botUsername string
+	webhookGone bool
+}
+
+// SetEventSink receives worker events (the control server's Publish).
+func (a *App) SetEventSink(f func(typ string, data any)) { a.events.Store(&f) }
+
+func (a *App) emit(typ string, data any) {
+	if f := a.events.Load(); f != nil && *f != nil {
+		(*f)(typ, data)
+	}
+}
+
+func (a *App) setBotUsername(u string) {
+	a.nameMu.Lock()
+	a.botUsername = u
+	a.nameMu.Unlock()
+}
+
+// BotUsername returns the bot's @username once known.
+func (a *App) BotUsername() string {
+	a.nameMu.Lock()
+	defer a.nameMu.Unlock()
+	return a.botUsername
 }
 
 // Options configure New.
@@ -180,6 +209,10 @@ func (a *App) Run(ctx context.Context) error {
 		_, _ = a.b.DeleteWebhook(a.ctx, &bot.DeleteWebhookParams{})
 		a.outbox.Push(Out{HTML: "⚠️ A webhook was configured for this bot and has been removed. If you did not set it, the bot token may have leaked: rotate it (see the runbook)."})
 		a.log.Warn("webhook was set; deleted")
+		a.webhookGone = true
+	}
+	if me, err := a.b.GetMe(a.ctx); err == nil {
+		a.setBotUsername(me.Username)
 	}
 	a.registerCommands()
 	a.jobs.SetPaused(a.st.Setting("paused", "false") == "true")
@@ -205,7 +238,16 @@ func (a *App) Run(ctx context.Context) error {
 	a.go_(a.maintenanceLoop)
 	a.log.Info("bot started", "version", Version)
 
-	a.b.Start(a.ctx) // blocks until ctx is done
+	if a.st.Setting(keyBotEnabled, "true") != "false" {
+		// No getMe gate here: at login the network may not be up yet, and the
+		// library retries getUpdates with backoff.
+		_, _ = a.StartPolling(false)
+	} else {
+		a.poll.set("stopped", "")
+		a.log.Info("telegram polling is switched off (start it from the clawdyX app or with: clawdyx ctl bot.start)")
+	}
+	<-a.ctx.Done()
+	a.StopPolling(false)
 
 	a.log.Info("shutting down")
 	sctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)

@@ -139,6 +139,8 @@ type Config struct {
 
 	// Token is loaded separately from the environment or the .env file.
 	Token string `json:"-"`
+	// TokenSource says where Token came from: "env", "file" or "keychain".
+	TokenSource string `json:"-"`
 }
 
 // MinimumDenied are deny rules every workspace must contain unless it opts out.
@@ -270,6 +272,10 @@ func Load(configPath, envPath string) (*Config, error) {
 		return nil, err
 	}
 	c.Token = tok
+	c.TokenSource = "file"
+	if strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")) != "" {
+		c.TokenSource = "env"
+	}
 	return c, nil
 }
 
@@ -496,3 +502,6 @@ func IsEffort(s string) bool { return contains(EffortLevels, s) }
 // ValidToken reports whether s has the shape of a Telegram bot token. The
 // value is never logged or echoed by callers.
 func ValidToken(s string) bool { return tokenRe.MatchString(strings.TrimSpace(s)) }
+
+// ControlSocket is the worker's local control socket.
+func (c *Config) ControlSocket() string { return filepath.Join(c.StateDir, "control.sock") }

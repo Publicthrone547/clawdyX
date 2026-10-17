@@ -20,6 +20,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/agent"
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/control"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/store"
@@ -48,6 +49,8 @@ Usage:
   clawdyx check                     validate config, token, CLI, auth and Telegram (read-only)
   clawdyx service uninstall [--purge-state]
   clawdyx backup                    write a consistent copy of the state database
+  clawdyx ctl METHOD [JSON]         call the running worker (e.g. ctl status.get, ctl bot.stop '{"cancelJobs":true}');
+                                    ctl events streams events; ctl help lists methods
   clawdyx version
 
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
@@ -93,6 +96,8 @@ func main() {
 		os.Exit(service(sub, *cfgPath, *purge))
 	case "backup":
 		os.Exit(backup(*cfgPath))
+	case "ctl":
+		os.Exit(ctl(*cfgPath, fs.Args()))
 	case "mcp-screen":
 		// Started by claude (via --mcp-config) for automation sessions with
 		// screen control. Speaks MCP on stdin/stdout.
@@ -172,6 +177,20 @@ func run(cfgPath, envPath string) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
+
+	srv := control.NewServer(log)
+	app.RegisterControl(srv)
+	if err := srv.Listen(cfg.ControlSocket()); err != nil {
+		// The bot still works without the control channel; the desktop app does not.
+		log.Error("control socket unavailable", "err", err)
+	} else {
+		go func() {
+			if err := srv.Serve(ctx); err != nil {
+				log.Error("control socket stopped", "err", err)
+			}
+		}()
+		defer srv.Close()
+	}
 	if err := app.Run(ctx); err != nil {
 		log.Error("run", "err", observability.Redact(err.Error()))
 		return exitError
@@ -260,6 +279,7 @@ func backup(cfgPath string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return exitError
 	}
+	_ = os.Chmod(dir, 0o700)
 	out := filepath.Join(dir, "state-"+time.Now().Format("20060102-150405")+".db")
 	if err := st.Backup(context.Background(), out); err != nil {
 		fmt.Fprintln(os.Stderr, "backup:", err)

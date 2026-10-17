@@ -268,3 +268,37 @@ func ParseKey(combo string) (int, uint64, error) {
 	}
 	return code, flags, nil
 }
+
+// jsScreenAccess infers Screen Recording permission without capturing:
+// without it, macOS hides the titles of other processes' windows.
+const jsScreenAccess = `function run(argv){
+ ObjC.import("CoreGraphics"); ObjC.import("Foundation");
+ var arr = ObjC.castRefToObject($.CGWindowListCopyWindowInfo($.kCGWindowListOptionOnScreenOnly, 0));
+ var n = arr.count, named = 0, other = 0, me = $.NSProcessInfo.processInfo.processIdentifier;
+ for (var i=0;i<n;i++){ var d = arr.objectAtIndex(i);
+   var pid = d.objectForKey("kCGWindowOwnerPID").intValue;
+   var owner = ObjC.unwrap(d.objectForKey("kCGWindowOwnerName"));
+   if (pid == me || owner == "Window Server" || owner == "Dock" || owner == "osascript") continue;
+   other++;
+   var nm = d.objectForKey("kCGWindowName");
+   if (nm && nm.js !== undefined && ObjC.unwrap(nm)) named++;
+ }
+ return other + " " + named;
+}`
+
+// ScreenAccess reports (granted, known). known is false when no other
+// window is on screen to infer the permission from.
+func (m Mac) ScreenAccess(ctx context.Context) (bool, bool) {
+	out, err := jxa(ctx, jsScreenAccess)
+	if err != nil {
+		return false, false
+	}
+	var other, named int
+	if _, err := fmt.Sscanf(out, "%d %d", &other, &named); err != nil {
+		return false, false
+	}
+	if named > 0 {
+		return true, true
+	}
+	return false, other > 0
+}

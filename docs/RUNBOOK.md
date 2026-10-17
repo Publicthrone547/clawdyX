@@ -54,6 +54,22 @@ Under launchd, macOS checks the `clawdyx` program itself, not your terminal. In 
 
 macOS ties these grants to the exact binary. After `make install` installs a new build, remove `clawdyx` from both lists, add it again, and restart the service.
 
+## Control socket (`clawdyx ctl`)
+
+The running worker listens on `~/Library/Application Support/clawdyx/control.sock` (mode 0600 in a 0700 folder; connections from other macOS users are refused by uid). The desktop app uses it; you can too:
+
+```sh
+clawdyx ctl status.get                      # one-screen overview as JSON
+clawdyx ctl bot.stop                        # stop Telegram polling; running jobs finish
+clawdyx ctl bot.stop '{"cancelJobs":true}'  # stop polling and cancel running jobs
+clawdyx ctl bot.start                       # validate the token, start polling again
+clawdyx ctl diagnostics.run                 # the same checks as the app's Diagnostics page
+clawdyx ctl events                          # stream job/bot/session events until Ctrl-C
+clawdyx ctl help                            # every method
+```
+
+`bot.stop` is remembered: after a restart or a login the worker stays connected but does not poll Telegram until `bot.start` (or Start in the app). `make status` shows the polling state.
+
 ## Inspect
 
 - Telegram: `/status`, `/doctor`, `/processes`, `/usage`, `/jobs`, `/logs j-ID`.

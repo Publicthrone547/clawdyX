@@ -96,4 +96,5 @@ type Counters struct {
 	SendErrors     atomic.Int64
 	LastPollOKUnix atomic.Int64
 	LastConflict   atomic.Int64
+	PollStarts     atomic.Int64 // how many times polling was started in this process
 }

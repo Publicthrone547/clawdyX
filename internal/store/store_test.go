@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -125,5 +126,51 @@ func TestBackupAndPerms(t *testing.T) {
 	}
 	if err := s.Prune(Retention{JobsDays: 1, JobEventsDays: 1, ProcessedUpdatesDays: 1, AuditDays: 1}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestMigrateV1ToV2KeepsDataAndBacksUp(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(migrations[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 1`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO sessions(name,claude_session_id,workspace_name,workspace_path,mode,created_at,last_used_at) VALUES('old','uuid-1','w','/tmp','observe',1,1)`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	os.Chmod(path, 0o600)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	x, err := s.GetSession(1)
+	if err != nil || x.Name != "old" || !x.ForgottenAt.IsZero() {
+		t.Fatalf("session after migration: %v %+v", err, x)
+	}
+	bk, _ := filepath.Glob(filepath.Join(dir, "backups", "state-pre-v2-*.db"))
+	if len(bk) != 1 {
+		t.Fatalf("expected one pre-migration backup, got %v", bk)
+	}
+	if err := s.MarkForgotten(1, false); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := s.ListSessions(true, 10); len(l) != 0 {
+		t.Fatal("forgotten session listed")
+	}
+	if l, _ := s.ListForgotten(time.Hour); len(l) != 1 {
+		t.Fatal("tombstone missing")
+	}
+	s.AuditCapture(Capture{DisplayKey: "d1", Width: 10, Height: 10, Bytes: 5, Destination: "preview"})
+	if s.CaptureCount(time.Now().Add(-time.Minute)) != 1 {
+		t.Fatal("capture audit missing")
 	}
 }

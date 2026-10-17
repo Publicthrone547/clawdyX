@@ -91,6 +91,7 @@ func (a *App) command(ctx context.Context, m *models.Message, text string) {
 	}
 	args := fields[1:]
 	a.st.Audit("command", cmd, "", "", 0)
+	defer a.emit("telegram.command", map[string]string{"command": cmd})
 	switch cmd {
 	case "start":
 		a.cmdStart(m)

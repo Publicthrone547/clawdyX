@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -155,7 +156,7 @@ func (s *Service) Resolve(ref string) (*store.Session, error) {
 	num := strings.TrimPrefix(strings.TrimPrefix(ref, "S"), "s")
 	if id, err := strconv.ParseInt(num, 10, 64); err == nil && id > 0 {
 		x, err := s.st.GetSession(id)
-		if errors.Is(err, store.ErrNotFound) {
+		if errors.Is(err, store.ErrNotFound) || (err == nil && x.Status == "forgotten") {
 			return nil, ErrNoSession
 		}
 		return x, err
@@ -225,4 +226,49 @@ func (s *Service) Workspace(x *store.Session) (*config.Workspace, error) {
 		return nil, fmt.Errorf("workspace %q moved since the session was created", x.WorkspaceName)
 	}
 	return ws, nil
+}
+
+// RestoreWindow is how long a forgotten session can be restored.
+const RestoreWindow = 30 * 24 * time.Hour
+
+// Restore makes an archived session, or a session forgotten within the
+// restore window whose history was not deleted, active again (it does not
+// switch to it).
+func (s *Service) Restore(ref string) (*store.Session, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	x, err := s.resolveAny(ref)
+	if err != nil {
+		return nil, err
+	}
+	switch x.Status {
+	case "archived":
+	case "forgotten":
+		if !x.DeletedAt.IsZero() {
+			return nil, fmt.Errorf("%s cannot be restored: its Claude Code history was deleted", x.Label())
+		}
+		if time.Since(x.ForgottenAt) > RestoreWindow {
+			return nil, fmt.Errorf("%s was forgotten more than 30 days ago", x.Label())
+		}
+	default:
+		return nil, fmt.Errorf("%s is %s, not archived or forgotten", x.Label(), x.Status)
+	}
+	if err := s.st.Restore(x.ID); err != nil {
+		return nil, err
+	}
+	s.st.Audit("session", "restore", x.Label(), "ok", 0)
+	return s.st.GetSession(x.ID)
+}
+
+// resolveAny resolves "S3"/"3" including forgotten sessions (by number only).
+func (s *Service) resolveAny(ref string) (*store.Session, error) {
+	num := strings.TrimPrefix(strings.TrimPrefix(strings.TrimSpace(ref), "S"), "s")
+	if id, err := strconv.ParseInt(num, 10, 64); err == nil && id > 0 {
+		x, err := s.st.GetSession(id)
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, ErrNoSession
+		}
+		return x, err
+	}
+	return s.Resolve(ref)
 }

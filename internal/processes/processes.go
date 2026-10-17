@@ -191,3 +191,78 @@ func (a *AgentsCache) Run(ctx context.Context, every time.Duration, skip func() 
 		}
 	}
 }
+
+// CPUPercent measures each pid's CPU use over interval from two samples of
+// its accumulated CPU time (ps's %cpu is a decaying minute-long average and
+// is useless for short windows). 100 means one full core.
+func CPUPercent(ctx context.Context, pids []int, interval time.Duration) map[int]float64 {
+	out := map[int]float64{}
+	if len(pids) == 0 {
+		return out
+	}
+	a := cpuTimes(ctx, pids)
+	t0 := time.Now()
+	select {
+	case <-ctx.Done():
+		return out
+	case <-time.After(interval):
+	}
+	b := cpuTimes(ctx, pids)
+	wall := time.Since(t0).Seconds()
+	for pid, v1 := range b {
+		if v0, ok := a[pid]; ok && wall > 0 && v1 >= v0 {
+			out[pid] = (v1 - v0) / wall * 100
+		}
+	}
+	return out
+}
+
+func cpuTimes(ctx context.Context, pids []int) map[int]float64 {
+	args := []string{"-o", "pid=,time="}
+	for _, p := range pids {
+		args = append(args, "-p", strconv.Itoa(p))
+	}
+	ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	b, _ := exec.CommandContext(ctx, "/bin/ps", args...).Output()
+	out := map[int]float64{}
+	for _, l := range strings.Split(string(b), "\n") {
+		f := strings.Fields(l)
+		if len(f) != 2 {
+			continue
+		}
+		pid, err := strconv.Atoi(f[0])
+		if err != nil {
+			continue
+		}
+		if s, ok := ParseCPUTime(f[1]); ok {
+			out[pid] = s
+		}
+	}
+	return out
+}
+
+// ParseCPUTime parses ps time output ([[dd-]hh:]mm:ss[.ss]) into seconds.
+func ParseCPUTime(s string) (float64, bool) {
+	days := 0.0
+	if d, rest, ok := strings.Cut(s, "-"); ok {
+		v, err := strconv.ParseFloat(d, 64)
+		if err != nil {
+			return 0, false
+		}
+		days, s = v, rest
+	}
+	parts := strings.Split(s, ":")
+	if len(parts) < 2 || len(parts) > 3 {
+		return 0, false
+	}
+	total := 0.0
+	for _, p := range parts {
+		v, err := strconv.ParseFloat(p, 64)
+		if err != nil {
+			return 0, false
+		}
+		total = total*60 + v
+	}
+	return total + days*86400, true
+}

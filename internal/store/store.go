@@ -25,10 +25,11 @@ var ErrDuplicate = errors.New("duplicate")
 
 // Store wraps the database.
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
-const schemaVersion = 1
+const schemaVersion = 2
 
 var migrations = []string{
 	// v1
@@ -95,6 +96,20 @@ var migrations = []string{
 	CREATE TABLE processed_updates (update_id INTEGER PRIMARY KEY, received_at INTEGER NOT NULL);
 	CREATE TABLE audit (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, category TEXT NOT NULL, action TEXT NOT NULL, target TEXT NOT NULL DEFAULT '', outcome TEXT NOT NULL DEFAULT '', job_id INTEGER);
 	CREATE TABLE capability_cache (key TEXT PRIMARY KEY, value TEXT NOT NULL, cli_version TEXT NOT NULL, checked_at INTEGER NOT NULL);`,
+	// v2: session tombstones (forget / delete history) and the capture audit.
+	`ALTER TABLE sessions ADD COLUMN forgotten_at INTEGER NOT NULL DEFAULT 0;
+	ALTER TABLE sessions ADD COLUMN deleted_at INTEGER NOT NULL DEFAULT 0;
+	CREATE TABLE captures (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		ts INTEGER NOT NULL,
+		display_key TEXT NOT NULL,
+		width INTEGER NOT NULL DEFAULT 0,
+		height INTEGER NOT NULL DEFAULT 0,
+		bytes INTEGER NOT NULL DEFAULT 0,
+		destination TEXT NOT NULL,
+		requester TEXT NOT NULL DEFAULT '',
+		job_id INTEGER
+	);`,
 }
 
 // Open opens (creating) the database at path with private permissions.
@@ -115,7 +130,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, path: path}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
@@ -133,6 +148,17 @@ func (s *Store) migrate() error {
 	}
 	if v > schemaVersion {
 		return fmt.Errorf("store: database schema v%d is newer than this binary (v%d); refusing to run", v, schemaVersion)
+	}
+	if v > 0 && v < len(migrations) && s.path != "" {
+		dir := filepath.Join(filepath.Dir(s.path), "backups")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return err
+		}
+		_ = os.Chmod(dir, 0o700)
+		bk := filepath.Join(dir, fmt.Sprintf("state-pre-v%d-%s.db", len(migrations), time.Now().Format("20060102-150405")))
+		if err := s.Backup(context.Background(), bk); err != nil {
+			return fmt.Errorf("store: backup before migration: %w", err)
+		}
 	}
 	for i := v; i < len(migrations); i++ {
 		tx, err := s.db.Begin()
@@ -185,25 +211,27 @@ type Session struct {
 	Mode            string
 	Model           string // empty = chat default
 	Effort          string // empty = chat default
-	Status          string // active | archived | missing
+	Status          string // active | archived | missing | forgotten
 	Origin          string
 	Started         bool // a Claude transcript exists (first job ran)
 	Turns           int
 	CreatedAt       time.Time
 	LastUsedAt      time.Time
 	LastJobID       int64
+	ForgottenAt     time.Time // set when forgotten from the app
+	DeletedAt       time.Time // set when its Claude Code history was deleted
 }
 
 // Label returns "S<id>".
 func (x Session) Label() string { return fmt.Sprintf("S%d", x.ID) }
 
-const sessionCols = `id,name,claude_session_id,workspace_name,workspace_path,mode,COALESCE(model,''),COALESCE(effort,''),status,origin,started,turns,created_at,last_used_at,COALESCE(last_job_id,0)`
+const sessionCols = `id,name,claude_session_id,workspace_name,workspace_path,mode,COALESCE(model,''),COALESCE(effort,''),status,origin,started,turns,created_at,last_used_at,COALESCE(last_job_id,0),forgotten_at,deleted_at`
 
 func scanSession(r interface{ Scan(...any) error }) (*Session, error) {
 	var x Session
 	var started int
-	var c, l int64
-	if err := r.Scan(&x.ID, &x.Name, &x.ClaudeSessionID, &x.WorkspaceName, &x.WorkspacePath, &x.Mode, &x.Model, &x.Effort, &x.Status, &x.Origin, &started, &x.Turns, &c, &l, &x.LastJobID); err != nil {
+	var c, l, f, d int64
+	if err := r.Scan(&x.ID, &x.Name, &x.ClaudeSessionID, &x.WorkspaceName, &x.WorkspacePath, &x.Mode, &x.Model, &x.Effort, &x.Status, &x.Origin, &started, &x.Turns, &c, &l, &x.LastJobID, &f, &d); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
@@ -211,6 +239,12 @@ func scanSession(r interface{ Scan(...any) error }) (*Session, error) {
 	}
 	x.Started = started != 0
 	x.CreatedAt, x.LastUsedAt = time.Unix(c, 0), time.Unix(l, 0)
+	if f > 0 {
+		x.ForgottenAt = time.Unix(f, 0)
+	}
+	if d > 0 {
+		x.DeletedAt = time.Unix(d, 0)
+	}
 	return &x, nil
 }
 
@@ -234,14 +268,14 @@ func (s *Store) GetSession(id int64) (*Session, error) {
 
 // FindSessionByName returns the most recent session with that name.
 func (s *Store) FindSessionByName(name string) (*Session, error) {
-	return scanSession(s.db.QueryRow(`SELECT `+sessionCols+` FROM sessions WHERE name=? AND status!='archived' ORDER BY id DESC LIMIT 1`, name))
+	return scanSession(s.db.QueryRow(`SELECT `+sessionCols+` FROM sessions WHERE name=? AND status NOT IN ('archived','forgotten') ORDER BY id DESC LIMIT 1`, name))
 }
 
 // ListSessions lists sessions, most recently used first.
 func (s *Store) ListSessions(includeArchived bool, limit int) ([]Session, error) {
-	q := `SELECT ` + sessionCols + ` FROM sessions`
+	q := `SELECT ` + sessionCols + ` FROM sessions WHERE status!='forgotten'`
 	if !includeArchived {
-		q += ` WHERE status!='archived'`
+		q += ` AND status!='archived'`
 	}
 	q += ` ORDER BY last_used_at DESC, id DESC LIMIT ?`
 	rows, err := s.db.Query(q, limit)
@@ -263,7 +297,7 @@ func (s *Store) ListSessions(includeArchived bool, limit int) ([]Session, error)
 // CountSessions returns active and total counts.
 func (s *Store) CountSessions() (active, total int) {
 	_ = s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE status='active'`).Scan(&active)
-	_ = s.db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&total)
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM sessions WHERE status!='forgotten'`).Scan(&total)
 	return
 }
 
@@ -278,6 +312,61 @@ func (s *Store) SetSessionField(id int64, field, value string) error {
 		return err
 	}
 	return fmt.Errorf("store: field %q not updatable", field)
+}
+
+// ListForgotten returns sessions forgotten within the last window, newest first.
+func (s *Store) ListForgotten(window time.Duration) ([]Session, error) {
+	rows, err := s.db.Query(`SELECT `+sessionCols+` FROM sessions WHERE status='forgotten' AND forgotten_at>=? ORDER BY forgotten_at DESC, id DESC LIMIT 200`, now()-int64(window.Seconds()))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Session
+	for rows.Next() {
+		x, err := scanSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, *x)
+	}
+	return out, rows.Err()
+}
+
+// MarkForgotten turns a session into a tombstone. withDeleted also records
+// that its Claude Code history was deleted.
+func (s *Store) MarkForgotten(id int64, withDeleted bool) error {
+	t := now()
+	d := int64(0)
+	if withDeleted {
+		d = t
+	}
+	_, err := s.db.Exec(`UPDATE sessions SET status='forgotten', forgotten_at=?, deleted_at=MAX(deleted_at,?) WHERE id=?`, t, d, id)
+	return err
+}
+
+// MarkHistoryDeleted records that a session's Claude Code history is gone.
+func (s *Store) MarkHistoryDeleted(id int64) error {
+	_, err := s.db.Exec(`UPDATE sessions SET deleted_at=? WHERE id=?`, now(), id)
+	return err
+}
+
+// Restore makes an archived or forgotten session active again.
+func (s *Store) Restore(id int64) error {
+	_, err := s.db.Exec(`UPDATE sessions SET status='active', forgotten_at=0 WHERE id=?`, id)
+	return err
+}
+
+// Tx runs f in one transaction.
+func (s *Store) Tx(f func(tx *sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := f(tx); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 // TouchSession records a completed turn.
@@ -642,6 +731,31 @@ func (s *Store) ClearCapabilities() error {
 	return err
 }
 
+// ---- captures audit ----
+
+// Capture is one audit row of a screen capture (never pixels).
+type Capture struct {
+	DisplayKey    string
+	Width, Height int
+	Bytes         int
+	Destination   string // preview | telegram | claude | mcp
+	Requester     string
+	JobID         int64
+}
+
+// AuditCapture records a capture.
+func (s *Store) AuditCapture(c Capture) {
+	_, _ = s.db.Exec(`INSERT INTO captures(ts,display_key,width,height,bytes,destination,requester,job_id) VALUES(?,?,?,?,?,?,?,NULLIF(?,0))`,
+		now(), c.DisplayKey, c.Width, c.Height, c.Bytes, c.Destination, c.Requester, c.JobID)
+}
+
+// CaptureCount returns how many captures were recorded since t.
+func (s *Store) CaptureCount(since time.Time) int {
+	var n int
+	_ = s.db.QueryRow(`SELECT COUNT(*) FROM captures WHERE ts>=?`, since.Unix()).Scan(&n)
+	return n
+}
+
 // ---- maintenance ----
 
 // Retention in days.
@@ -661,6 +775,7 @@ func (s *Store) Prune(r Retention) error {
 		{`DELETE FROM processed_updates WHERE received_at < ?`, r.ProcessedUpdatesDays},
 		{`DELETE FROM audit WHERE ts < ?`, r.AuditDays},
 		{`DELETE FROM jobs WHERE created_at < ? AND state IN ('completed','failed','timeout','cancelled','interrupted')`, r.JobsDays},
+		{`DELETE FROM captures WHERE ts < ?`, r.AuditDays},
 	}
 	for _, st := range stmts {
 		if st.days <= 0 {
