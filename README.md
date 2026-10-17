@@ -80,4 +80,10 @@ internal/observability  redaction, logging, counters
 
 ## Repository
 
-Local `main` branch with milestone commits. The `origin` remote points to `https://github.com/Publicthrone547/clawdyX.git`. The owner pushes manually. Secrets, local config, state databases, logs, and build output are git-ignored (see `.gitignore`). `make check-secrets` scans tracked files for token-shaped strings.
+The public history of this repository starts at version 0.2.0. The owner pushes manually; nothing is pushed by tooling. Secrets, local config, state databases, logs, build output and private planning notes are git-ignored (see `.gitignore`). `make check-secrets` scans tracked files for token-shaped strings.
+
+## License
+
+clawdyX is **source-available** under the [PolyForm Noncommercial License 1.0.0](LICENSE) (official text: https://polyformproject.org/licenses/noncommercial/1.0.0). In short, and without this being legal advice: the license permits use for noncommercial purposes and does not grant permission for commercial use. Anyone who wants to use clawdyX commercially needs separate permission from the rightsholder. The exact terms, including what counts as noncommercial, are those of the license text itself; ask a lawyer if you are unsure. This is not an OSI-approved open-source license.
+
+The license covers the original material in this repository only. Third-party dependencies keep their own licenses (see `go.mod` and, once present, `THIRD_PARTY_NOTICES.md`). Claude Code is a separate product with its own terms; clawdyX only drives the copy you installed and logged into yourself.
