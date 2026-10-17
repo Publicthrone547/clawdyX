@@ -1,14 +1,13 @@
-# Telegram-Controlled Local Claude Code Agent for macOS — Implementation Specification
+# clawdyX architecture and verified Claude Code behaviour
 
-| Field | Value |
+This document records how clawdyX drives the Claude Code CLI and why. Sections 1–3 hold the findings and the capability matrix that were **verified** by running Claude Code 2.1.292 on macOS 27 (Apple silicon) in October 2026. Sections 4–12 are the design, 13–19 the build, test and operations plan. It started as the pre-implementation specification; the "Implementation status" section at the end lists where the code differs.
+
+| Item | Value at verification time |
 | --- | --- |
-| Status | Analysis complete; ready for the implementation phase |
-| Written | 2026-10-16 (analyst phase, read-only; nothing was built, installed, or committed) |
-| Source brief | the owner's analyst brief (private, kept outside the repository) |
-| Target machine | macOS 27.0.1 (26A434), Apple M3 Max, 14 cores, 36 GiB, user `<you>` (uid 501), zsh |
-| Target CLI | Claude Code **2.1.292**, Homebrew cask, native arm64 binary, logged in via claude.ai (Max subscription) |
-| Implementation language | Go 1.27 (installed: go1.27.0; latest stable 1.27.2) |
-| Authorized Telegram sender | user ID `<owner id>`, private chat only |
+| Target machine | macOS 27.0.1, Apple silicon, zsh |
+| Claude Code | 2.1.292 (Homebrew cask, native arm64), logged in with a claude.ai subscription |
+| Language | Go 1.27 |
+| Authorized Telegram sender | the numeric user ID configured locally, private chat only |
 
 How to read this document: Sections 1–3 are the findings and the capability matrix (what is *verified* on this machine). Sections 4–12 are the design. Sections 13–16 are the build plan, tests, runbook, and roadmap. Appendices hold the raw (redacted) evidence and the JSON shapes the implementer must parse. Every claim that was **not** verified locally is labelled `UNVERIFIED` or `DOCS-ONLY`.
 

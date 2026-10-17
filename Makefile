@@ -2,7 +2,7 @@ BIN   := bin/clawdyx
 GOBIN := $(shell go env GOPATH)/bin
 PKG   := ./...
 
-.PHONY: help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -59,6 +59,9 @@ check-secrets:
 		echo "possible secret found"; exit 1; else echo "no secrets found"; fi
 
 check: lint test check-secrets
+
+notices: ## regenerate THIRD_PARTY_NOTICES.md
+	scripts/gen-notices.sh
 
 install: build
 	install -m 0755 $(BIN) $(GOBIN)/clawdyx

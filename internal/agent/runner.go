@@ -94,7 +94,10 @@ func BuildArgs(s Spec) []string {
 // ChildEnv builds the allowlisted environment for claude children. Secrets
 // (bot token, API keys) and nested-session markers are never forwarded.
 func ChildEnv(path string, bgWaitMS int) []string {
-	env := []string{"PATH=" + path, "SHELL=/bin/zsh", "TERM=dumb", "LANG=en_US.UTF-8", "DISABLE_AUTOUPDATER=1"}
+	env := []string{"PATH=" + path, "SHELL=/bin/zsh", "TERM=dumb", "LANG=en_US.UTF-8", "DISABLE_AUTOUPDATER=1",
+		// Keep prompts out of Claude Code's global prompt history (history.jsonl), so
+		// deleting one session's transcript removes its prompts completely.
+		"CLAUDE_CODE_SKIP_PROMPT_HISTORY=1"}
 	for _, k := range []string{"HOME", "USER", "LOGNAME", "TMPDIR"} {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
