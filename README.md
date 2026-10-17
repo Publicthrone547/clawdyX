@@ -4,13 +4,17 @@ A private, single-operator Telegram bot that drives the **Claude Code CLI alread
 
 Only the Telegram users on your local allowlist are served (by numeric ID, in their own private chat): you as the owner, plus anyone you deliberately add. Every other update is dropped silently before any lookup or side effect.
 
+**Download:** [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest) (`clawdyX-<version>.dmg` for the desktop app, or the worker alone as a `.tar.gz`; Apple silicon, macOS 14 or later) · [all releases](https://github.com/Publicthrone547/clawdyX/releases) · [changelog](CHANGELOG.md).
+
 Design and verified CLI facts: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). Operations: [`docs/RUNBOOK.md`](docs/RUNBOOK.md). Tests: [`docs/TESTING.md`](docs/TESTING.md). Privacy: [`docs/PRIVACY.md`](docs/PRIVACY.md). Security reports: [`SECURITY.md`](SECURITY.md).
 
 ## Desktop app
 
 clawdyX.app is the control panel: first-run setup, Start/Stop, sessions, jobs and processes, monitors, settings and diagnostics, plus a menu-bar item. It does not run the bot itself. The bot runs in a small background worker (a LaunchAgent that starts at login), so closing the window or quitting the app never stops Telegram. The app talks to the worker over a private Unix socket.
 
-Build and install it from source (macOS 14 or later, Xcode command-line tools, Go, Node.js):
+Download `clawdyX-<version>.dmg` from the [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest), open it and drag clawdyX to Applications. Release builds are not notarized: on first launch, allow the app in System Settings → Privacy & Security → **Open Anyway**.
+
+Or build and install it from source (macOS 14 or later, Xcode command-line tools, Go, Node.js):
 
 ```sh
 make app                                # bin/clawdyX.app (about 30 MB): app + worker + capture helper
