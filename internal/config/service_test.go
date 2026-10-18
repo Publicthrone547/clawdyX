@@ -36,3 +36,21 @@ func TestFoldersOfAnInvalidConfig(t *testing.T) {
 		t.Fatal("defaults for a missing file")
 	}
 }
+
+func TestSystemdUnitAndProgram(t *testing.T) {
+	for label, want := range map[string]string{"local.clawdyx": "clawdyx", "local.clawdyx.dev": "clawdyx-dev", "mybot": "mybot"} {
+		if got := SystemdUnit(label); got != want {
+			t.Errorf("%s → %s want %s", label, got, want)
+		}
+	}
+	unit := "[Service]\nExecStart=\"/home/jöhn doe/bin/clawdyx\" run -config \"/x/my \\\"odd\\\" 100%% $$c.json\"\n"
+	if got := UnitProgram(unit); got != "/home/jöhn doe/bin/clawdyx" {
+		t.Fatal(got)
+	}
+	if got := UnitProgram("ExecStart=/usr/bin/clawdyx run\n"); got != "/usr/bin/clawdyx" {
+		t.Fatal(got)
+	}
+	if UnitProgram("[Unit]\n") != "" || UnitProgram("ExecStart=\"unterminated") != "" {
+		t.Fatal("no program")
+	}
+}

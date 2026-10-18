@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"regexp"
+	"strings"
 )
 
 // DefaultServiceLabel names the background worker's login entry
@@ -42,4 +43,45 @@ func Folders(configPath string) (stateDir, logDir string) {
 		c.LogDir = defaultLogDir(home)
 	}
 	return c.StateDir, c.LogDir
+}
+
+// SystemdUnit is the systemd user unit of a service label: "clawdyx" for
+// the default label, "clawdyx-dev" for local.clawdyx.dev.
+func SystemdUnit(label string) string {
+	n := strings.ReplaceAll(strings.TrimPrefix(label, "local."), ".", "-")
+	if n == "" {
+		return "clawdyx"
+	}
+	return n
+}
+
+// UnitProgram returns the executable of a systemd unit file's ExecStart
+// line (the first word, unquoted).
+func UnitProgram(unit string) string {
+	for _, l := range strings.Split(unit, "\n") {
+		rest, ok := strings.CutPrefix(strings.TrimSpace(l), "ExecStart=")
+		if !ok {
+			continue
+		}
+		if !strings.HasPrefix(rest, `"`) {
+			if f := strings.Fields(rest); len(f) > 0 {
+				return f[0]
+			}
+			return ""
+		}
+		var b strings.Builder
+		for i := 1; i < len(rest); i++ {
+			switch c := rest[i]; {
+			case c == '\\' && i+1 < len(rest):
+				i++
+				b.WriteByte(rest[i])
+			case c == '"':
+				return strings.NewReplacer("$$", "$", "%%", "%").Replace(b.String())
+			default:
+				b.WriteByte(c)
+			}
+		}
+		return ""
+	}
+	return ""
 }

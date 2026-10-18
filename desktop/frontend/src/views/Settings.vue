@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import { Worker, System, Setup, errMsg, type SettingsInfo, type ModelsInfo, type D, type SettingsPatch } from "../api";
 import { store, toast, fail, refreshService } from "../store";
 import { theme, setTheme, type Theme } from "../prefs";
+import { words } from "../platform";
 
 const s = ref<SettingsInfo | null>(null);
 const models = ref<ModelsInfo | null>(null);
@@ -28,6 +29,14 @@ async function checkUpdate() {
 // The worker reports its own version; after an app update it runs the old one until restarted.
 const workerVersion = () => store.status?.version ?? "";
 const workerOutdated = () => !!app.value?.version && !!workerVersion() && workerVersion() !== app.value.version && !!store.service?.usesAppWorker;
+// "Windows 11 23H2 · amd64", "Ubuntu 24.04 LTS · amd64 · Wayland (GNOME)".
+function systemLine(): string {
+  const p = store.platform;
+  if (!p) return "—";
+  let line = (p.pretty || p.osName) + " · " + p.arch;
+  if (p.os === "linux") line += " · " + (p.headless ? "no graphical session" : p.session === "wayland" ? "Wayland" : "X11") + (p.desktop ? " (" + p.desktop + ")" : "");
+  return line;
+}
 const saving = ref(false);
 
 function fill(x: SettingsInfo) {
@@ -165,9 +174,11 @@ function doUninstall() {
           <Badge v-if="workerOutdated()" tone="warn" label="older than the app: restart the worker" />
         </dd>
         <dt class="text-muted">Claude Code</dt><dd class="mono">{{ store.status?.claude.version || "—" }}</dd>
+        <dt class="text-muted">System</dt>
+        <dd>{{ systemLine() }}</dd>
       </dl>
       <div v-if="update?.newer" class="mt-3 rounded-md border border-line bg-surface-2 px-3 py-2">
-        <b>clawdyX {{ update.latest }} is available.</b> Download the .dmg from the release page, quit clawdyX, replace it in Applications, then restart the worker.
+        <b>clawdyX {{ update.latest }} is available.</b> {{ words.updateHint }}
       </div>
       <div class="mt-3 flex flex-wrap gap-2">
         <button v-if="update?.newer" class="btn btn-primary" @click="System.OpenRelease(update.latest).catch(fail)">Get {{ update.latest }}</button>

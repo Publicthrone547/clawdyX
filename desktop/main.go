@@ -1,5 +1,5 @@
 // Command clawdyX is the desktop control panel for the clawdyX worker.
-// The worker (a separate launchd job) owns the Telegram bot, Claude jobs,
+// The worker (a separate background service) owns the Telegram bot, Claude jobs,
 // the token and captures; this app talks to it over its private socket.
 package main
 
@@ -11,6 +11,8 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+
+	"github.com/Publicthrone547/clawdyX/desktop/host"
 )
 
 //go:embed all:frontend/dist
@@ -21,7 +23,23 @@ var trayIcon []byte
 
 var version = "0.4.1"
 
+// instanceID keeps one app per user; development builds pass a different
+// one (-ldflags "-X main.instanceID=…dev") so they do not just focus the
+// installed app.
+var instanceID = "io.github.publicthrone547.clawdyx.app"
+
+// trayAvailable is false on a Linux desktop without a StatusNotifier host.
+var trayAvailable = true
+
 func main() {
+	trayAvailable = host.TrayAvailable()
+	var window *application.WebviewWindow
+	showWindow := func() {
+		if window != nil {
+			window.Show()
+			window.Focus()
+		}
+	}
 	worker := &WorkerService{}
 	system := &SystemService{w: worker}
 	app := application.New(application.Options{
@@ -37,10 +55,14 @@ func main() {
 			// Closing the window keeps the app (and its menu-bar item) alive.
 			ApplicationShouldTerminateAfterLastWindowClosed: false,
 		},
-		SingleInstance: &application.SingleInstanceOptions{UniqueID: "io.github.publicthrone547.clawdyx.app"},
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID: instanceID,
+			// Starting the app again brings the running one to the front.
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) { showWindow() },
+		},
 	})
 
-	window := app.Window.NewWithOptions(application.WebviewWindowOptions{
+	window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      "main",
 		Title:     "clawdyX",
 		Width:     1100,
@@ -54,16 +76,18 @@ func main() {
 		},
 		BackgroundColour: application.NewRGB(17, 18, 22),
 	})
-	// Close hides the window; the worker is unaffected either way.
+	// Close hides the window to the tray; without a tray (some Linux
+	// desktops) it quits the app. The worker is unaffected either way.
 	window.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if !trayAvailable {
+			app.Quit()
+			return
+		}
 		window.Hide()
 		e.Cancel()
 		app.Event.Emit("app:hidden", true)
 	})
-	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) {
-		window.Show()
-		window.Focus()
-	})
+	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { showWindow() })
 
 	tray := app.SystemTray.New()
 	setTrayIcon(tray)
@@ -71,7 +95,7 @@ func main() {
 	menu := application.NewMenu()
 	stateItem := menu.Add("Worker: checking…").SetEnabled(false)
 	menu.AddSeparator()
-	menu.Add("Open clawdyX").OnClick(func(*application.Context) { window.Show(); window.Focus() })
+	menu.Add("Open clawdyX").OnClick(func(*application.Context) { showWindow() })
 	toggle := menu.Add("Stop bot")
 	toggle.OnClick(func(*application.Context) {
 		if st, err := worker.Status(); err == nil {

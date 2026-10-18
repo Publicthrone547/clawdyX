@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Publicthrone547/clawdyX/desktop/host"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 )
 
@@ -36,20 +37,7 @@ func loadConfigFile(path string) (*config.Config, error) {
 }
 
 // bundleDir returns the .app/Contents directory when running from a bundle.
-func bundleDir() string {
-	exe, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	if exe, err = filepath.EvalSymlinks(exe); err != nil {
-		return ""
-	}
-	dir := filepath.Dir(exe)
-	if filepath.Base(dir) == "MacOS" && filepath.Base(filepath.Dir(dir)) == "Contents" {
-		return filepath.Dir(dir)
-	}
-	return ""
-}
+func bundleDir() string { return host.BundleDir() }
 
 // workerBinary finds the clawdyx worker: the one shipped with the app (see
 // appWorker), else CLAWDYX_WORKER, PATH, or ~/go/bin.
@@ -64,7 +52,7 @@ func workerBinary() (string, error) {
 		return filepath.Abs(p)
 	}
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{filepath.Join(home, "go", "bin", "clawdyx"+exeSuffix), "/usr/local/bin/clawdyx"} {
+	for _, p := range host.WorkerCandidates(home) {
 		if isExec(p) {
 			return p, nil
 		}

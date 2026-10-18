@@ -15,6 +15,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 // serviceLabel names the login entry (CLAWDYX_SERVICE_LABEL lets a test
@@ -40,10 +41,20 @@ type AppInfo struct {
 	StateDir      string `json:"stateDir"`
 	LaunchAtLogin bool   `json:"launchAtLogin"`
 	InBundle      bool   `json:"inBundle"`
+	// TrayAvailable is false on a Linux desktop without a tray host; closing
+	// the window then quits the app (the worker keeps running).
+	TrayAvailable bool `json:"trayAvailable"`
 }
 
-// SystemService manages the LaunchAgent, launch at login, and opens the
-// few macOS places the UI links to. Commands are fixed; the UI passes keys,
+// PlatformInfo is the OS the app runs on and its vocabulary; the frontend
+// reads every OS-specific word from here.
+type PlatformInfo struct {
+	platform.Info
+	Words platform.Words `json:"words"`
+}
+
+// SystemService manages the background worker's service, launch at login,
+// and opens the few OS places the UI links to. Commands are fixed; the UI passes keys,
 // never paths or command text.
 type SystemService struct {
 	app *application.App
@@ -123,10 +134,17 @@ func (s *SystemService) Info() AppInfo {
 	if cfg, err := loadConfig(); err == nil {
 		ai.LogDir, ai.StateDir = homeRel(cfg.LogDir), homeRel(cfg.StateDir)
 	}
+	ai.TrayAvailable = trayAvailable
 	if s.app != nil {
 		ai.LaunchAtLogin, _ = s.app.Autostart.IsEnabled()
 	}
 	return ai
+}
+
+// Platform describes the OS (re-detected, so a Linux session change shows)
+// and returns its words.
+func (s *SystemService) Platform() PlatformInfo {
+	return PlatformInfo{Info: platform.Detect(), Words: platform.W}
 }
 
 // SetLaunchAtLogin registers or removes the app as a login item.

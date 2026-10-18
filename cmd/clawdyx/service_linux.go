@@ -19,15 +19,8 @@ import (
 // at desktop login instead. A server without a desktop login needs
 // "lingering" so the user manager runs from boot (loginctl enable-linger).
 
-// unitName is the systemd unit for the service label: "clawdyx" for the
-// default label, "clawdyx-dev" for local.clawdyx.dev.
-func unitName() string {
-	n := strings.ReplaceAll(strings.TrimPrefix(serviceLabel, "local."), ".", "-")
-	if n == "" {
-		n = "clawdyx"
-	}
-	return n
-}
+// unitName is the systemd unit of the service label (see config.SystemdUnit).
+func unitName() string { return config.SystemdUnit(serviceLabel) }
 
 func xdgConfigHome() string {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" && filepath.IsAbs(d) {
@@ -292,7 +285,7 @@ func service(sub, cfgPath string, purge bool) int {
 			fmt.Println("")
 			return exitError
 		}
-		if p := unitProgram(string(b)); p != "" {
+		if p := config.UnitProgram(string(b)); p != "" {
 			fmt.Println(p)
 			return exitOK
 		}
@@ -351,33 +344,6 @@ func service(sub, cfgPath string, purge bool) int {
 	}
 	fmt.Fprintln(os.Stderr, errNoSub)
 	return exitConfig
-}
-
-// unitProgram returns the executable of a unit file's ExecStart line.
-func unitProgram(unit string) string {
-	for _, l := range strings.Split(unit, "\n") {
-		rest, ok := strings.CutPrefix(strings.TrimSpace(l), "ExecStart=")
-		if !ok {
-			continue
-		}
-		if strings.HasPrefix(rest, `"`) {
-			var b strings.Builder
-			for i := 1; i < len(rest); i++ {
-				switch c := rest[i]; {
-				case c == '\\' && i+1 < len(rest):
-					i++
-					b.WriteByte(rest[i])
-				case c == '"':
-					return strings.ReplaceAll(strings.ReplaceAll(b.String(), "$$", "$"), "%%", "%")
-				default:
-					b.WriteByte(c)
-				}
-			}
-			return ""
-		}
-		return strings.Fields(rest)[0]
-	}
-	return ""
 }
 
 // startAutostart is the fallback without a systemd user manager: an XDG

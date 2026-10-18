@@ -43,6 +43,8 @@ export const store = reactive({
   ready: false,
   // Version of this app build ("" until known).
   appVersion: "",
+  // The OS and its words (see platform.ts); null until known.
+  platform: null as D.PlatformInfo | null,
 });
 
 let nextToast = 1;
@@ -94,6 +96,9 @@ function soon() {
 }
 
 export function initStore() {
+  System.Platform()
+    .then((p) => (store.platform = p))
+    .catch(() => {});
   System.Info()
     .then((i) => (store.appVersion = i.version))
     .catch(() => {});

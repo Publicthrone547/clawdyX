@@ -3,6 +3,8 @@ package main
 import (
 	"strings"
 	"testing"
+
+	"github.com/Publicthrone547/clawdyX/internal/config"
 )
 
 func TestUnitQuotesPathsWithSpaces(t *testing.T) {
@@ -21,10 +23,10 @@ func TestUnitQuotesPathsWithSpaces(t *testing.T) {
 	if strings.Contains(u, "TELEGRAM_BOT_TOKEN") {
 		t.Fatal("the token must not be in the unit")
 	}
-	if got := unitProgram(u); got != exe {
+	if got := config.UnitProgram(u); got != exe {
 		t.Fatalf("unitProgram %q", got)
 	}
-	if got := unitProgram("[Service]\nExecStart=/usr/bin/clawdyx run\n"); got != "/usr/bin/clawdyx" {
+	if got := config.UnitProgram("[Service]\nExecStart=/usr/bin/clawdyx run\n"); got != "/usr/bin/clawdyx" {
 		t.Fatal(got)
 	}
 }
