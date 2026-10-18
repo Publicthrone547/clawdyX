@@ -89,3 +89,17 @@ func ParseOSRelease(doc string) (pretty, version, ids string) {
 	ids = strings.TrimSpace(vals["ID"] + " " + vals["ID_LIKE"])
 	return vals["PRETTY_NAME"], vals["VERSION_ID"], ids
 }
+
+// SessionLabel names a Linux session kind for people: "X11", "Wayland",
+// "no graphical session" ("" for the other OSes' sessions).
+func SessionLabel(s Session) string {
+	switch s {
+	case SessionX11:
+		return "X11"
+	case SessionWayland:
+		return "Wayland"
+	case SessionHeadless:
+		return "no graphical session"
+	}
+	return ""
+}

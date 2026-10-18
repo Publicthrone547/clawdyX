@@ -429,10 +429,8 @@ func migrateToken(cfgPath, envPath string, out io.Writer) int {
 // nextSteps is the end of setup: how to start the worker on this OS, and on
 // a server how to keep it running without a login.
 func nextSteps(headless bool) string {
-	if headless && platform.IsLinux {
-		return "clawdyx service start           install and start the systemd user service\n" +
-			"  loginctl enable-linger $USER    once: keep it running from boot, without a login\n" +
-			"  clawdyx service status          check it (logs: journalctl --user -u clawdyx)"
+	if headless && headlessSteps != "" {
+		return headlessSteps
 	}
 	return platform.W.SetupNext
 }

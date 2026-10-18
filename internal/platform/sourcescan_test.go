@@ -44,6 +44,8 @@ var scanAllowed = map[string]string{
 	"bash.exe":                              "file name checked in claude.git_bash_path, which only Windows validates",
 	"sh.exe":                                "same",
 	"io.github.publicthrone547.clawdyx.app": "the app's single-instance id, not text",
+	".dmg":                                  "the suffix of a release file, matched by the update check",
+	"-setup.exe":                            "the same, for the Windows installer",
 	`must point at bash.exe (for example C:\Program Files\Git\bin\bash.exe)`: "claude.git_bash_path is validated only on Windows",
 }
 

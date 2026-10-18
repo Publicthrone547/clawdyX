@@ -320,14 +320,11 @@ func systemLine(in platform.Info) string {
 	}
 	s += " · " + in.Arch
 	if in.OS == "linux" {
-		switch in.Session {
-		case platform.SessionX11:
-			s += " · X11"
-		case platform.SessionWayland:
-			s += " · Wayland"
-		default:
-			s += " · no graphical session"
+		l := platform.SessionLabel(in.Session)
+		if l == "" {
+			l = platform.SessionLabel(platform.SessionHeadless)
 		}
+		s += " · " + l
 		if in.Desktop != "" {
 			s += " (" + in.Desktop + ")"
 		}

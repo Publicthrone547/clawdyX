@@ -45,6 +45,12 @@ type Words struct {
 	UpdateHint       string `json:"updateHint"`       // how to install a newer release
 
 	HomeExample string `json:"homeExample"` // "/Users/you" | `C:\Users\you` | "/home/you"
+	// The default places, as Help names them for an OS other than the
+	// running one (on this computer Help shows the real paths).
+	ConfigPathExample string `json:"configPathExample"`
+	StatePathExample  string `json:"statePathExample"`
+	LogPathExample    string `json:"logPathExample"`
+	WorkerPathExample string `json:"workerPathExample"`
 
 	// Bot and Diagnostics sentences that differ per OS.
 	AutomationExamples  string `json:"automationExamples"`  // what the automation tier can run
@@ -89,7 +95,9 @@ var Darwin = Words{
 	CameraRiskNote: "macOS asks for Camera permission the first time.",
 	UpdateHint:     "Download the .dmg from the release page, quit clawdyX, replace it in Applications, then restart the worker.",
 
-	HomeExample: "/Users/you",
+	HomeExample:       "/Users/you",
+	ConfigPathExample: "~/.config/clawdyx/config.json", StatePathExample: "~/Library/Application Support/clawdyx",
+	LogPathExample: "~/Library/Logs/clawdyx", WorkerPathExample: "/Applications/clawdyX.app/Contents/Helpers/clawdyx",
 
 	AutomationExamples:  "open apps and files, scripts, osascript…",
 	ScreenLabel:         "Screen Recording",
@@ -133,7 +141,9 @@ var Windows = Words{
 	CameraRiskNote:   "Windows asks nothing; camera access for desktop apps must be on in Windows Settings.",
 	UpdateHint:       "Download the installer from the release page and run it; it replaces the app and restarts the worker.",
 
-	HomeExample: `C:\Users\you`,
+	HomeExample:       `C:\Users\you`,
+	ConfigPathExample: `%APPDATA%\clawdyx\config.json`, StatePathExample: `%LOCALAPPDATA%\clawdyx`,
+	LogPathExample: `%LOCALAPPDATA%\clawdyx\logs`, WorkerPathExample: `%LOCALAPPDATA%\Programs\clawdyX\helpers\clawdyx.exe`,
 
 	AutomationExamples:  "open apps and files, scripts",
 	ScreenLabel:         "Screenshots",
@@ -174,7 +184,9 @@ var Linux = Words{
 	CameraRiskNote:   "Your user must be in the video group.",
 	UpdateHint:       "Download the package for your distribution from the release page.",
 
-	HomeExample: "/home/you",
+	HomeExample:       "/home/you",
+	ConfigPathExample: "~/.config/clawdyx/config.json", StatePathExample: "~/.local/state/clawdyx",
+	LogPathExample: "~/.local/state/clawdyx/logs", WorkerPathExample: "/usr/bin/clawdyx",
 
 	AutomationExamples:  "open apps and files, scripts",
 	ScreenLabel:         "Screenshots",

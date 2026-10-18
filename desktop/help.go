@@ -65,13 +65,10 @@ type helpData struct {
 	Version string
 }
 
-var defaultHelpPaths = map[string]helpPaths{
-	"darwin": {Config: "~/.config/clawdyx/config.json", State: "~/Library/Application Support/clawdyx", Logs: "~/Library/Logs/clawdyx",
-		Worker: "/Applications/clawdyX.app/Contents/Helpers/clawdyx"},
-	"windows": {Config: `%APPDATA%\clawdyx\config.json`, State: `%LOCALAPPDATA%\clawdyx`, Logs: `%LOCALAPPDATA%\clawdyx\logs`,
-		Worker: `%LOCALAPPDATA%\Programs\clawdyX\helpers\clawdyx.exe`},
-	"linux": {Config: "~/.config/clawdyx/config.json", State: "~/.local/state/clawdyx", Logs: "~/.local/state/clawdyx/logs",
-		Worker: "/usr/bin/clawdyx"},
+// examplePaths are the default places of an OS (for an OS other than the
+// running one, in tests).
+func examplePaths(w platform.Words) helpPaths {
+	return helpPaths{Config: w.ConfigPathExample, State: w.StatePathExample, Logs: w.LogPathExample, Worker: w.WorkerPathExample}
 }
 
 var defaultSessions = map[string]string{"darwin": "aqua", "windows": "windows", "linux": "x11"}
@@ -97,7 +94,7 @@ func newHelpData(w platform.Words, session string) helpData {
 	}
 	return helpData{
 		W: w, Darwin: w.OS == "darwin", Windows: w.OS == "windows", Linux: w.OS == "linux",
-		Session: session, Paths: defaultHelpPaths[w.OS], Version: version,
+		Session: session, Paths: examplePaths(w), Version: version,
 	}
 }
 
