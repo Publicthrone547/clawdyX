@@ -1,0 +1,193 @@
+name: release
+
+# A pushed tag v<version> builds every release file on its own system and
+# creates a DRAFT GitHub release with them and SHA256SUMS. The owner
+# reviews the draft and publishes it by hand. Signing runs only when its
+# secrets exist; without them the files are built unsigned (as documented).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: the tag, the Makefile, CHANGELOG.md and the release notes agree
+        run: |
+          make check-version TAG="${GITHUB_REF_NAME}"
+          echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+  macos:
+    needs: version
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - name: signing identity (only with the MACOS_CERT_* secrets)
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [ -z "$MACOS_CERT_P12" ]; then echo "::notice::no MACOS_CERT_P12 secret: the macOS files are ad-hoc signed"; exit 0; fi
+          kc="$RUNNER_TEMP/build.keychain-db"; pw=$(openssl rand -hex 16)
+          security create-keychain -p "$pw" "$kc" && security set-keychain-settings -lut 3600 "$kc" && security unlock-keychain -p "$pw" "$kc"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          rm -f "$RUNNER_TEMP/cert.p12"
+          id=$(security find-identity -v -p codesigning "$kc" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)
+          echo "CLAWDYX_SIGN_IDENTITY=$id" >> "$GITHUB_ENV"
+          echo "CLAWDYX_HARDENED=1" >> "$GITHUB_ENV"
+      - name: build
+        run: make release-darwin
+      - name: notarize (only with the APPLE_* secrets and a signing identity)
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          if [ -z "$APPLE_ID" ] || [ -z "${CLAWDYX_SIGN_IDENTITY:-}" ]; then echo "::notice::not notarized (no APPLE_ID secret or no signing identity)"; exit 0; fi
+          dmg=$(ls bin/release-*/clawdyX-*-darwin-arm64.dmg)
+          xcrun notarytool submit "$dmg" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD" --wait
+          xcrun stapler staple "$dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: bin/release-*/
+          if-no-files-found: error
+
+  windows:
+    needs: version
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - name: tools (wails3 for the icon and manifest, NSIS on PATH)
+        run: |
+          command -v make || choco install make -y --no-progress
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          echo "C:/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
+      - name: build (app, worker, launcher, camera helper, installer, zip)
+        run: make release-windows
+      - name: sign (only with the AZURE_* secrets)
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CERT_NAME: ${{ secrets.AZURE_CERT_NAME }}
+        run: |
+          if [ -z "$AZURE_KEY_VAULT_URL" ]; then echo "::notice::no AZURE_* secrets: the Windows files are unsigned (SmartScreen warns)"; exit 0; fi
+          dotnet tool install --global AzureSignTool
+          sign() { AzureSignTool sign -kvu "$AZURE_KEY_VAULT_URL" -kvi "$AZURE_CLIENT_ID" -kvs "$AZURE_CLIENT_SECRET" -kvt "$AZURE_TENANT_ID" -kvc "$AZURE_CERT_NAME" -tr http://timestamp.digicert.com -td sha256 "$@"; }
+          sign bin/windows/clawdyX/clawdyX.exe bin/windows/clawdyX/helpers/*.exe
+          v=${GITHUB_REF_NAME#v}
+          rm -f bin/release-$v/*.exe bin/release-$v/*.zip
+          make -o build-windows installer-windows release-windows
+          sign bin/release-$v/*-setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: bin/release-*/
+          if-no-files-found: error
+
+  linux:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            workers: true
+          - runner: ubuntu-24.04-arm
+            workers: false
+    runs-on: ${{ matrix.runner }}
+    # The arm64 app is optional: without the runner (or if its build fails)
+    # the release has the arm64 worker only.
+    continue-on-error: ${{ matrix.runner == 'ubuntu-24.04-arm' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+          cache-dependency-path: "**/go.sum"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - name: build dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libx11-dev
+      - name: build (.deb, .rpm, app tarball)
+        run: make release-linux
+      - name: the worker-only tarballs (amd64, arm64)
+        if: matrix.workers
+        run: make release-workers
+      - name: AppImage (best effort)
+        continue-on-error: true
+        run: |
+          sudo apt-get install -y libfuse2 || true
+          make -o app-linux appimage-linux
+      - name: the .deb installs and runs
+        run: |
+          sudo apt-get install -y ./bin/release-*/clawdyx_*.deb
+          clawdyx version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.runner }}
+          path: bin/release-*/
+          if-no-files-found: error
+
+  publish:
+    needs: [version, macos, windows, linux]
+    if: ${{ !cancelled() && needs.macos.result == 'success' && needs.windows.result == 'success' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dl
+      - name: collect the files and SHA256SUMS
+        run: |
+          mkdir -p out
+          find dl -type f ! -name SHA256SUMS -exec cp {} out/ \;
+          test -n "$(ls out/*linux-amd64.tar.gz 2>/dev/null)" || { echo "the Linux amd64 files are missing"; exit 1; }
+          (cd out && sha256sum $(ls | sort) > SHA256SUMS && sha256sum -c SHA256SUMS)
+          ls -l out
+      - name: draft release (the owner publishes it)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ needs.version.outputs.version }}"
+          gh release create "$GITHUB_REF_NAME" out/* --draft --title "clawdyX $v" --notes-file "desktop/build/release-notes/$v.md"
