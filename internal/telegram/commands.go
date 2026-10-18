@@ -1216,7 +1216,7 @@ func (a *App) confirm(t target, editID int, tok string) {
 	case "stop_all":
 		a.stopJobs(t, strings.Split(args, ","))
 	case "shutdown":
-		a.say(t, "Shutting down gracefully. launchd will not restart a clean exit; start it again with: launchctl kickstart gui/$(id -u)/local.clawdyx")
+		a.say(t, "Shutting down gracefully. "+startAgainHint)
 		a.shutdownOnce.Do(func() { close(a.ShutdownRequested) })
 		go func() {
 			time.Sleep(time.Second)
@@ -1276,11 +1276,11 @@ func (a *App) onCallback(ctx context.Context, cq *models.CallbackQuery, role str
 
 func (a *App) cmdShutdown(m *models.Message) {
 	if !a.cfg.ShutdownCommandEnabled {
-		a.replyTo(m, "/shutdown is disabled (shutdown_command_enabled is false). Stop the service from macOS: launchctl bootout gui/$(id -u)/local.clawdyx")
+		a.replyTo(m, "/shutdown is disabled (shutdown_command_enabled is false). "+stopServiceHint)
 		return
 	}
 	tok := a.confirms.New(m.From.ID, "shutdown", "")
-	a.askConfirm(tgt(m), "Shut the bot down? Running jobs will be stopped. You will need macOS (launchctl) to start it again.", tok, "Shut down", "Cancel")
+	a.askConfirm(tgt(m), "Shut the bot down? Running jobs will be stopped. "+startNeedsHint, tok, "Shut down", "Cancel")
 }
 
 // ---- /doctor ----

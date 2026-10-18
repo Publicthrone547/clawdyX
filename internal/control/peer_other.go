@@ -1,4 +1,4 @@
-//go:build !darwin && !linux
+//go:build !darwin && !linux && !windows
 
 package control
 
@@ -7,6 +7,5 @@ import (
 	"net"
 )
 
-// The control channel is not available on this platform yet (Windows will
-// use a named pipe with an explicit DACL).
+// The control channel is not available on this platform.
 func peerUID(*net.UnixConn) (int, error) { return -1, errors.New("control: unsupported platform") }

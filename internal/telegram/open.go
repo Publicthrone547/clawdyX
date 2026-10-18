@@ -1,19 +1,13 @@
 package telegram
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/url"
-	"os/exec"
 	"regexp"
 	"strings"
-	"syscall"
-	"time"
 
 	"github.com/go-telegram/bot/models"
-
-	"github.com/Publicthrone547/clawdyX/internal/observability"
 )
 
 var (
@@ -58,24 +52,6 @@ func NormalizeURL(in string) (string, error) {
 	return u.String(), nil
 }
 
-// openURL launches the URL with /usr/bin/open (argument array, no shell).
-func openURL(ctx context.Context, app, u string) error {
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "/usr/bin/open", "-a", app, "--", u)
-	cmd.Env = []string{"PATH=/usr/bin:/bin"}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		msg := strings.TrimSpace(string(out))
-		if msg == "" {
-			msg = err.Error()
-		}
-		return errors.New(observability.Truncate(msg, 200))
-	}
-	return nil
-}
-
 func (a *App) cmdOpen(m *models.Message, args []string) {
 	if !a.cfg.Desktop.OpenEnabled() {
 		a.replyTo(m, "/open is disabled in the config (desktop.open_urls).")
@@ -94,9 +70,9 @@ func (a *App) cmdOpen(m *models.Message, args []string) {
 	parsed, _ := url.Parse(u)
 	if err := a.opener(a.ctx, app, u); err != nil {
 		a.st.Audit("desktop", "open", parsed.Hostname(), "failed", 0)
-		a.replyTo(m, fmt.Sprintf("❌ Could not open it in %s: %s", Esc(app), Esc(err.Error())))
+		a.replyTo(m, fmt.Sprintf("❌ Could not open it in %s: %s", Esc(browserName(app)), Esc(err.Error())))
 		return
 	}
 	a.st.Audit("desktop", "open", parsed.Hostname(), "ok", 0)
-	a.replyTo(m, fmt.Sprintf("🌐 Opened %s in %s on the Mac.", Esc(u), Esc(app)))
+	a.replyTo(m, fmt.Sprintf("🌐 Opened %s in %s on %s.", Esc(u), Esc(browserName(app)), thisComputer))
 }

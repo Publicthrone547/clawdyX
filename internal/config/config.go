@@ -258,7 +258,7 @@ func applyDefaults(c *Config) {
 	}
 	cl := &c.Claude
 	if cl.Binary == "" {
-		cl.Binary = "/opt/homebrew/bin/claude"
+		cl.Binary = defaultClaudeBinary(home)
 	}
 	if cl.DefaultModel == "" {
 		cl.DefaultModel = "fable"
@@ -288,7 +288,7 @@ func applyDefaults(c *Config) {
 		cl.BgWaitCeilingMS = 60000
 	}
 	if cl.ChildPath == "" {
-		cl.ChildPath = "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+		cl.ChildPath = DefaultChildPath()
 	}
 	for i := range c.Workspaces {
 		if c.Workspaces[i].DefaultMode == "" {
@@ -296,10 +296,10 @@ func applyDefaults(c *Config) {
 		}
 	}
 	if c.StateDir == "" {
-		c.StateDir = filepath.Join(home, "Library", "Application Support", "clawdyx")
+		c.StateDir = defaultStateDir(home)
 	}
 	if c.LogDir == "" {
-		c.LogDir = filepath.Join(home, "Library", "Logs", "clawdyx")
+		c.LogDir = defaultLogDir(home)
 	}
 	if c.Desktop.BrowserApp == "" {
 		c.Desktop.BrowserApp = "Firefox"
@@ -473,7 +473,7 @@ func checkPrivate(path string) error {
 	if err != nil {
 		return fmt.Errorf("config: %w", err)
 	}
-	if st.Mode().Perm()&0o077 != 0 {
+	if !Private(st) {
 		return fmt.Errorf("config: %s must not be readable by group or others (chmod 600)", path)
 	}
 	return nil
@@ -507,7 +507,7 @@ func (c *Config) validate() error {
 		add("claude.binary must be an absolute path")
 	} else if st, err := os.Stat(cl.Binary); err != nil {
 		add("claude.binary %s: %v", cl.Binary, err)
-	} else if st.IsDir() || st.Mode().Perm()&0o111 == 0 {
+	} else if !Executable(st) {
 		add("claude.binary %s is not an executable file", cl.Binary)
 	}
 	if strings.TrimSpace(cl.DefaultModel) == "" {
@@ -544,7 +544,7 @@ func (c *Config) validate() error {
 	if cl.MaxChildRSSMB < 256 {
 		add("claude.max_child_rss_mb must be >= 256")
 	}
-	for _, p := range strings.Split(cl.ChildPath, ":") {
+	for _, p := range filepath.SplitList(cl.ChildPath) {
 		if !filepath.IsAbs(p) {
 			add("claude.child_path entries must be absolute (%q)", p)
 		}
@@ -581,7 +581,7 @@ func (c *Config) validate() error {
 			add("workspace %q path is not a directory", w.Name)
 			continue
 		}
-		if canon == "/" {
+		if filepath.Dir(canon) == canon {
 			add("workspace %q must not be the filesystem root", w.Name)
 		}
 		if home, _ := os.UserHomeDir(); canon == filepath.Clean(home) {

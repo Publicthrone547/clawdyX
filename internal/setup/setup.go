@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -156,7 +157,7 @@ func WorkspaceOK(p string) error {
 		return err
 	}
 	home, _ := os.UserHomeDir()
-	if canon == "/" || canon == filepath.Clean(home) {
+	if filepath.Dir(canon) == canon || canon == filepath.Clean(home) {
 		return errors.New("the home folder and the filesystem root cannot be workspaces; pick a project folder such as ~/projects/<name>")
 	}
 	return nil
@@ -165,6 +166,9 @@ func WorkspaceOK(p string) error {
 // PrivacyWarning flags folders that macOS privacy protection can hide from
 // a background (launchd) process.
 func PrivacyWarning(p string) string {
+	if runtime.GOOS != "darwin" {
+		return ""
+	}
 	home, _ := os.UserHomeDir()
 	for _, d := range []string{"Desktop", "Documents", "Downloads"} {
 		root := filepath.Join(home, d)
@@ -177,6 +181,9 @@ func PrivacyWarning(p string) string {
 
 // DetectBrowser picks an installed browser for /open.
 func DetectBrowser() string {
+	if runtime.GOOS == "windows" {
+		return "default" // /open uses the default browser on Windows
+	}
 	for _, c := range [][2]string{{"/Applications/Firefox.app", "Firefox"}, {"/Applications/Google Chrome.app", "Google Chrome"}, {"/Applications/Brave Browser.app", "Brave Browser"}, {"/Applications/Arc.app", "Arc"}} {
 		if st, err := os.Stat(c[0]); err == nil && st.IsDir() {
 			return c[1]
@@ -194,7 +201,11 @@ func DetectClaude() string {
 		return p
 	}
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{"/opt/homebrew/bin/claude", "/usr/local/bin/claude", filepath.Join(home, ".local", "bin", "claude")} {
+	candidates := []string{"/opt/homebrew/bin/claude", "/usr/local/bin/claude", filepath.Join(home, ".local", "bin", "claude")}
+	if runtime.GOOS == "windows" {
+		candidates = []string{filepath.Join(home, ".local", "bin", "claude.exe"), filepath.Join(os.Getenv("APPDATA"), "npm", "claude.cmd")}
+	}
+	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p
 		}
@@ -234,9 +245,10 @@ func NewWorkspace(name, path string) config.Workspace {
 func GenerateConfig(owner int64, wsPath, browser, claudeBin string) *config.Config {
 	open := true
 	name := WorkspaceName(wsPath)
-	childPath := "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-	if dir := filepath.Dir(claudeBin); !strings.Contains(":"+childPath+":", ":"+dir+":") {
-		childPath = dir + ":" + childPath
+	childPath := config.DefaultChildPath()
+	sep := string(os.PathListSeparator)
+	if dir := filepath.Dir(claudeBin); !strings.Contains(sep+childPath+sep, sep+dir+sep) {
+		childPath = dir + sep + childPath
 	}
 	return &config.Config{
 		Telegram: config.Telegram{OwnerUserID: owner, PollTimeoutSeconds: 30},

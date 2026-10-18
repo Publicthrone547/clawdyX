@@ -15,7 +15,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/Publicthrone547/clawdyX/internal/agent"
@@ -827,12 +826,12 @@ func (m *Manager) Recover() []Interrupted {
 	for _, j := range js {
 		killed := false
 		if j.PID > 0 && agent.OwnedAlive(j.PID, j.ProcStartUnix) {
-			_ = syscall.Kill(-j.PID, syscall.SIGTERM)
+			_ = agent.KillGroup(j.PID, false)
 			for i := 0; i < 50 && agent.OwnedAlive(j.PID, j.ProcStartUnix); i++ {
 				time.Sleep(100 * time.Millisecond)
 			}
 			if agent.OwnedAlive(j.PID, j.ProcStartUnix) {
-				_ = syscall.Kill(-j.PID, syscall.SIGKILL)
+				_ = agent.KillGroup(j.PID, true)
 			}
 			killed = true
 		}

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -13,8 +12,8 @@ func runWithStdin(ctx context.Context, c CLI, stdin string, args ...string) (str
 	cmd := exec.CommandContext(ctx, c.Binary, args...)
 	cmd.Dir, cmd.Env = c.Dir, c.Env
 	cmd.Stdin = strings.NewReader(stdin)
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.SysProcAttr = groupAttr()
+	cmd.Cancel = func() error { return KillGroup(cmd.Process.Pid, true) }
 	cmd.WaitDelay = 2 * time.Second
 	out, errb := &ringBuffer{n: 4 << 20}, &ringBuffer{n: 64 << 10}
 	cmd.Stdout, cmd.Stderr = out, errb

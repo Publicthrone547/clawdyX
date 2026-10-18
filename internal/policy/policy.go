@@ -43,6 +43,7 @@ func SecretPaths(home string) []string {
 		"Library/Application Support/BraveSoftware", "Library/Safari",
 		"Library/Application Support/clawdyx", "Library/Application Support/claude-tg",
 	}
+	rel = append(rel, platformSecretPaths...)
 	out := make([]string, 0, len(rel))
 	for _, r := range rel {
 		out = append(out, filepath.Join(home, r))
@@ -53,8 +54,7 @@ func SecretPaths(home string) []string {
 func secretRules(home string) []string {
 	var rules []string
 	for _, p := range SecretPaths(home) {
-		// "//" anchors an absolute filesystem path in permission rules.
-		abs := "/" + p
+		abs := ruleAbs(p)
 		rules = append(rules, "Read("+abs+"/**)", "Read("+abs+")", "Edit("+abs+"/**)", "Edit("+abs+")")
 	}
 	return rules

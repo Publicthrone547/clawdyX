@@ -1,3 +1,5 @@
+//go:build !windows
+
 package telegram
 
 import "golang.org/x/sys/unix"

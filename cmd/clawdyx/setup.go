@@ -114,7 +114,7 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 	if f, ok := in.(*os.File); ok && !o.TokenStdin && term.IsTerminal(int(f.Fd())) {
 		w.tty = f
 	}
-	where := "the macOS Keychain (item \"" + vault.Service + "\")"
+	where := vault.Name + " (item \"" + vault.Service + "\")"
 	if o.TokenFile {
 		where = envPath + " (mode 0600)"
 	}
@@ -236,14 +236,14 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 			w.say("✓ Stored the token in %s (it is never shown again)", envPath)
 		} else {
 			if err := storeAndVerify(cfgPath, token); err != nil {
-				w.say("Could not store the token in the Keychain: %s. Rerun with -token-file to keep it in a private file instead.", observability.Redact(err.Error()))
+				w.say("Could not store the token in %s: %s. Rerun with -token-file to keep it in a private file instead.", vault.Name, observability.Redact(err.Error()))
 				return exitError
 			}
 			if fileExists(envPath) {
 				_ = os.Remove(envPath)
 				w.say("✓ Removed the old token file %s", envPath)
 			}
-			w.say("✓ Stored the token in the macOS Keychain (item %q; it is never shown again)", vault.Service)
+			w.say("✓ Stored the token in %s (item %q; it is never shown again)", vault.Name, vault.Service)
 		}
 	}
 	if !o.NoCheck {
@@ -406,6 +406,6 @@ func migrateToken(cfgPath, envPath string, out io.Writer) int {
 		fmt.Fprintln(out, "The token is in the Keychain, but the old file could not be removed:", err)
 		return exitError
 	}
-	fmt.Fprintf(out, "✓ Moved the bot token into the macOS Keychain (item %q) and removed %s.\nRestart the worker to use it: make restart\n", vault.Service, envPath)
+	fmt.Fprintf(out, "✓ Moved the bot token into %s (item %q) and removed %s.\nRestart the worker to use it: clawdyx service restart\n", vault.Name, vault.Service, envPath)
 	return exitOK
 }

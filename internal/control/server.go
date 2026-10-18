@@ -94,7 +94,7 @@ func (s *Server) Methods() []string {
 // The parent directory must already exist; it is forced to 0700.
 func (s *Server) Listen(path string) error {
 	if len(path) > 103 {
-		return fmt.Errorf("control socket path is too long for macOS (%d > 103 bytes): %s", len(path), path)
+		return fmt.Errorf("control socket path is too long (%d > 103 bytes): %s", len(path), path)
 	}
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -102,7 +102,7 @@ func (s *Server) Listen(path string) error {
 	}
 	_ = os.Chmod(dir, 0o700)
 	if st, err := os.Lstat(path); err == nil {
-		if st.Mode()&os.ModeSocket == 0 {
+		if !isSocket(st) {
 			return fmt.Errorf("%s exists and is not a socket; refusing to replace it", path)
 		}
 		if c, err := net.DialTimeout("unix", path, 300*time.Millisecond); err == nil {
@@ -117,7 +117,7 @@ func (s *Server) Listen(path string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	if err := chmodSocket(path); err != nil {
 		ln.Close()
 		return err
 	}

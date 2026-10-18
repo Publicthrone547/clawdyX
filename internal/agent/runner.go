@@ -16,8 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/Publicthrone547/clawdyX/internal/policy"
 )
 
@@ -137,8 +135,9 @@ func BuildArgs(s Spec) []string {
 func ChildEnv(path string, bgWaitMS int) []string {
 	// Never set CLAUDE_CODE_SKIP_PROMPT_HISTORY: on CLI 2.1.292 it also stops
 	// transcripts from being written, so --resume finds no conversation.
-	env := []string{"PATH=" + path, "SHELL=/bin/zsh", "TERM=dumb", "LANG=en_US.UTF-8", "DISABLE_AUTOUPDATER=1"}
-	for _, k := range []string{"HOME", "USER", "LOGNAME", "TMPDIR"} {
+	env := append([]string{"PATH=" + path}, platformEnv...)
+	env = append(env, "TERM=dumb", "LANG=en_US.UTF-8", "DISABLE_AUTOUPDATER=1")
+	for _, k := range passEnv {
 		if v := os.Getenv(k); v != "" {
 			env = append(env, k+"="+v)
 		}
@@ -172,7 +171,8 @@ func (r *ringBuffer) String() string {
 	return string(r.buf)
 }
 
-// Process is a running claude child in its own process group.
+// Process is a running claude child in its own process group (on Windows:
+// its own process tree, ended with taskkill /T).
 type Process struct {
 	cmd       *exec.Cmd
 	events    chan Event
@@ -209,7 +209,7 @@ func Start(s Spec) (*Process, error) {
 	cmd := exec.Command(s.Binary, BuildArgs(s)...)
 	cmd.Dir = s.Dir
 	cmd.Env = s.Env
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	cmd.SysProcAttr = groupAttr()
 	payload, err := StdinPayload(s)
 	if err != nil {
 		return nil, err
@@ -269,26 +269,17 @@ func exitCode(cmd *exec.Cmd, err error) int {
 	return cmd.ProcessState.ExitCode()
 }
 
-// SignalGroup sends sig to the child's whole process group.
-func (p *Process) SignalGroup(sig syscall.Signal) error {
-	select {
-	case <-p.done:
-		return nil
-	default:
-	}
-	return syscall.Kill(-p.PID, sig)
-}
-
-// Stop runs the cancellation ladder: SIGINT (ends the turn and records it),
-// then SIGTERM, then SIGKILL, each to the whole process group. It returns
-// when the child has exited.
+// Stop runs the cancellation ladder (see stopLadder): on macOS SIGINT (ends
+// the turn and records it), then SIGTERM, then SIGKILL, each to the whole
+// process group. It returns when the child has exited.
 func (p *Process) Stop(intGrace, termGrace time.Duration) {
-	steps := []struct {
-		sig   syscall.Signal
-		grace time.Duration
-	}{{syscall.SIGINT, intGrace}, {syscall.SIGTERM, termGrace}, {syscall.SIGKILL, 5 * time.Second}}
-	for _, st := range steps {
-		if err := p.SignalGroup(st.sig); err != nil && !errors.Is(err, syscall.ESRCH) {
+	for _, st := range stopLadder(intGrace, termGrace) {
+		select {
+		case <-p.done:
+			return
+		default:
+		}
+		if err := signalGroup(p.PID, st.sig); err != nil && !errors.Is(err, syscall.ESRCH) {
 			_ = p.cmd.Process.Signal(st.sig)
 		}
 		select {
@@ -298,29 +289,6 @@ func (p *Process) Stop(intGrace, termGrace time.Duration) {
 		}
 	}
 	<-p.done
-}
-
-// ProcessStartUnix returns a process's start time (seconds) via sysctl, or 0.
-func ProcessStartUnix(pid int) int64 {
-	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
-	if err != nil || kp == nil || kp.Proc.P_pid != int32(pid) {
-		return 0
-	}
-	return int64(kp.Proc.P_starttime.Sec)
-}
-
-// ProcessComm returns the short command name of a pid, or "".
-func ProcessComm(pid int) string {
-	kp, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
-	if err != nil || kp == nil || kp.Proc.P_pid != int32(pid) {
-		return ""
-	}
-	b := kp.Proc.P_comm[:]
-	n := 0
-	for n < len(b) && b[n] != 0 {
-		n++
-	}
-	return string(b[:n])
 }
 
 // OwnedAlive reports whether pid is still the same claude process the bot
@@ -341,8 +309,8 @@ func RunCapture(ctx context.Context, timeout time.Duration, dir string, env []st
 	cmd.Dir = dir
 	cmd.Env = env
 	cmd.Stdin = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	cmd.Cancel = func() error { return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) }
+	cmd.SysProcAttr = groupAttr()
+	cmd.Cancel = func() error { return KillGroup(cmd.Process.Pid, true) }
 	cmd.WaitDelay = 2 * time.Second
 	out, errb := &ringBuffer{n: 4 << 20}, &ringBuffer{n: 64 << 10}
 	cmd.Stdout, cmd.Stderr = out, errb

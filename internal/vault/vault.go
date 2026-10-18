@@ -12,10 +12,15 @@ import (
 	"encoding/hex"
 	"errors"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/zalando/go-keyring"
 )
+
+// Name is the user-facing name of the system secret store (go-keyring uses
+// the Windows Credential Manager on Windows).
+var Name = map[bool]string{true: "the Windows Credential Manager", false: "the macOS Keychain"}[runtime.GOOS == "windows"]
 
 // Service is the Keychain service name of every clawdyX item.
 const Service = "clawdyx"
