@@ -194,3 +194,29 @@ func TestSettingsGetSet(t *testing.T) {
 		t.Fatalf("camera in the file = %v", cfg3.Desktop.Camera)
 	}
 }
+
+func TestSettingsResetExportImport(t *testing.T) {
+	h := start(t)
+	p := writeConfig(t, h)
+	c := withControl(t, h)
+	ctx := context.Background()
+	turns := 99
+	var si control.SettingsInfo
+	if err := c.Call(ctx, "settings.set", control.SettingsPatch{MaxTurns: &turns}, &si); err != nil || si.MaxTurns != 99 {
+		t.Fatalf("set: %v", err)
+	}
+	if err := c.Call(ctx, "settings.reset", control.SettingsResetParams{Section: control.SectionLimits}, &si); err != nil || si.MaxTurns != config.Defaults().Claude.MaxTurns {
+		t.Fatalf("reset: %v %d", err, si.MaxTurns)
+	}
+	var ex control.SettingsExport
+	if err := c.Call(ctx, "settings.export", nil, &ex); err != nil || ex.JSON != string(mustRead(t, p)) || config.ContainsToken(ex.JSON) {
+		t.Fatalf("export: %v", err)
+	}
+	var res control.SettingsImportResult
+	if err := c.Call(ctx, "settings.import", control.SettingsImportParams{JSON: ex.JSON, Apply: true}, &res); err != nil || len(res.Changes) != 0 {
+		t.Fatalf("import: %v %+v", err, res.Changes)
+	}
+	if err := c.Call(ctx, "settings.import", control.SettingsImportParams{JSON: "{", Apply: true}, nil); err == nil {
+		t.Fatal("invalid import accepted")
+	}
+}

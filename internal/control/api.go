@@ -483,51 +483,165 @@ type WorkspaceInfo struct {
 	DefaultMode     string   `json:"defaultMode"`
 	AllowedCommands []string `json:"allowedCommands"`
 	DeniedCommands  []string `json:"deniedCommands"`
-	IsDefault       bool     `json:"isDefault"`
+	// IKnowWhatIAmDoing drops the minimum deny rules check for this workspace.
+	IKnowWhatIAmDoing bool `json:"iKnowWhatIAmDoing"`
+	IsDefault         bool `json:"isDefault"`
 }
 
-// SettingsInfo is the editable, non-secret configuration.
+// SettingsInfo is the editable, non-secret configuration: every key of
+// config.json except the Telegram allowlist (telegram.allowlist.*).
 type SettingsInfo struct {
-	ConfigPath        string          `json:"configPath"`
-	Workspaces        []WorkspaceInfo `json:"workspaces"`
-	DefaultWorkspace  string          `json:"defaultWorkspace"`
-	ClaudeBinary      string          `json:"claudeBinary"`
-	MaxConcurrentJobs int             `json:"maxConcurrentJobs"`
-	JobTimeoutMinutes int             `json:"jobTimeoutMinutes"`
-	MaxTurns          int             `json:"maxTurns"`
-	AutomationEnabled bool            `json:"automationEnabled"`
-	ScreenControl     bool            `json:"screenControl"`
-	Camera            bool            `json:"camera"`
-	CameraSupported   bool            `json:"cameraSupported"`
-	OpenURLs          bool            `json:"openUrls"`
-	BrowserApp        string          `json:"browserApp"`
-	ShutdownCommand   bool            `json:"shutdownCommand"`
-	LogLevel          string          `json:"logLevel"`
-	JobsDays          int             `json:"jobsDays"`
-	JobEventsDays     int             `json:"jobEventsDays"`
-	AuditDays         int             `json:"auditDays"`
-	RestartPending    bool            `json:"restartPending"`
+	ConfigPath       string          `json:"configPath"`
+	OwnerUserID      int64           `json:"ownerUserId"` // read-only here (setup changes it)
+	Workspaces       []WorkspaceInfo `json:"workspaces"`
+	DefaultWorkspace string          `json:"defaultWorkspace"`
+
+	PollTimeoutSeconds int `json:"pollTimeoutSeconds"`
+
+	ClaudeBinary    string   `json:"claudeBinary"`
+	SettingSources  []string `json:"settingSources"` // of user, project, local
+	StrictMCPConfig bool     `json:"strictMcpConfig"`
+	GitBashPath     string   `json:"gitBashPath"` // Windows only
+	DefaultModel    string   `json:"defaultModel"`
+	DefaultEffort   string   `json:"defaultEffort"`
+
+	MaxConcurrentJobs  int      `json:"maxConcurrentJobs"`
+	JobTimeoutMinutes  int      `json:"jobTimeoutMinutes"`
+	MaxTurns           int      `json:"maxTurns"`
+	MaxBudgetUSD       float64  `json:"maxBudgetUsd"` // 0 = off
+	MaxQueuePerSession int      `json:"maxQueuePerSession"`
+	MaxOutputBytes     int      `json:"maxOutputBytes"`
+	MaxChildRSSMB      int      `json:"maxChildRssMb"`
+	BgWaitCeilingMS    int      `json:"bgWaitCeilingMs"`
+	ChildPath          []string `json:"childPath"`        // folders, in order
+	ChildPathDefault   []string `json:"childPathDefault"` // what "Reset to default" gives
+
+	ExtraDisallowedTools []string `json:"extraDisallowedTools"`
+	// BuiltinDenied is what every job on this OS is denied before any rule
+	// of a workspace (read-only).
+	BuiltinDenied []string `json:"builtinDenied"`
+
+	AutomationEnabled bool   `json:"automationEnabled"`
+	ScreenControl     bool   `json:"screenControl"`
+	Camera            bool   `json:"camera"`
+	CameraSupported   bool   `json:"cameraSupported"`
+	OpenURLs          bool   `json:"openUrls"`
+	BrowserApp        string `json:"browserApp"`
+	ShutdownCommand   bool   `json:"shutdownCommand"`
+
+	StateDir             string `json:"stateDir"`
+	LogDir               string `json:"logDir"`
+	LogLevel             string `json:"logLevel"`
+	JobsDays             int    `json:"jobsDays"`
+	JobEventsDays        int    `json:"jobEventsDays"`
+	AuditDays            int    `json:"auditDays"`
+	ProcessedUpdatesDays int    `json:"processedUpdatesDays"`
+
+	RestartPending bool `json:"restartPending"`
+	// Invalid is set by the app when it read the file itself (the worker is
+	// down) and the file does not pass validation: the reason.
+	Invalid string `json:"invalid,omitempty"`
 }
 
 // SettingsPatch changes settings; nil fields are left alone. Changes to
-// config.json take effect after the worker restarts.
+// the settings take effect after the worker restarts.
 type SettingsPatch struct {
-	MaxConcurrentJobs *int              `json:"maxConcurrentJobs,omitempty"`
-	JobTimeoutMinutes *int              `json:"jobTimeoutMinutes,omitempty"`
-	MaxTurns          *int              `json:"maxTurns,omitempty"`
-	AutomationEnabled *bool             `json:"automationEnabled,omitempty"`
-	ScreenControl     *bool             `json:"screenControl,omitempty"`
-	Camera            *bool             `json:"camera,omitempty"`
-	OpenURLs          *bool             `json:"openUrls,omitempty"`
-	BrowserApp        *string           `json:"browserApp,omitempty"`
-	ShutdownCommand   *bool             `json:"shutdownCommand,omitempty"`
-	LogLevel          *string           `json:"logLevel,omitempty"`
-	JobsDays          *int              `json:"jobsDays,omitempty"`
-	JobEventsDays     *int              `json:"jobEventsDays,omitempty"`
-	AuditDays         *int              `json:"auditDays,omitempty"`
-	AddWorkspace      *WorkspaceInfo    `json:"addWorkspace,omitempty"`
-	RemoveWorkspace   string            `json:"removeWorkspace,omitempty"`
-	WorkspaceModes    map[string]string `json:"workspaceModes,omitempty"`
+	PollTimeoutSeconds *int `json:"pollTimeoutSeconds,omitempty"`
+
+	ClaudeBinary    *string   `json:"claudeBinary,omitempty"`
+	SettingSources  *[]string `json:"settingSources,omitempty"`
+	StrictMCPConfig *bool     `json:"strictMcpConfig,omitempty"`
+	GitBashPath     *string   `json:"gitBashPath,omitempty"`
+
+	MaxConcurrentJobs  *int      `json:"maxConcurrentJobs,omitempty"`
+	JobTimeoutMinutes  *int      `json:"jobTimeoutMinutes,omitempty"`
+	MaxTurns           *int      `json:"maxTurns,omitempty"`
+	MaxBudgetUSD       *float64  `json:"maxBudgetUsd,omitempty"`
+	MaxQueuePerSession *int      `json:"maxQueuePerSession,omitempty"`
+	MaxOutputBytes     *int      `json:"maxOutputBytes,omitempty"`
+	MaxChildRSSMB      *int      `json:"maxChildRssMb,omitempty"`
+	BgWaitCeilingMS    *int      `json:"bgWaitCeilingMs,omitempty"`
+	ChildPath          *[]string `json:"childPath,omitempty"`
+
+	ExtraDisallowedTools *[]string `json:"extraDisallowedTools,omitempty"`
+
+	AutomationEnabled *bool   `json:"automationEnabled,omitempty"`
+	ScreenControl     *bool   `json:"screenControl,omitempty"`
+	Camera            *bool   `json:"camera,omitempty"`
+	OpenURLs          *bool   `json:"openUrls,omitempty"`
+	BrowserApp        *string `json:"browserApp,omitempty"`
+	ShutdownCommand   *bool   `json:"shutdownCommand,omitempty"`
+
+	StateDir             *string `json:"stateDir,omitempty"`
+	LogDir               *string `json:"logDir,omitempty"`
+	LogLevel             *string `json:"logLevel,omitempty"`
+	JobsDays             *int    `json:"jobsDays,omitempty"`
+	JobEventsDays        *int    `json:"jobEventsDays,omitempty"`
+	AuditDays            *int    `json:"auditDays,omitempty"`
+	ProcessedUpdatesDays *int    `json:"processedUpdatesDays,omitempty"`
+
+	AddWorkspace    *WorkspaceInfo                 `json:"addWorkspace,omitempty"`
+	RemoveWorkspace string                         `json:"removeWorkspace,omitempty"`
+	RenameWorkspace *RenameParams                  `json:"renameWorkspace,omitempty"`
+	WorkspaceModes  map[string]string              `json:"workspaceModes,omitempty"`
+	WorkspaceRules  map[string]WorkspaceRulesPatch `json:"workspaceRules,omitempty"`
+}
+
+// RenameParams renames a workspace (only while no session uses it).
+type RenameParams struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+// WorkspaceRulesPatch replaces a workspace's command rules; nil fields are
+// left alone.
+type WorkspaceRulesPatch struct {
+	Allowed           *[]string `json:"allowed,omitempty"`
+	Denied            *[]string `json:"denied,omitempty"`
+	IKnowWhatIAmDoing *bool     `json:"iKnowWhatIAmDoing,omitempty"`
+}
+
+// Settings sections for SettingsResetParams.
+const (
+	SectionClaudeCode  = "claude-code"
+	SectionDefaults    = "defaults"
+	SectionLimits      = "limits"
+	SectionFeatures    = "features"
+	SectionPermissions = "permissions"
+	SectionWorkspaces  = "workspaces"
+	SectionLogs        = "logs"
+	SectionAdvanced    = "advanced"
+	SectionAll         = "all"
+)
+
+// SettingsResetParams restores the defaults of one section, or of all
+// (the Telegram owner and allowlist and the workspaces' names and folders
+// are kept: they are identity, not preferences).
+type SettingsResetParams struct {
+	Section string `json:"section"`
+}
+
+// SettingsExport is the settings file as it is (it never holds the token).
+type SettingsExport struct {
+	JSON     string `json:"json"`
+	Filename string `json:"filename"` // suggested name
+}
+
+// SettingsImportParams replaces the settings with an exported file.
+// Without Apply it only reports what would change.
+type SettingsImportParams struct {
+	JSON string `json:"json"`
+	// AllowOwnerChange accepts a file whose Telegram owner differs.
+	AllowOwnerChange bool `json:"allowOwnerChange"`
+	Apply            bool `json:"apply"`
+}
+
+// SettingsImportResult lists the changed keys ("claude.max_turns: 60 → 80").
+type SettingsImportResult struct {
+	Changes      []string     `json:"changes"`
+	OwnerChanged bool         `json:"ownerChanged"`
+	Applied      bool         `json:"applied"`
+	Settings     SettingsInfo `json:"settings"`
 }
 
 // WorkspaceDefaultParams sets the workspace for new sessions (immediate).

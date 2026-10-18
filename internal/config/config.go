@@ -372,6 +372,31 @@ func applyDefaults(c *Config) {
 
 // Parse decodes and validates a config document (without the token).
 func Parse(data []byte) (*Config, error) {
+	c, err := decode(data)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+// ParseLenient decodes a config document and fills in the defaults but
+// does not validate it, so the desktop app can show and repair a config
+// the worker refuses. invalid is the validation error ("" when valid). A
+// document that is not JSON for this schema (syntax, unknown keys) is still
+// an error.
+func ParseLenient(data []byte) (c *Config, invalid error, err error) {
+	if c, err = decode(data); err != nil {
+		return nil, nil, err
+	}
+	valid := *c
+	valid.Workspaces = append([]Workspace(nil), c.Workspaces...)
+	return c, valid.validate(), nil
+}
+
+func decode(data []byte) (*Config, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var c Config
@@ -379,10 +404,15 @@ func Parse(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("config: %w", err)
 	}
 	applyDefaults(&c)
-	if err := c.validate(); err != nil {
-		return nil, err
-	}
 	return &c, nil
+}
+
+// Defaults is the configuration of an empty document: every default filled
+// in, no owner and no workspaces (so it is not valid by itself).
+func Defaults() Config {
+	var c Config
+	applyDefaults(&c)
+	return c
 }
 
 // TokenVault is where the bot token is kept (the system token store by
@@ -596,6 +626,9 @@ func (c *Config) validate() error {
 	if cl.MaxChildRSSMB < 256 {
 		add("claude.max_child_rss_mb must be >= 256")
 	}
+	if cl.BgWaitCeilingMS < 0 || cl.BgWaitCeilingMS > 600000 {
+		add("claude.bg_wait_ceiling_ms must be 0..600000")
+	}
 	for _, p := range filepath.SplitList(cl.ChildPath) {
 		if !filepath.IsAbs(p) {
 			add("claude.child_path entries must be absolute (%q)", p)
@@ -712,7 +745,9 @@ func Rewrite(path string, mutate func(*Config) error) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	c, err := Parse(raw)
+	// The current file may be invalid (the app repairs it while the worker
+	// is down); the result below must be valid.
+	c, err := decode(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -749,3 +784,9 @@ func Rewrite(path string, mutate func(*Config) error) (*Config, error) {
 	}
 	return nc, nil
 }
+
+var tokenInTextRe = regexp.MustCompile(`[0-9]{8,10}:[A-Za-z0-9_-]{35}`)
+
+// ContainsToken reports whether s contains something shaped like a bot
+// token (exports and imports of settings must never carry one).
+func ContainsToken(s string) bool { return tokenInTextRe.MatchString(s) }
