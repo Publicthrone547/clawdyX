@@ -12,9 +12,9 @@ import (
 // every connection that gets this far is accepted as the server's own user.
 func peerUID(*net.UnixConn) (int, error) { return os.Getuid(), nil }
 
-// Go may not report ModeSocket for AF_UNIX reparse points; anything but a
-// directory at the socket path is treated as a stale socket.
-func isSocket(st os.FileInfo) bool { return !st.IsDir() }
+// Go reports AF_UNIX reparse points as ModeSocket, so a regular file at the
+// socket path is never mistaken for a stale socket and removed.
+func isSocket(st os.FileInfo) bool { return st.Mode()&os.ModeSocket != 0 }
 
 // File modes do not apply on Windows (see peerUID).
 func chmodSocket(string) error { return nil }
