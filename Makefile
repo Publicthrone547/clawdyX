@@ -1,13 +1,22 @@
-BIN     := bin/clawdyx
+GOHOSTOS := $(shell go env GOOS)
+EXE     := $(if $(filter windows,$(GOHOSTOS)),.exe,)
+BIN     := bin/clawdyx$(EXE)
 GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
 VERSION := 0.4.1
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
 WINENV  := GOOS=windows GOARCH=amd64 CGO_ENABLED=0
+LINENV  := GOOS=linux CGO_ENABLED=0
+DARENV  := GOOS=darwin CGO_ENABLED=0
+LINDIR  := bin/linux
+# The desktop module needs cgo on macOS and Linux, not on Windows.
+DESKENV := $(if $(filter darwin,$(GOHOSTOS)),$(MACENV),$(if $(filter windows,$(GOHOSTOS)),CGO_ENABLED=0,CGO_ENABLED=1))
+# -race needs cgo: a Windows PC without gcc runs the tests without it.
+RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev/null),-race,),-race)
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all app dmg build-windows vet-windows release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all app dmg build-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -19,7 +28,7 @@ setup: build ## first-time setup: bot token, your Telegram ID, project folder (w
 run: build ## run the bot in the foreground; Ctrl-C stops it
 	$(BIN) run
 
-start: install ## run the bot in the background now and at every login (LaunchAgent)
+start: install ## run the bot in the background now and at every login
 	$(GOBIN)/clawdyx service start
 
 stop: ## stop the background bot (it stays off until make start)
@@ -33,8 +42,8 @@ status: ## is the bot running?
 	@test -x $(GOBIN)/clawdyx || (echo "not installed yet; run make start"; exit 1)
 	$(GOBIN)/clawdyx service status
 
-logs: ## follow the bot log
-	tail -n 50 -f "$(HOME)/Library/Logs/clawdyx/bot.log"
+logs: build ## follow the bot log
+	tail -n 50 -f "$$($(BIN) paths logs)/bot.log"
 
 doctor: build ## read-only checks: config, token, Claude CLI, auth, Telegram
 	$(BIN) check
@@ -72,6 +81,29 @@ vet-windows: ## type-check everything (including tests) for Windows
 	$(WINENV) go vet $(PKG)
 	cd desktop && $(WINENV) go vet ./...
 
+## Linux (the worker cross-compiles; the app needs cgo and GTK, so it builds on Linux only)
+build-linux: ## build the Linux worker for amd64 and arm64 into bin/linux/<arch>/clawdyx
+	for a in amd64 arm64; do $(LINENV) GOARCH=$$a go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(LINDIR)/$$a/clawdyx ./cmd/clawdyx || exit 1; done
+	@ls -lh $(LINDIR)/*/clawdyx
+
+vet-linux: ## type-check everything (including tests) for Linux; the app's cgo part only on Linux
+	$(LINENV) go vet $(PKG)
+	cd desktop && $(LINENV) go vet ./host
+
+app-linux: frontend ## build bin/linux/clawdyX/ (app, worker, .desktop file, icons); runs on Linux only
+	@test "$$(go env GOOS)" = linux || { echo "app-linux builds on Linux only (the app needs cgo and GTK); CI builds it"; exit 1; }
+	rm -rf $(LINDIR)/clawdyX && mkdir -p $(LINDIR)/clawdyX
+	CGO_ENABLED=0 go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(LINDIR)/clawdyX/clawdyx ./cmd/clawdyx
+	cd desktop && CGO_ENABLED=1 go build -tags production,gtk3 -trimpath -buildvcs=false -ldflags="-w -s -X main.version=$(VERSION)" -o ../$(LINDIR)/clawdyX/clawdyX .
+	cp desktop/build/linux/clawdyX.desktop LICENSE THIRD_PARTY_NOTICES.md README.md $(LINDIR)/clawdyX/
+	cp -R desktop/build/linux/icons $(LINDIR)/clawdyX/
+	@ls -lh $(LINDIR)/clawdyX
+
+## macOS type check from another system (the app's cgo part only on a Mac)
+vet-darwin:
+	$(DARENV) go vet $(PKG)
+	cd desktop && $(DARENV) go vet ./host
+
 ## Release
 release: check-all dmg build-windows ## build every release file into bin/release-$(VERSION) with SHA256SUMS
 	rm -rf $(REL) bin/tar && mkdir -p $(REL) bin/tar/clawdyx-$(VERSION)-darwin-arm64
@@ -91,21 +123,21 @@ frontend:
 	cd desktop/frontend && (test -d node_modules || npm ci) && npm run build
 
 bindings: ## regenerate the TypeScript bindings (needs: go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30)
-	cd desktop && $(MACENV) wails3 generate bindings -ts -i -d frontend/bindings
+	cd desktop && $(DESKENV) wails3 generate bindings -ts -i -d frontend/bindings
 
 dev: build helper ## run the desktop app against a running worker (hot reload needs wails3 dev)
 	cd desktop/frontend && npm run build
 	cd desktop && $(MACENV) CLAWDYX_WORKER=$(CURDIR)/bin/clawdyx go run .
 
 test-desktop:
-	cd desktop && $(MACENV) go vet ./... && go test ./...
+	cd desktop && $(DESKENV) go vet ./... && $(DESKENV) go test ./...
 	cd desktop/frontend && npm run typecheck && npm test
 
 test:
-	go test -race $(PKG)
+	go test $(RACE) $(PKG)
 
 test-integration:
-	go test -race -tags integration $(PKG)
+	go test $(RACE) -tags integration $(PKG)
 
 fmt:
 	gofmt -w .
@@ -123,7 +155,7 @@ check-secrets:
 
 check: lint test check-secrets
 
-check-all: check test-desktop vet-windows ## everything, including the desktop app's tests and the Windows type check
+check-all: check test-desktop vet-windows vet-linux vet-darwin ## everything: tests, the desktop app's tests and the type checks for all three OSes
 
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh

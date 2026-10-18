@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=clawdyX
+GenericName=Telegram control panel for Claude Code
+Comment=Control panel for the clawdyX Telegram bot and the local Claude Code CLI
+Exec=clawdyX
+Icon=clawdyx
+Terminal=false
+Categories=Development;Utility;
+StartupWMClass=clawdyX
