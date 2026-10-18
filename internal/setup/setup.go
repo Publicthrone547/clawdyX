@@ -23,6 +23,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/policy"
 )
 
 // APIBase is the Bot API base URL (tests replace it).
@@ -209,7 +210,9 @@ func WorkspaceName(path string) string {
 // DefaultAllowed and DefaultDenied are the command rules for new workspaces.
 var (
 	DefaultAllowed = []string{"Bash(git status *)", "Bash(git diff *)", "Bash(git log *)", "Bash(make test *)", "Bash(go test *)", "Bash(go build *)", "Bash(go vet *)"}
-	DefaultDenied  = []string{"Bash(rm *)", "Bash(rmdir *)", "Bash(sudo *)", "Bash(git push *)", "Bash(git remote *)", "Bash(curl *)", "Bash(wget *)", "Bash(brew *)", "Bash(claude *)"}
+	// DefaultDenied repeats the built-in rules of this OS (policy applies
+	// them anyway) so the workspace shows what is denied.
+	DefaultDenied = policy.DeniedCommands()
 )
 
 // NewWorkspace returns a workspace with the default rules.

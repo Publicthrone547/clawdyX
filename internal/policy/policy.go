@@ -32,38 +32,15 @@ var alwaysDisallowedTools = []string{"WebFetch", "WebSearch"}
 // observeDisallowedTools are additionally removed in observe mode.
 var observeDisallowedTools = []string{"Edit", "Write", "NotebookEdit"}
 
-// SecretPaths returns home-relative locations whose contents must never be
-// read or written by Claude, regardless of tier.
-func SecretPaths(home string) []string {
-	rel := []string{
-		".ssh", ".aws", ".gnupg", ".kube", ".docker", ".netrc", ".npmrc", ".pypirc",
-		".config", ".claude", ".claude.json", ".git-credentials", ".zsh_history", ".bash_history",
-		"Library/Keychains", "Library/Cookies",
-		"Library/Application Support/Google", "Library/Application Support/Firefox",
-		"Library/Application Support/BraveSoftware", "Library/Safari",
-		"Library/Application Support/clawdyx", "Library/Application Support/claude-tg",
-	}
-	rel = append(rel, platformSecretPaths...)
-	out := make([]string, 0, len(rel))
-	for _, r := range rel {
-		out = append(out, filepath.Join(home, r))
-	}
-	return out
-}
-
-func secretRules(home string) []string {
-	var rules []string
-	for _, p := range SecretPaths(home) {
-		abs := ruleAbs(p)
-		rules = append(rules, "Read("+abs+"/**)", "Read("+abs+")", "Edit("+abs+"/**)", "Edit("+abs+")")
-	}
-	return rules
-}
-
-// For computes the permission flags for a mode in a workspace.
+// For computes the permission flags for a mode in a workspace on this OS.
 //
 // automationEnabled must come from the config; it is re-checked for every job.
 func For(mode string, ws *config.Workspace, cl config.Claude, home string, automationEnabled bool) (Flags, error) {
+	return ForOS(hostOS, mode, ws, cl, home, automationEnabled)
+}
+
+// ForOS is For with the built-in lists of goos (tests check every OS).
+func ForOS(goos, mode string, ws *config.Workspace, cl config.Claude, home string, automationEnabled bool) (Flags, error) {
 	perms := map[string]any{"disableBypassPermissionsMode": "disable"}
 	if mode != config.ModeAutomation {
 		// Outside automation, auto mode is unavailable and file tools may not
@@ -86,7 +63,8 @@ func For(mode string, ws *config.Workspace, cl config.Claude, home string, autom
 		}
 		deny = append(deny, t)
 	}
-	deny = append(deny, secretRules(home)...)
+	deny = append(deny, secretRulesFor(goos, home)...)
+	deny = append(deny, BuiltinDeniedFor(goos)...)
 	deny = append(deny, ws.DeniedCommands...)
 	deny = append(deny, cl.ExtraDisallowedTools...)
 
