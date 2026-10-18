@@ -28,22 +28,60 @@ ps -axo pid,rss,comm | grep WebKit                                       # WebKi
 go test ./internal/screen/ -run XXX -bench EncodeLargeDisplay            # re-encode cost
 ```
 
+The macOS figures are from the development Mac; Windows and Linux have not been measured yet (record them with the release QA).
+
+## Release files
+
+| File | Built by | Contents |
+| --- | --- | --- |
+| `clawdyX-<v>-darwin-arm64.dmg` | `make release-darwin` (macOS) | `clawdyX.app` with the worker and the capture and camera helpers |
+| `clawdyx-<v>-darwin-arm64.tar.gz` | the same | the worker, `LICENSE`, `THIRD_PARTY_NOTICES.md`, `README.md` |
+| `clawdyX-<v>-windows-amd64-setup.exe` | `make release-windows` (Windows) | the per-user NSIS installer |
+| `clawdyX-<v>-windows-amd64.zip` | the same | `clawdyX/` with `clawdyX.exe`, `helpers\clawdyx.exe`, `clawdyxw.exe`, `clawdyx-camera.exe` and the license files |
+| `clawdyx_<v>_amd64.deb`, `clawdyx-<v>-1.x86_64.rpm` | `make release-linux` (Linux) | the package `clawdyx` (nfpm) |
+| `clawdyX-<v>-linux-amd64.tar.gz` | the same | `clawdyX`, `clawdyx`, `clawdyX.desktop`, `icons/`, the license files |
+| `clawdyX-<v>-linux-amd64.AppImage` | `make appimage-linux` (Linux, best effort) | the app and worker; WebKitGTK from the host |
+| `clawdyx-<v>-linux-amd64.tar.gz`, `clawdyx-<v>-linux-arm64.tar.gz` | `make release-workers` (anywhere) | the worker and the license files |
+| arm64 Linux packages and app tarball | the release workflow, when the `ubuntu-24.04-arm` runner exists | as for amd64 |
+| `SHA256SUMS` | `make release-sums`, and the workflow's publish job | every file above |
+
+The Windows camera helper uses only the Windows SDK (Media Foundation), so it adds no third-party notice. nfpm (MIT), linuxdeploy and its GTK plugin (MIT) and NSIS (zlib) are build tools; nothing of them is linked into clawdyX.
+
+## Version
+
+`VERSION` in the Makefile is the only source. Every build passes it with `-X main.version=…` (both programs default to `0.0.0-dev`), and the build files take it from there: `Info.plist`, the Windows `info.json` and manifest (`__VERSION__`), nfpm and NSIS (`VERSION`). `desktop/frontend/package.json` stays `0.0.0`. `make check-version` (part of `check-all`, and the first job of the release workflow with `TAG=v<version>`) fails unless `CHANGELOG.md` starts with `## <version>` and `desktop/build/release-notes/<version>.md` exists.
+
 ## Release checklist
 
-1. `make check-all` is green (Go race tests, vet, gofmt, secret scan, desktop Go tests, frontend type check and Vitest, Windows type check).
-2. `scripts/gen-notices.sh` regenerated `THIRD_PARTY_NOTICES.md`; review new licenses (anything not MIT/BSD/ISC/Apache/MPL needs a decision).
-3. Version: `VERSION` in the Makefile, `version` in `cmd/clawdyx/main.go` and `desktop/main.go`, `desktop/frontend/package.json` and `package-lock.json`, `CHANGELOG.md`. (The Windows file version comes from `VERSION` via `desktop/build/windows/info.json`.)
-4. Build: `make release` runs `check-all`, `make dmg` and `make build-windows` and writes `bin/release-<version>/` (dmg, darwin tar.gz, Windows zip, `SHA256SUMS`); add the release notes as `NOTES.md` there, with absolute links. For distribution on macOS, sign and notarize: `CLAWDYX_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" CLAWDYX_HARDENED=1 make dmg`, then `xcrun notarytool submit bin/clawdyX-<v>.dmg --keychain-profile <profile> --wait` and `xcrun stapler staple bin/clawdyX-<v>.dmg`. Never commit signing material.
-5. Smoke test the built app: wizard on an unconfigured account, Start/Stop, a Telegram prompt, a capture (with permission), Quit dialog, reopen.
-6. Privacy scan of everything that will be published (review every hit by hand; a clean scan is not a guarantee):
+1. `make check-all` is green on the development machine, and CI is green on macOS, Windows and Linux for the release commit.
+2. `scripts/gen-notices.sh` regenerated `THIRD_PARTY_NOTICES.md` (`make check-notices` compares); review new licenses (anything not MIT/BSD/ISC/Apache/MPL needs a decision).
+3. Version: `VERSION` in the Makefile, the `CHANGELOG.md` entry dated on release day, `desktop/build/release-notes/<version>.md` (the release page text, with a "Tested on" table from the QA checklists in `docs/TESTING.md`), the winget and Scoop manifests' version (`packaging/`).
+4. `make check-attribution`: no commit names Claude as an author or co-author.
+5. Privacy scan of everything that will be published (review every hit by hand; a clean scan is not a guarantee):
 
    ```sh
    make check-secrets
-   git grep -n -i -E '<your telegram id>|<your macOS user name>|<your e-mail>' -- .
-   git grep -n -E '/Users/[a-z0-9_-]+/' -- . | grep -v -E '/Users/(you|<you>|me)/'
-   git ls-files | grep -i -E 'analyst|brief|private|\.env$|\.db$|\.log$|\.png$|\.jpg$' | grep -v -E 'desktop/build/(appicon|tray-template)\.png'
-   git log --all --format='%H %s' | head -50                 # only reviewed commits
+   git grep -n -i -E '<your telegram id>|<your user name>|<your e-mail>' -- .
+   git grep -n -E '/Users/[a-z0-9_-]+/|/home/[a-z0-9_-]+/|C:\\Users\\[A-Za-z0-9_-]+' -- . | grep -v -E '/(you|<you>|me)/|Users\\you'
+   git ls-files | grep -i -E 'analyst|brief|private|plan|progress|\.env$|\.log$|\.png$|\.jpg$' | grep -v -E 'desktop/build/(appicon|tray-template)\.png|desktop/build/linux/icons/'
+   git log --all --format='%H %s' | head -60                 # only reviewed commits
    git log --all -p | grep -i -E '<your telegram id>|<your e-mail>'   # history, not just the tree
    ```
 
-7. Tag locally: `git tag -a v<version> -m "clawdyX <version>"`. Pushing (and publishing a release) is the owner's manual step.
+6. Tag locally: `git tag -a v<version> -m "clawdyX <version>"`. Pushing the tag (`git push origin main v<version>`) is the owner's manual step; it starts the release workflow.
+7. The workflow builds every file on its own system and creates a **draft** release with `SHA256SUMS`. Download the files, check them (`sha256sum -c SHA256SUMS --ignore-missing`, `shasum -a 256 -c SHA256SUMS --ignore-missing` on macOS, `Get-FileHash` in PowerShell), run the QA checklists, then publish the draft by hand.
+8. After publishing: fill in the SHA-256 of the installer and the zip in `packaging/winget/…/<version>/` and `packaging/scoop/clawdyx.json` from `SHA256SUMS`, run `winget validate --manifest <folder>`, and open the pull request to microsoft/winget-pkgs; copy the Scoop manifest into the Scoop bucket repository.
+
+Without the workflow, each system builds its own files with `make release` (it runs `check-all`, builds that system's files and the Linux worker tarballs, and writes `SHA256SUMS` for them); collect them into one folder and run `make release-sums`.
+
+## Signing (optional)
+
+The workflow signs only when its secrets exist; without them it builds unsigned files and says so in the job summary.
+
+| System | Secrets | What happens |
+| --- | --- | --- |
+| macOS | `MACOS_CERT_P12` (base64 of a Developer ID Application certificate), `MACOS_CERT_PASSWORD` | the app and its helpers are signed with the hardened runtime (`CLAWDYX_SIGN_IDENTITY`, `CLAWDYX_HARDENED=1`) |
+| macOS | `APPLE_ID`, `APPLE_TEAM_ID`, `APPLE_APP_PASSWORD` (with the certificate) | the dmg is notarized (`xcrun notarytool submit --wait`) and stapled |
+| Windows | `AZURE_KEY_VAULT_URL`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TENANT_ID`, `AZURE_CERT_NAME` | `clawdyX.exe`, the helpers and the installer are signed with AzureSignTool (Authenticode, timestamped) |
+
+Locally on a Mac: `CLAWDYX_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" CLAWDYX_HARDENED=1 make dmg`, then `xcrun notarytool submit bin/clawdyX-<v>-darwin-arm64.dmg --keychain-profile <profile> --wait` and `xcrun stapler staple bin/clawdyX-<v>-darwin-arm64.dmg`. Never commit signing material. Unsigned files need **Open Anyway** on macOS and **More info → Run anyway** on Windows; the README says so.
