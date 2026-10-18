@@ -322,3 +322,7 @@ func (w *WorkerService) SetDefaultWorkspace(name string) (control.SettingsInfo, 
 func (w *WorkerService) RestartWorker() error {
 	return w.call("worker.restart", nil, nil, short)
 }
+func (w *WorkerService) ResetSettings(section string) (control.SettingsInfo, error) {
+	var s control.SettingsInfo
+	return s, w.call("settings.reset", control.SettingsResetParams{Section: section}, &s, short)
+}

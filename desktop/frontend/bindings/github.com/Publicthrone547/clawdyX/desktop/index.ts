@@ -17,6 +17,7 @@ export type {
     FinishParams,
     FinishResult,
     FolderCheck,
+    ImportPreview,
     PlatformInfo,
     ServiceInfo,
     SetupState,

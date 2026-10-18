@@ -283,6 +283,14 @@ export interface ProcessesInfo {
 }
 
 /**
+ * RenameParams renames a workspace (only while no session uses it).
+ */
+export interface RenameParams {
+    "from": string;
+    "to": string;
+}
+
+/**
  * ScreenStatus is the state of the screen features.
  */
 export interface ScreenStatus {
@@ -370,16 +378,72 @@ export interface SettingResult {
 }
 
 /**
- * SettingsInfo is the editable, non-secret configuration.
+ * SettingsImportResult lists the changed keys ("claude.max_turns: 60 → 80").
+ */
+export interface SettingsImportResult {
+    "changes": string[] | null;
+    "ownerChanged": boolean;
+    "applied": boolean;
+    "settings": SettingsInfo;
+}
+
+/**
+ * SettingsInfo is the editable, non-secret configuration: every key of
+ * config.json except the Telegram allowlist (telegram.allowlist.*).
  */
 export interface SettingsInfo {
     "configPath": string;
+
+    /**
+     * read-only here (setup changes it)
+     */
+    "ownerUserId": number;
     "workspaces": WorkspaceInfo[] | null;
     "defaultWorkspace": string;
+    "pollTimeoutSeconds": number;
     "claudeBinary": string;
+
+    /**
+     * of user, project, local
+     */
+    "settingSources": string[] | null;
+    "strictMcpConfig": boolean;
+
+    /**
+     * Windows only
+     */
+    "gitBashPath": string;
+    "defaultModel": string;
+    "defaultEffort": string;
     "maxConcurrentJobs": number;
     "jobTimeoutMinutes": number;
     "maxTurns": number;
+
+    /**
+     * 0 = off
+     */
+    "maxBudgetUsd": number;
+    "maxQueuePerSession": number;
+    "maxOutputBytes": number;
+    "maxChildRssMb": number;
+    "bgWaitCeilingMs": number;
+
+    /**
+     * folders, in order
+     */
+    "childPath": string[] | null;
+
+    /**
+     * what "Reset to default" gives
+     */
+    "childPathDefault": string[] | null;
+    "extraDisallowedTools": string[] | null;
+
+    /**
+     * BuiltinDenied is what every job on this OS is denied before any rule
+     * of a workspace (read-only).
+     */
+    "builtinDenied": string[] | null;
     "automationEnabled": boolean;
     "screenControl": boolean;
     "camera": boolean;
@@ -387,34 +451,60 @@ export interface SettingsInfo {
     "openUrls": boolean;
     "browserApp": string;
     "shutdownCommand": boolean;
+    "stateDir": string;
+    "logDir": string;
     "logLevel": string;
     "jobsDays": number;
     "jobEventsDays": number;
     "auditDays": number;
+    "processedUpdatesDays": number;
     "restartPending": boolean;
+
+    /**
+     * Invalid is set by the app when it read the file itself (the worker is
+     * down) and the file does not pass validation: the reason.
+     */
+    "invalid"?: string;
 }
 
 /**
  * SettingsPatch changes settings; nil fields are left alone. Changes to
- * config.json take effect after the worker restarts.
+ * the settings take effect after the worker restarts.
  */
 export interface SettingsPatch {
+    "pollTimeoutSeconds"?: number | null;
+    "claudeBinary"?: string | null;
+    "settingSources"?: string[] | null;
+    "strictMcpConfig"?: boolean | null;
+    "gitBashPath"?: string | null;
     "maxConcurrentJobs"?: number | null;
     "jobTimeoutMinutes"?: number | null;
     "maxTurns"?: number | null;
+    "maxBudgetUsd"?: number | null;
+    "maxQueuePerSession"?: number | null;
+    "maxOutputBytes"?: number | null;
+    "maxChildRssMb"?: number | null;
+    "bgWaitCeilingMs"?: number | null;
+    "childPath"?: string[] | null;
+    "extraDisallowedTools"?: string[] | null;
     "automationEnabled"?: boolean | null;
     "screenControl"?: boolean | null;
     "camera"?: boolean | null;
     "openUrls"?: boolean | null;
     "browserApp"?: string | null;
     "shutdownCommand"?: boolean | null;
+    "stateDir"?: string | null;
+    "logDir"?: string | null;
     "logLevel"?: string | null;
     "jobsDays"?: number | null;
     "jobEventsDays"?: number | null;
     "auditDays"?: number | null;
+    "processedUpdatesDays"?: number | null;
     "addWorkspace"?: WorkspaceInfo | null;
     "removeWorkspace"?: string;
+    "renameWorkspace"?: RenameParams | null;
     "workspaceModes"?: { [_ in string]?: string } | null;
+    "workspaceRules"?: { [_ in string]?: WorkspaceRulesPatch } | null;
 }
 
 /**
@@ -518,5 +608,20 @@ export interface WorkspaceInfo {
     "defaultMode": string;
     "allowedCommands": string[] | null;
     "deniedCommands": string[] | null;
+
+    /**
+     * IKnowWhatIAmDoing drops the minimum deny rules check for this workspace.
+     */
+    "iKnowWhatIAmDoing": boolean;
     "isDefault": boolean;
+}
+
+/**
+ * WorkspaceRulesPatch replaces a workspace's command rules; nil fields are
+ * left alone.
+ */
+export interface WorkspaceRulesPatch {
+    "allowed"?: string[] | null;
+    "denied"?: string[] | null;
+    "iKnowWhatIAmDoing"?: boolean | null;
 }

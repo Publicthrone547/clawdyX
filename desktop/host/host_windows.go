@@ -106,3 +106,6 @@ func OpenFolder(p string) error {
 
 // TrayAvailable: the Windows notification area always exists.
 func TrayAvailable() bool { return true }
+
+// InstalledBrowsers: /open uses the default browser here; there is no choice.
+func InstalledBrowsers() []string { return []string{} }

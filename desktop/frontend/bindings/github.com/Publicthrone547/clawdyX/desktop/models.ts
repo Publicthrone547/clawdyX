@@ -3,6 +3,9 @@
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as control$0 from "../internal/control/models.js";
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as platform$0 from "../internal/platform/models.js";
 
 /**
@@ -73,6 +76,18 @@ export interface FolderCheck {
     "ok": boolean;
     "error"?: string;
     "warning"?: string;
+}
+
+/**
+ * ImportPreview is a settings file chosen for import and what it changes.
+ */
+export interface ImportPreview {
+    /**
+     * home-relative, for display
+     */
+    "file": string;
+    "json": string;
+    "result": control$0.SettingsImportResult;
 }
 
 /**

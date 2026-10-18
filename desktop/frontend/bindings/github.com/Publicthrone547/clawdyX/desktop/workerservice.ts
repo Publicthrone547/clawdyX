@@ -107,6 +107,10 @@ export function Processes(): $CancellablePromise<control$0.ProcessesInfo> {
     return $Call.ByID(1818222492);
 }
 
+export function ResetSettings(section: string): $CancellablePromise<control$0.SettingsInfo> {
+    return $Call.ByID(1940404967, section);
+}
+
 export function RestartWorker(): $CancellablePromise<void> {
     return $Call.ByID(1969646500);
 }

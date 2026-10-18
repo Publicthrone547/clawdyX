@@ -99,3 +99,22 @@ func OpenFolder(p string) error { return exec.Command("/usr/bin/open", p).Run() 
 
 // TrayAvailable: the macOS menu bar always exists.
 func TrayAvailable() bool { return true }
+
+// knownBrowsers are browser applications /open can name on macOS.
+var knownBrowsers = []string{"Safari", "Firefox", "Google Chrome", "Brave Browser", "Arc", "Microsoft Edge", "Opera", "Vivaldi", "Chromium", "Orion", "Zen", "DuckDuckGo"}
+
+// InstalledBrowsers lists the known browsers found in /Applications or
+// ~/Applications (for the /open browser picker).
+func InstalledBrowsers() []string {
+	home, _ := os.UserHomeDir()
+	out := []string{}
+	for _, b := range knownBrowsers {
+		for _, dir := range []string{"/Applications", filepath.Join(home, "Applications")} {
+			if st, err := os.Stat(filepath.Join(dir, b+".app")); err == nil && st.IsDir() {
+				out = append(out, b)
+				break
+			}
+		}
+	}
+	return out
+}

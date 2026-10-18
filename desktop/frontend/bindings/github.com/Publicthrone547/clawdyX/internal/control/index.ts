@@ -24,11 +24,13 @@ export type {
     ModelsInfo,
     ProcessRow,
     ProcessesInfo,
+    RenameParams,
     ScreenStatus,
     ScreensInfo,
     SessionInfo,
     SessionResult,
     SettingResult,
+    SettingsImportResult,
     SettingsInfo,
     SettingsPatch,
     Status,
@@ -37,5 +39,6 @@ export type {
     TelegramStatus,
     TokenStatus,
     TokenTestResult,
-    WorkspaceInfo
+    WorkspaceInfo,
+    WorkspaceRulesPatch
 } from "./models.js";

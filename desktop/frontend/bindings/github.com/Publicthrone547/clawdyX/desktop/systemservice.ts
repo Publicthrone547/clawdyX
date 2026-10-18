@@ -14,7 +14,18 @@ import { Call as $Call, CancellablePromise as $CancellablePromise } from "@wails
 
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore: Unused imports
+import * as control$0 from "../internal/control/models.js";
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore: Unused imports
 import * as $models from "./models.js";
+
+/**
+ * ApplyImport replaces the settings with a previewed file.
+ */
+export function ApplyImport(jsonDoc: string, allowOwnerChange: boolean): $CancellablePromise<control$0.SettingsImportResult> {
+    return $Call.ByID(1525818473, jsonDoc, allowOwnerChange);
+}
 
 /**
  * CheckForUpdate asks GitHub for the latest published release. It runs only
@@ -25,12 +36,56 @@ export function CheckForUpdate(): $CancellablePromise<$models.UpdateInfo> {
 }
 
 /**
+ * ChooseFile shows a file picker and returns the chosen path ("" when cancelled).
+ */
+export function ChooseFile(title: string): $CancellablePromise<string> {
+    return $Call.ByID(1504686479, title);
+}
+
+/**
+ * ChooseFolder shows a folder picker and returns the chosen path ("" when cancelled).
+ */
+export function ChooseFolder(title: string): $CancellablePromise<string> {
+    return $Call.ByID(400823017, title);
+}
+
+/**
+ * ChooseImport asks for a settings file and previews its changes (nothing
+ * is changed yet). An empty File means the dialog was cancelled.
+ */
+export function ChooseImport(): $CancellablePromise<$models.ImportPreview> {
+    return $Call.ByID(3823135056);
+}
+
+/**
+ * DetectClaude finds the claude CLI (for Settings → Claude Code → Detect).
+ */
+export function DetectClaude(): $CancellablePromise<string> {
+    return $Call.ByID(1451943117);
+}
+
+/**
+ * DetectGitBash finds Git for Windows' bash.exe ("" elsewhere or when missing).
+ */
+export function DetectGitBash(): $CancellablePromise<string> {
+    return $Call.ByID(318890431);
+}
+
+/**
  * DiagnosticBundle builds a sanitized text report for preview: worker
  * status, diagnostics, settings and the log tail. Tokens are redacted, home
  * paths shortened, and Telegram IDs removed unless includeIDs.
  */
 export function DiagnosticBundle(includeIDs: boolean): $CancellablePromise<string> {
     return $Call.ByID(2197267719, includeIDs);
+}
+
+/**
+ * ExportSettings asks where to save the settings and writes them (0600).
+ * The file never contains the bot token.
+ */
+export function ExportSettings(): $CancellablePromise<string> {
+    return $Call.ByID(4269085475);
 }
 
 /**
@@ -45,6 +100,14 @@ export function Info(): $CancellablePromise<$models.AppInfo> {
  */
 export function InstallService(): $CancellablePromise<string> {
     return $Call.ByID(1226114166);
+}
+
+/**
+ * InstalledBrowsers lists the browsers /open can use (macOS; elsewhere
+ * /open uses the default browser and the list is empty).
+ */
+export function InstalledBrowsers(): $CancellablePromise<string[] | null> {
+    return $Call.ByID(562577567);
 }
 
 /**
@@ -80,6 +143,14 @@ export function RequestScreenAccess(): $CancellablePromise<void> {
 }
 
 /**
+ * ResetSettingsOffline resets a section of the settings file while the
+ * worker is down.
+ */
+export function ResetSettingsOffline(section: string): $CancellablePromise<control$0.SettingsInfo> {
+    return $Call.ByID(3252226109, section);
+}
+
+/**
  * RestartService restarts the worker process.
  */
 export function RestartService(): $CancellablePromise<string> {
@@ -112,6 +183,22 @@ export function Service(): $CancellablePromise<$models.ServiceInfo> {
  */
 export function SetLaunchAtLogin(on: boolean): $CancellablePromise<boolean> {
     return $Call.ByID(3600067299, on);
+}
+
+/**
+ * SetSettingsOffline changes the settings file while the worker is down.
+ * Removing or renaming a workspace needs the worker (it knows the sessions).
+ */
+export function SetSettingsOffline(p: control$0.SettingsPatch): $CancellablePromise<control$0.SettingsInfo> {
+    return $Call.ByID(1929997984, p);
+}
+
+/**
+ * SettingsOffline reads the settings file while the worker is down;
+ * Invalid says why the worker would refuse it.
+ */
+export function SettingsOffline(): $CancellablePromise<control$0.SettingsInfo> {
+    return $Call.ByID(2121874480);
 }
 
 /**

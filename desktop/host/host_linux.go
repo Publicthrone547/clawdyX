@@ -121,3 +121,6 @@ func TrayAvailable() bool {
 	err = conn.BusObject().Call("org.freedesktop.DBus.NameHasOwner", 0, "org.kde.StatusNotifierWatcher").Store(&has)
 	return err == nil && has
 }
+
+// InstalledBrowsers: /open uses the default browser here; there is no choice.
+func InstalledBrowsers() []string { return []string{} }
