@@ -19,10 +19,11 @@ import Monitors from "../views/Monitors.vue";
 import Settings from "../views/Settings.vue";
 import Diagnostics from "../views/Diagnostics.vue";
 import Wizard from "../views/Wizard.vue";
+import Help from "../views/Help.vue";
 import App from "../App.vue";
 import Rules from "../views/settings/Rules.vue";
 
-const views: Record<string, unknown> = { Overview, Telegram, Sessions, Jobs, Monitors, Settings, Diagnostics, Wizard };
+const views: Record<string, unknown> = { Overview, Telegram, Sessions, Jobs, Monitors, Settings, Diagnostics, Wizard, Help };
 
 /** visible collects the text and the labels people see or hear. */
 function visible(w: VueWrapper): string {

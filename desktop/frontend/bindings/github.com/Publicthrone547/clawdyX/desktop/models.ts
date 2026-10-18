@@ -79,6 +79,23 @@ export interface FolderCheck {
 }
 
 /**
+ * HelpPage is one rendered topic.
+ */
+export interface HelpPage {
+    "id": string;
+    "title": string;
+    "html": string;
+}
+
+/**
+ * HelpTopic is one entry of the Help screen's list.
+ */
+export interface HelpTopic {
+    "id": string;
+    "title": string;
+}
+
+/**
  * ImportPreview is a settings file chosen for import and what it changes.
  */
 export interface ImportPreview {

@@ -4,7 +4,7 @@
 # (tests, path helpers, the string "config.json" itself, comments), and
 # ARCHITECTURE.md documents the file format on purpose.
 set -eu
-hits=$(git grep -nI 'config\.json' -- internal cmd desktop/*.go desktop/host desktop/frontend/src README.md docs \
+hits=$(git grep -nI 'config\.json' -- internal cmd desktop/*.go desktop/host desktop/frontend/src desktop/help README.md docs \
 	| grep -v -E '_test\.go:|desktop/frontend/src/__tests__/|DefaultPath|StandardPath|legacyConfigPath|"config\.json"|//[^"]*config\.json|^docs/ARCHITECTURE\.md:' \
 	| grep -iE 'edit config.json|in (~/.config/clawdyx/)?config.json' || true)
 if [ -n "$hits" ]; then

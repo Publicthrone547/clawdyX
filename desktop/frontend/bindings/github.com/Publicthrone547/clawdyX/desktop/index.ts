@@ -17,6 +17,8 @@ export type {
     FinishParams,
     FinishResult,
     FolderCheck,
+    HelpPage,
+    HelpTopic,
     ImportPreview,
     PlatformInfo,
     ServiceInfo,

@@ -97,6 +97,20 @@ export function HasLink(key: string): $CancellablePromise<boolean> {
 }
 
 /**
+ * Help renders one Help topic for this computer.
+ */
+export function Help(topic: string): $CancellablePromise<$models.HelpPage> {
+    return $Call.ByID(3211620291, topic);
+}
+
+/**
+ * HelpTopics lists the Help screen's topics.
+ */
+export function HelpTopics(): $CancellablePromise<$models.HelpTopic[] | null> {
+    return $Call.ByID(1559950519);
+}
+
+/**
  * Info returns paths and app settings.
  */
 export function Info(): $CancellablePromise<$models.AppInfo> {

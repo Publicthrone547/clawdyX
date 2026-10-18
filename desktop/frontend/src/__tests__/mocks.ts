@@ -48,6 +48,8 @@ export const fixtures: Record<string, any> = {
   Service: { installed: true, loaded: true, pid: 42, binary: "~/clawdyx", appWorker: "~/clawdyx", usesAppWorker: true, inBundle: true },
   InstalledBrowsers: ["Firefox"],
   HasLink: true,
+  HelpTopics: [{ id: "getting-started", title: "Getting started" }, { id: "terminal", title: "Terminal setup" }],
+  Help: { id: "getting-started", title: "Getting started", html: "<h1>Getting started</h1><p>The bot runs in a small background worker. See <a href=\"help:terminal\">Terminal setup</a> or <a href=\"open:releases\">the release page</a>.</p>" },
   State: { configExists: false, tokenStored: false, workerFound: true, claudeBinary: "/bin/claude", browser: "Firefox", suggestFolder: "/work", configPath: "~/cfg/config.json" },
 };
 

@@ -6,6 +6,7 @@ require (
 	github.com/Publicthrone547/clawdyX v0.0.0
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/wailsapp/wails/v3 v3.0.0-beta.30
+	github.com/yuin/goldmark v1.7.16
 	golang.org/x/sys v0.49.0
 )
 

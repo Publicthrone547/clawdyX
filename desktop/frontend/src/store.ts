@@ -2,7 +2,7 @@ import { reactive } from "vue";
 import { Events } from "@wailsio/runtime";
 import { Worker, System, Setup, errMsg, type Status, type D } from "./api";
 
-export type View = "overview" | "telegram" | "sessions" | "jobs" | "monitors" | "settings" | "diagnostics";
+export type View = "overview" | "telegram" | "sessions" | "jobs" | "monitors" | "settings" | "diagnostics" | "help";
 
 export interface Toast {
   id: number;
@@ -45,6 +45,8 @@ export const store = reactive({
   appVersion: "",
   // The OS and its words (see platform.ts); null until known.
   platform: null as D.PlatformInfo | null,
+  // The Help topic shown last, so Help reopens where it was.
+  helpTopic: "",
 });
 
 let nextToast = 1;

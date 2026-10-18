@@ -296,7 +296,7 @@ export interface RenameParams {
  */
 export interface ScreenStatus {
     /**
-     * desktop.screen_control in config.json
+     * the screen_control setting
      */
     "configured": boolean;
 

@@ -15,6 +15,7 @@ const Monitors = defineAsyncComponent(() => import("./views/Monitors.vue"));
 const Settings = defineAsyncComponent(() => import("./views/Settings.vue"));
 const Diagnostics = defineAsyncComponent(() => import("./views/Diagnostics.vue"));
 const Wizard = defineAsyncComponent(() => import("./views/Wizard.vue"));
+const Help = defineAsyncComponent(() => import("./views/Help.vue"));
 
 const nav: { id: View; label: string; key: string }[] = [
   { id: "overview", label: "Overview", key: "1" },
@@ -24,8 +25,9 @@ const nav: { id: View; label: string; key: string }[] = [
   { id: "monitors", label: "Monitors", key: "5" },
   { id: "settings", label: "Settings", key: "6" },
   { id: "diagnostics", label: "Diagnostics", key: "7" },
+  { id: "help", label: "Help", key: "8" },
 ];
-const views: Record<View, unknown> = { overview: Overview, telegram: Telegram, sessions: Sessions, jobs: Jobs, monitors: Monitors, settings: Settings, diagnostics: Diagnostics };
+const views: Record<View, unknown> = { overview: Overview, telegram: Telegram, sessions: Sessions, jobs: Jobs, monitors: Monitors, settings: Settings, diagnostics: Diagnostics, help: Help };
 
 const needsSetup = computed(() => store.ready && store.setup !== null && (!store.setup.configExists || !store.setup.tokenStored));
 const botState = computed(() => (store.connection.connected ? store.status?.bot.state : undefined));
@@ -33,6 +35,14 @@ const botState = computed(() => (store.connection.connected ? store.status?.bot.
 // Shortcuts use ⌘ on macOS and Ctrl elsewhere; with the other modifier or
 // Alt the key is not ours.
 function onKey(e: KeyboardEvent) {
+  // "?" opens Help, unless it is typed into a field.
+  const t = e.target as HTMLElement | null;
+  const typing = !!t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+  if (e.key === "?" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    store.view = "help";
+    e.preventDefault();
+    return;
+  }
   const mod = isMac.value ? e.metaKey : e.ctrlKey;
   const other = isMac.value ? e.ctrlKey : e.metaKey;
   if (!mod || other || e.altKey) return;
@@ -87,7 +97,7 @@ const shortcut = (k: string) => (isMac.value ? words.value.shortcutMod + k : (wo
           </button>
         </li>
       </ul>
-      <div class="mt-auto px-4 text-xs text-muted">{{ shortcut("1") }}–7 switch · {{ shortcut("R") }} refresh</div>
+      <div class="mt-auto px-4 text-xs text-muted">{{ shortcut("1") }}–8 switch · {{ shortcut("R") }} refresh · ? help</div>
     </nav>
     <main class="min-w-0 flex-1">
       <div v-if="!store.ready" class="flex h-full items-center justify-center text-muted">Loading…</div>
