@@ -32,13 +32,16 @@ import (
 var version = "0.4.1"
 
 const (
-	exitOK       = 0
-	exitError    = 1
-	exitConfig   = 2
-	exitLocked   = 3
-	exitRestart  = 75
-	serviceLabel = "local.clawdyx"
+	exitOK      = 0
+	exitError   = 1
+	exitConfig  = 2
+	exitLocked  = 3
+	exitRestart = 75
 )
+
+// serviceLabel names the login entry (CLAWDYX_SERVICE_LABEL lets a test
+// instance use its own).
+var serviceLabel = config.ServiceLabel()
 
 func usage() {
 	fmt.Fprintf(os.Stderr, `clawdyx %s — Telegram control plane for the local Claude Code CLI
@@ -48,7 +51,7 @@ Usage:
   clawdyx run                       run the bot in the foreground (Ctrl-C stops it)
   clawdyx service start|stop|restart|status
                                     background service that also starts at login
-                                    (macOS: LaunchAgent; Windows: detached process + login entry)
+                                    (on this system: a %s)
   clawdyx check                     validate config, token, CLI, auth and Telegram (read-only)
   clawdyx service uninstall [--purge-state]
   clawdyx backup                    write a consistent copy of the state database
@@ -59,7 +62,7 @@ Usage:
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
 Setup flags (optional, for scripts): -owner-id N -workspace DIR -browser NAME -claude-binary PATH
                                      -token-stdin -token-file -migrate-token -force -no-check -yes
-`, version, config.DefaultPath(), config.DefaultEnvPath())
+`, version, platform.W.ServiceKind, config.DefaultPath(), config.DefaultEnvPath())
 }
 
 func main() {
@@ -89,6 +92,13 @@ func main() {
 		sub, rest = rest[0], rest[1:]
 	}
 	_ = fs.Parse(rest)
+	// The token file belongs to the config file: a -config of its own (a
+	// test instance, the supervisor's worker) never reads another's .env.
+	envSet := false
+	fs.Visit(func(f *flag.Flag) { envSet = envSet || f.Name == "env" })
+	if !envSet {
+		*envPath = config.EnvPathFor(*cfgPath)
+	}
 
 	switch cmd {
 	case "setup":

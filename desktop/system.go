@@ -17,7 +17,9 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 )
 
-const serviceLabel = "local.clawdyx"
+// serviceLabel names the login entry (CLAWDYX_SERVICE_LABEL lets a test
+// instance use its own).
+var serviceLabel = config.ServiceLabel()
 
 // ServiceInfo describes the background worker's LaunchAgent.
 type ServiceInfo struct {

@@ -54,9 +54,10 @@ dmg: app ## build bin/clawdyX-$(VERSION).dmg for installing by drag and drop
 	rm -rf bin/dmg && ls -lh bin/clawdyX-$(VERSION).dmg
 
 ## Windows (cross-compiled from this Mac; no CGO, no extra toolchain)
-build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX.exe (app) + helpers/clawdyx.exe (worker)
+build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX.exe (app), helpers/clawdyx.exe (worker), helpers/clawdyxw.exe (login launcher)
 	rm -rf bin/windows && mkdir -p $(WINDIR)/helpers
 	$(WINENV) go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyx.exe ./cmd/clawdyx
+	$(WINENV) go build -trimpath -ldflags="-H windowsgui -X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyxw.exe ./cmd/clawdyxw
 	@if command -v wails3 >/dev/null; then \
 		sed 's/__VERSION__/$(VERSION)/g' desktop/build/windows/info.json > bin/windows/info.json && \
 		wails3 generate syso -arch amd64 -icon desktop/build/windows/icon.ico -manifest desktop/build/windows/clawdyX.exe.manifest \
@@ -65,7 +66,7 @@ build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX
 	cd desktop && $(WINENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version=$(VERSION)" -o ../$(WINDIR)/clawdyX.exe .
 	rm -f desktop/rsrc_windows_amd64.syso bin/windows/info.json
 	cp LICENSE THIRD_PARTY_NOTICES.md README.md $(WINDIR)/
-	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe
+	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe $(WINDIR)/helpers/clawdyxw.exe
 
 vet-windows: ## type-check everything (including tests) for Windows
 	$(WINENV) go vet $(PKG)

@@ -25,7 +25,8 @@ const screenSupported = false
 var errScreenUnsupported = errors.New("screen capture is not supported on Windows yet (macOS only)")
 
 // serviceStatus reports the worker's login entry (HKCU Run value written by
-// `clawdyx service start`) and the running worker's pid.
+// `clawdyx service start`) and the running worker's pid. The entry runs the
+// login launcher clawdyxw.exe; the worker is the clawdyx.exe next to it.
 func serviceStatus() (installed, loaded bool, pid int, prog string) {
 	if k, err := registry.OpenKey(registry.CURRENT_USER, `Software\Microsoft\Windows\CurrentVersion\Run`, registry.QUERY_VALUE); err == nil {
 		if v, _, err := k.GetStringValue(serviceLabel); err == nil {
@@ -33,6 +34,9 @@ func serviceStatus() (installed, loaded bool, pid int, prog string) {
 			if strings.HasPrefix(v, `"`) {
 				if i := strings.Index(v[1:], `"`); i >= 0 {
 					prog = v[1 : 1+i]
+					if strings.EqualFold(filepath.Base(prog), "clawdyxw.exe") {
+						prog = filepath.Join(filepath.Dir(prog), "clawdyx.exe")
+					}
 				}
 			}
 		}

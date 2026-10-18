@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -10,14 +9,14 @@ import (
 
 	"golang.org/x/sys/windows/registry"
 
-	"github.com/Publicthrone547/clawdyX/internal/agent"
 	"github.com/Publicthrone547/clawdyX/internal/config"
-	"github.com/Publicthrone547/clawdyX/internal/control"
 )
 
-// On Windows the background worker is a detached `clawdyx run` process,
+// On Windows the background worker runs under the supervisor
+// (`clawdyx service supervise`), which restarts it after a crash. It is
 // started now by `service start` and at every login from the per-user Run
-// key (no administrator rights needed). It replaces the LaunchAgent.
+// key through clawdyxw.exe, a GUI program, so no console window flashes
+// (no administrator rights needed). It replaces the LaunchAgent.
 const runKeyPath = `Software\Microsoft\Windows\CurrentVersion\Run`
 
 func runValue() (string, bool) {
@@ -51,36 +50,10 @@ func deleteRunValue() error {
 	return nil
 }
 
-// stopWorker asks the worker to exit cleanly (worker.stop over the control
-// socket) and waits for the state lock; after 40 s it ends the worker's
-// process tree.
-func stopWorker(cfg *config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	if c, err := control.Dial(ctx, cfg.ControlSocket()); err == nil {
-		_ = c.Call(ctx, "worker.stop", nil, nil)
-		c.Close()
-	}
-	cancel()
-	for i := 0; i < 160; i++ {
-		if !lockHeld(cfg) {
-			return nil
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	if pid := readPID(cfg.StateDir); pid > 0 && agent.ProcessComm(pid) == "clawdyx" {
-		_ = agent.KillGroup(pid, true)
-		for i := 0; i < 20 && lockHeld(cfg); i++ {
-			time.Sleep(250 * time.Millisecond)
-		}
-	}
-	if lockHeld(cfg) {
-		return errors.New("the worker did not stop; end clawdyx.exe in Task Manager")
-	}
-	return nil
-}
-
 func service(sub, cfgPath string, purge bool) int {
 	switch sub {
+	case "supervise":
+		return supervise(cfgPath)
 	case "start", "install", "restart":
 		cfg, err := loadConfigOnly(cfgPath)
 		if err != nil {
@@ -89,13 +62,14 @@ func service(sub, cfgPath string, purge bool) int {
 			return exitConfig
 		}
 		_, registered := runValue()
-		if lockHeld(cfg) {
-			if !registered {
+		_, supervised := supervisorAlive(cfg.StateDir)
+		if lockHeld(cfg) || supervised {
+			if !registered && !supervised {
 				fmt.Fprintln(os.Stderr, "another clawdyx is already running in the foreground (it holds", filepath.Join(cfg.StateDir, "bot.lock")+").")
 				fmt.Fprintln(os.Stderr, "Stop it with Ctrl-C in its terminal, then run this again.")
 				return exitLocked
 			}
-			if err := stopWorker(cfg); err != nil {
+			if err := stopAll(cfg); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				return exitError
 			}
@@ -116,15 +90,20 @@ func service(sub, cfgPath string, purge bool) int {
 			fmt.Fprintln(os.Stderr, err)
 			return exitError
 		}
-		if err := setRunValue(RunCommand(exe, abs)); err != nil {
+		_, lerr := os.Stat(filepath.Join(filepath.Dir(exe), launcherName))
+		if err := setRunValue(RunCommand(exe, abs, lerr == nil)); err != nil {
 			fmt.Fprintln(os.Stderr, "could not register the worker to start at login:", err)
+			fmt.Fprintf(os.Stderr, "Start it at login another way: put a shortcut to\n  %s\nin the Startup folder (Win+R, shell:startup).\n", RunCommand(exe, abs, lerr == nil))
 			return exitError
 		}
-		if err := spawnDetached(exe, "run", "-config", abs); err != nil {
+		if err := spawnDetached(exe, "service", "supervise", "-config", abs); err != nil {
 			fmt.Fprintln(os.Stderr, "could not start the worker:", err)
 			return exitError
 		}
 		fmt.Printf("service %s → %s (starts at login)\n", serviceLabel, exe)
+		if lerr != nil {
+			fmt.Printf("note: %s is not next to it; a console window may appear for a moment at login\n", launcherName)
+		}
 		verb := "started"
 		if registered && sub != "install" {
 			verb = "restarted"
@@ -137,7 +116,8 @@ func service(sub, cfgPath string, purge bool) int {
 			return exitConfig
 		}
 		_, registered := runValue()
-		if !registered {
+		_, supervised := supervisorAlive(cfg.StateDir)
+		if !registered && !supervised {
 			fmt.Println("not installed as a background service; nothing to stop. (A foreground `clawdyx run` is stopped with Ctrl-C.)")
 			return exitOK
 		}
@@ -145,7 +125,7 @@ func service(sub, cfgPath string, purge bool) int {
 			fmt.Fprintln(os.Stderr, err)
 			return exitError
 		}
-		if err := stopWorker(cfg); err != nil {
+		if err := stopAll(cfg); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return exitError
 		}
@@ -157,10 +137,12 @@ func service(sub, cfgPath string, purge bool) int {
 			return exitError
 		}
 		cfg, err := loadConfigOnly(cfgPath)
-		if err == nil && lockHeld(cfg) {
-			if err := stopWorker(cfg); err != nil {
-				fmt.Fprintln(os.Stderr, err)
-				return exitError
+		if err == nil {
+			if _, supervised := supervisorAlive(cfg.StateDir); supervised || lockHeld(cfg) {
+				if err := stopAll(cfg); err != nil {
+					fmt.Fprintln(os.Stderr, err)
+					return exitError
+				}
 			}
 		}
 		fmt.Println("removed the login entry", `HKCU\`+runKeyPath+`\`+serviceLabel)
@@ -179,7 +161,7 @@ func service(sub, cfgPath string, purge bool) int {
 		}
 		return exitOK
 	case "where":
-		// Prints the executable the login entry runs (for the desktop app).
+		// Prints the worker executable the login entry runs (for the desktop app).
 		v, ok := runValue()
 		if p := runProgram(v); ok && p != "" {
 			fmt.Println(p)
@@ -195,9 +177,16 @@ func service(sub, cfgPath string, purge bool) int {
 		}
 		_, registered := runValue()
 		running := lockHeld(cfg)
+		spid, supervised := supervisorAlive(cfg.StateDir)
 		switch {
-		case running && registered:
-			fmt.Printf("running in the background (pid %d), starts at login\n", readPID(cfg.StateDir))
+		case running && supervised:
+			fmt.Printf("running in the background (supervisor pid %d, worker pid %d)", spid, readPID(cfg.StateDir))
+			if registered {
+				fmt.Print(", starts at login")
+			}
+			fmt.Println()
+		case supervised:
+			fmt.Printf("the supervisor (pid %d) is starting the worker again; check %s\n", spid, cfg.LogDir)
 		case running:
 			fmt.Println("running in the foreground (not as a background service)")
 		case registered:
@@ -225,7 +214,7 @@ func service(sub, cfgPath string, purge bool) int {
 // report waits briefly for the worker to take the state lock.
 func report(cfg *config.Config, verb string) int {
 	pid := 0
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 30; i++ {
 		time.Sleep(300 * time.Millisecond)
 		if lockHeld(cfg) {
 			if pid = readPID(cfg.StateDir); pid > 0 {
@@ -233,8 +222,17 @@ func report(cfg *config.Config, verb string) int {
 			}
 		}
 	}
+	if pid > 0 {
+		// A worker that cannot start (no network, a rejected token) exits
+		// within a second; the supervisor keeps trying.
+		time.Sleep(1500 * time.Millisecond)
+		if !lockHeld(cfg) {
+			fmt.Printf("%s, but the worker stopped again at once; the supervisor keeps trying. Check %s (bot.log, supervisor.log)\n", verb, cfg.LogDir)
+			return exitError
+		}
+	}
 	if pid == 0 {
-		fmt.Printf("%s, but no process is running yet. Check %s (bot.log, stderr.log)\n", verb, cfg.LogDir)
+		fmt.Printf("%s, but no process is running yet. Check %s (bot.log, supervisor.log, stderr.log)\n", verb, cfg.LogDir)
 		return exitError
 	}
 	fmt.Printf("%s (pid %d). logs: %s · stop: clawdyx service stop · status: clawdyx service status\n", verb, pid, cfg.LogDir)

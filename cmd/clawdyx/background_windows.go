@@ -5,8 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"syscall"
 	"unsafe"
 
@@ -44,29 +42,12 @@ func detachConsole(logDir string) bool {
 	return true
 }
 
-func pidPath(stateDir string) string { return filepath.Join(stateDir, "worker.pid") }
-
-// writePID records the running worker for `clawdyx service status|stop`.
-func writePID(stateDir string) func() {
-	p := pidPath(stateDir)
-	_ = os.WriteFile(p, []byte(strconv.Itoa(os.Getpid())), 0o600)
-	return func() { _ = os.Remove(p) }
-}
-
-func readPID(stateDir string) int {
-	b, err := os.ReadFile(pidPath(stateDir))
-	if err != nil {
-		return 0
-	}
-	pid, _ := strconv.Atoi(strings.TrimSpace(string(b)))
-	return pid
-}
-
-// relaunch replaces launchd's KeepAlive: a background worker that stopped
-// for a restart (exitRestart) starts a fresh copy of itself. The state lock
-// is already released when this runs.
+// relaunch: a background worker that stopped for a restart (exitRestart)
+// starts a fresh copy of itself, unless the supervisor started it (the
+// supervisor restarts it then). The state lock is already released when
+// this runs.
 func relaunch(code int, background bool) int {
-	if code != exitRestart || !background {
+	if code != exitRestart || !background || os.Getenv(supervisedEnv) != "" {
 		return code
 	}
 	exe, err := os.Executable()
