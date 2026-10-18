@@ -3,8 +3,11 @@ GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
 VERSION := 0.3.3
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
+WINENV  := GOOS=windows GOARCH=amd64 CGO_ENABLED=0
+WINDIR  := bin/windows/clawdyX
+REL     := bin/release-$(VERSION)
 
-.PHONY: check-all app dmg helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all app dmg build-windows vet-windows release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -50,6 +53,34 @@ dmg: app ## build bin/clawdyX-$(VERSION).dmg for installing by drag and drop
 	hdiutil create -volname clawdyX -srcfolder bin/dmg -ov -format UDZO bin/clawdyX-$(VERSION).dmg >/dev/null
 	rm -rf bin/dmg && ls -lh bin/clawdyX-$(VERSION).dmg
 
+## Windows (cross-compiled from this Mac; no CGO, no extra toolchain)
+build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX.exe (app) + helpers/clawdyx.exe (worker)
+	rm -rf bin/windows && mkdir -p $(WINDIR)/helpers
+	$(WINENV) go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyx.exe ./cmd/clawdyx
+	@if command -v wails3 >/dev/null; then \
+		sed 's/__VERSION__/$(VERSION)/g' desktop/build/windows/info.json > bin/windows/info.json && \
+		wails3 generate syso -arch amd64 -icon desktop/build/windows/icon.ico -manifest desktop/build/windows/clawdyX.exe.manifest \
+			-info bin/windows/info.json -out desktop/rsrc_windows_amd64.syso >/dev/null; \
+	else echo "note: wails3 not installed; clawdyX.exe gets no icon or manifest (see make bindings)"; fi
+	cd desktop && $(WINENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version=$(VERSION)" -o ../$(WINDIR)/clawdyX.exe .
+	rm -f desktop/rsrc_windows_amd64.syso bin/windows/info.json
+	cp LICENSE THIRD_PARTY_NOTICES.md README.md $(WINDIR)/
+	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe
+
+vet-windows: ## type-check everything (including tests) for Windows
+	$(WINENV) go vet $(PKG)
+	cd desktop && $(WINENV) go vet ./...
+
+## Release
+release: check-all dmg build-windows ## build every release file into bin/release-$(VERSION) with SHA256SUMS
+	rm -rf $(REL) bin/tar && mkdir -p $(REL) bin/tar/clawdyx-$(VERSION)-darwin-arm64
+	cp bin/clawdyx LICENSE THIRD_PARTY_NOTICES.md README.md bin/tar/clawdyx-$(VERSION)-darwin-arm64/
+	tar -C bin/tar -czf $(REL)/clawdyx-$(VERSION)-darwin-arm64.tar.gz clawdyx-$(VERSION)-darwin-arm64
+	cp bin/clawdyX-$(VERSION).dmg $(REL)/
+	cd bin/windows && rm -f ../../$(REL)/clawdyX-$(VERSION)-windows-amd64.zip && zip -qr -X ../../$(REL)/clawdyX-$(VERSION)-windows-amd64.zip clawdyX
+	rm -rf bin/tar
+	cd $(REL) && shasum -a 256 *.dmg *.tar.gz *.zip > SHA256SUMS && cat SHA256SUMS
+
 helper:
 	swiftc -O -parse-as-library -target $$(uname -m)-apple-macos14.0 desktop/helper/main.swift -o bin/clawdyx-screenshot
 
@@ -89,7 +120,7 @@ check-secrets:
 
 check: lint test check-secrets
 
-check-all: check test-desktop ## everything, including the desktop app's tests
+check-all: check test-desktop vet-windows ## everything, including the desktop app's tests and the Windows type check
 
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh
@@ -109,4 +140,4 @@ identities: ## list code-signing identities usable for CLAWDYX_SIGN_IDENTITY
 	@security find-identity -v -p codesigning
 
 clean:
-	rm -rf bin coverage.out desktop/frontend/dist
+	rm -rf bin coverage.out desktop/frontend/dist desktop/*.syso

@@ -37,3 +37,4 @@ desktop/frontend/dist/
 *.dmg
 *.app/
 desktop/desktop
+desktop/*.syso
