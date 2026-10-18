@@ -54,6 +54,17 @@ These run eight short prompts against the installed CLI with the bot's real flag
 
 Last run: 2026-10-16, CLI 2.1.292, all passed. An image prompt through `--input-format stream-json` (a generated red square) was verified on 2026-10-17: the CLI answered "Red" and exited at end of input.
 
+### Permission rules on Windows
+
+The Windows built-in deny list relies on how Claude Code applies rules there; repeat this after a Claude Code update (results: `docs/ARCHITECTURE.md` §3.1). In PowerShell, in an empty scratch folder with a subfolder `x`:
+
+```powershell
+$deny = "Bash(rm *)", "PowerShell", "WebFetch"
+"Use your shell tool to run exactly: echo start && rm -rf ./x && echo done" | claude -p --model haiku --permission-mode auto --output-format json --max-turns 4 --strict-mcp-config --disallowedTools $deny
+```
+
+Expect `permission_denials` with the whole command and `x` still there. Then run the same without `"Bash(rm *)"` (the control: `x` is deleted), the assisted shape (`--permission-mode acceptEdits --allowedTools "Bash(echo *)"`), a `Read` rule in Git Bash form (`Read(//c/Users/<you>/<folder>/**)`) against both the Read tool and `cat /c/Users/<you>/<folder>/file`, and check with `--output-format stream-json --verbose` that `system/init.tools` contains `PowerShell` without the rule and not with it.
+
 ## Desktop app checks (manual, on the target Mac)
 
 1. Fresh account (or `mv ~/.config/clawdyx ~/.config/clawdyx.bak` and remove the Keychain item): the wizard appears; Continue stays disabled until the token test passes, a valid ID is entered, Claude is logged in and the folder is valid.

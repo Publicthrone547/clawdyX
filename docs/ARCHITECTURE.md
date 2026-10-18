@@ -171,6 +171,19 @@ Legend: **V** = verified by running it on this machine on 2026-10-16; **H** = pr
 | Background work at exit | D | A `-p` run may stay open up to 10 min waiting for background tasks; `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS` caps it | Set to 60000 ms in the child env; job timeout is the hard cap |
 | Agent SDK (TS/Python) | D | "Anthropic does not allow third party developers to offer claude.ai login … Use the API key authentication methods" | Rejected for this project |
 
+### 3.1 Verified on Windows (Claude Code 2.1.302, Windows 11, 2026-10-18)
+
+The permission rules that the deny lists (Section 14, `internal/policy`) rely on, exercised with `claude -p --model haiku --strict-mcp-config --output-format json` in a scratch folder, each with a control run that differs only in the rule. The procedure is in `docs/TESTING.md` ("Permission rules on Windows").
+
+| Fact | Result | Evidence |
+| --- | --- | --- |
+| A `PowerShell` tool exists next to `Bash` (Git for Windows installed) | **V** | `system/init` lists `Bash, PowerShell`; with `--disallowedTools PowerShell` it lists `Bash` only. Without that rule PowerShell commands would bypass every `Bash(...)` rule, so the Windows built-in list removes the tool in every tier |
+| `Bash(rm *)` denies `rm` inside a chain, in `auto` mode | **V** | `echo start && rm -rf ./x && echo done` → denied, folder kept; control without the rule → the classifier ran it and `./x` was deleted; `echo start && echo done` with the rule → ran |
+| The same in the assisted shape (`acceptEdits`, `--allowedTools "Bash(echo *)"`) | **V** | `echo a && rm -rf ./x` → denied, folder kept; `echo a && echo b` → ran |
+| `Read(//c/Users/<me>/…/**)` blocks the Read tool for a Windows path | **V** | `Read` of `C:\Users\<me>\…\s.txt` → denied; control without the rule → content returned |
+| The same `Read(...)` rule also blocks `cat /c/Users/<me>/…` through Bash | **V** | denied with the rule; control without it → content returned |
+| `Bash(powershell *)` denies `powershell` inside a chain | **V (inconclusive control)** | denied with the rule; the control without it was refused by the auto-mode classifier itself, so the denial cannot be attributed to the rule alone. The rule stays (the classifier is not a guarantee) |
+
 ---
 
 ## 4. Integration strategy (architecture decision record)
