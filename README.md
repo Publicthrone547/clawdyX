@@ -153,13 +153,13 @@ Nothing is captured at startup or on a timer. Captures stay in memory for at mos
 
 ### Camera (opt-in)
 
-With `"desktop": {"camera": true}` in config.json (macOS, with the clawdyX app installed):
+Turn it on in the clawdyX app: **Settings → Features → Camera**, then restart the worker (macOS, with the clawdyX app installed). Without the app, `"desktop": {"camera": true}` in config.json does the same.
 
 - **`/cameras`** lists the cameras (built-in first). It never captures.
 - **`/camera`** sends you a photo from the built-in camera; **`/camera N`** uses camera N. **`/camera video 10`** (or `/camera 2 video 10`) records a 10-second clip **without sound** and sends it to you. Clips are 1–60 seconds; longer requests are refused.
 - The same rules as for screens: owner only, only to the private chat that asked, in memory for at most five minutes, nothing captured at startup or on a timer, every capture in the audit table (kind, camera, length, size, destination; never pixels). **`/screen off` switches the camera off too.**
 - **Claude never gets the camera:** there is no camera tool, and the bundled helper only captures when the worker starts it. See [`docs/PRIVACY.md`](docs/PRIVACY.md#camera) for the one remaining limit in the automation tier.
-- **Permission:** macOS asks once, on the Mac, whether clawdyX may use the camera (at the first `/camera`). If it was refused, the bot says so; allow it in System Settings → Privacy & Security → **Camera**. The green camera light is on while it records.
+- **Permission:** macOS asks once, on the Mac, whether clawdyX may use the camera (at the first `/camera`). If it was refused, the bot says so; allow it in System Settings → Privacy & Security → **Camera**. **Diagnostics** in the app shows the cameras found and the permission state without capturing. The green camera light is on while it records.
 - **Windows:** not supported; the commands reply that the camera is macOS only.
 
 Every job also passes `--settings` that disables bypass and auto modes and blocks file-tool reads outside the working directory. Secret locations are denied in every tier: `~/.ssh`, `~/.aws`, `~/.config`, `~/.claude`, keychains, and browser profiles. One consequence is that Claude Code's auto-memory cannot write under `~/.claude`. Claude reports those writes as denied and carries on.
