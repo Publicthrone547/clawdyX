@@ -57,6 +57,7 @@ Usage:
   clawdyx backup                    write a consistent copy of the state database
   clawdyx ctl METHOD [JSON]         call the running worker (e.g. ctl status.get, ctl bot.stop '{"cancelJobs":true}');
                                     ctl events streams events; ctl help lists methods
+  clawdyx paths [NAME]              where the settings, state and logs are (NAME: config env state logs socket)
   clawdyx version
 
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
@@ -141,6 +142,8 @@ func main() {
 		if err := srv.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {
 			os.Exit(exitError)
 		}
+	case "paths":
+		os.Exit(printPaths(os.Stdout, *cfgPath, *envPath, fs.Args()))
 	case "version", "-v", "--version":
 		fmt.Println("clawdyx", version)
 	case "help", "-h", "--help":
