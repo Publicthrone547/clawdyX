@@ -130,9 +130,10 @@ func BuildArgs(s Spec) []string {
 	return a
 }
 
-// ChildEnv builds the allowlisted environment for claude children. Secrets
-// (bot token, API keys) and nested-session markers are never forwarded.
-func ChildEnv(path string, bgWaitMS int) []string {
+// ChildEnv builds the allowlisted environment for claude children, plus
+// extra (from the settings, config.Claude.ChildEnvExtra). Secrets (bot
+// token, API keys) and nested-session markers are never forwarded.
+func ChildEnv(path string, bgWaitMS int, extra ...string) []string {
 	// Never set CLAUDE_CODE_SKIP_PROMPT_HISTORY: on CLI 2.1.292 it also stops
 	// transcripts from being written, so --resume finds no conversation.
 	env := append([]string{"PATH=" + path}, platformEnv...)
@@ -145,7 +146,8 @@ func ChildEnv(path string, bgWaitMS int) []string {
 	if bgWaitMS > 0 {
 		env = append(env, "CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS="+strconv.Itoa(bgWaitMS))
 	}
-	return env
+	// Settings win over inherited variables (exec keeps the last duplicate).
+	return append(env, extra...)
 }
 
 // ringBuffer keeps the last n bytes written.

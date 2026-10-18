@@ -196,7 +196,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 		users = []config.AllowedUser{{ID: cfg.Telegram.OwnerUserID, Role: config.RoleOwner}}
 	}
 	a.allow.Store(&users)
-	a.cli = agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}
+	a.cli = agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0, cfg.Claude.ChildEnvExtra()...), Dir: cfg.StateDir}
 	a.agents = processes.NewAgentsCache(a.cli)
 	a.streams = newStreams()
 

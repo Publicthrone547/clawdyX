@@ -156,6 +156,18 @@ type Claude struct {
 	BgWaitCeilingMS      int      `json:"bg_wait_ceiling_ms"`
 	ChildPath            string   `json:"child_path"`
 	ExtraDisallowedTools []string `json:"extra_disallowed_tools"`
+	// GitBashPath is the bash.exe of Git for Windows that Claude Code's
+	// shell tool uses (CLAUDE_CODE_GIT_BASH_PATH). Empty: Claude Code finds
+	// it. Windows only; ignored elsewhere.
+	GitBashPath string `json:"git_bash_path,omitempty"`
+}
+
+// ChildEnvExtra are the variables the config adds to every claude child.
+func (cl Claude) ChildEnvExtra() []string {
+	if cl.GitBashPath == "" || !gitBashUsed {
+		return nil
+	}
+	return []string{"CLAUDE_CODE_GIT_BASH_PATH=" + cl.GitBashPath}
 }
 
 // Workspace is an allowed project root.
@@ -587,6 +599,11 @@ func (c *Config) validate() error {
 	for _, p := range filepath.SplitList(cl.ChildPath) {
 		if !filepath.IsAbs(p) {
 			add("claude.child_path entries must be absolute (%q)", p)
+		}
+	}
+	if cl.GitBashPath != "" && gitBashUsed {
+		if err := checkGitBash(cl.GitBashPath); err != nil {
+			add("claude.git_bash_path %v", err)
 		}
 	}
 

@@ -66,3 +66,6 @@ func Executable(st os.FileInfo) bool {
 
 // pathEqual compares canonical paths; NTFS is case-insensitive.
 func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }
+
+// gitBashUsed: claude.git_bash_path matters only on Windows.
+const gitBashUsed = true

@@ -150,7 +150,7 @@ func New(cfg *config.Config, st *store.Store, sess *sessions.Service, log *slog.
 	}
 	home, _ := os.UserHomeDir()
 	m := &Manager{cfg: cfg, st: st, sess: sess, log: log, notify: n, start: start, home: home,
-		childEnv: agent.ChildEnv(cfg.Claude.ChildPath, cfg.Claude.BgWaitCeilingMS),
+		childEnv: agent.ChildEnv(cfg.Claude.ChildPath, cfg.Claude.BgWaitCeilingMS, cfg.Claude.ChildEnvExtra()...),
 		IntGrace: 10 * time.Second, TermGrace: 5 * time.Second,
 		sem:    make(chan struct{}, cfg.Claude.MaxConcurrentJobs),
 		queues: map[int64][]int64{}, waiting: map[int64]*waitState{}, starting: map[int64]*waitState{}, ready: map[int64]chan struct{}{}, prompts: map[int64]string{}, images: map[int64][]agent.Image{},

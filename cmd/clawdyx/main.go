@@ -301,7 +301,7 @@ func check(cfgPath, envPath string) int {
 		fmt.Println("       tip: clawdyx setup -migrate-token moves it into " + platform.W.TokenStore)
 	}
 	_ = os.MkdirAll(cfg.StateDir, 0o700)
-	cli := agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}
+	cli := agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0, cfg.Claude.ChildEnvExtra()...), Dir: cfg.StateDir}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	v, err := cli.Version(ctx)

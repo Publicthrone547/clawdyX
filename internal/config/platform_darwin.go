@@ -27,3 +27,6 @@ func defaultLogDir(home string) string { return filepath.Join(home, "Library", "
 // pathEqual compares canonical paths; macOS volumes are case-insensitive
 // by default.
 func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }
+
+// gitBashUsed: claude.git_bash_path matters only on Windows.
+const gitBashUsed = false
