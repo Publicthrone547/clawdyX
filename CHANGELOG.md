@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.0 — 2026-10-19
+
+clawdyX now runs on macOS, Windows and Linux with the same features, and every setting is edited in the app.
+
+- **Windows.** The bot and the desktop app are supported, not a preview: a per-user installer (`clawdyX-1.0.0-windows-amd64-setup.exe`, no administrator rights) next to the portable zip; the background worker starts at login without a console window and restarts itself after a crash; screenshots, `/screen`, `/look` and Claude's screen tools (mouse and keyboard) work on every monitor and scaling; `/cameras`, `/camera` and `/camera video` use the Media Foundation camera helper; Claude Code's Git Bash location is a setting; the Windows deny list blocks PowerShell (Claude Code's PowerShell tool included), cmd, download and system tools in every tier. Settings moved to `%APPDATA%\clawdyx` (moved automatically when the 1.0 worker starts, the token included).
+- **Linux.** New: the worker and the desktop app (`.deb`, `.rpm`, AppImage, tar.gz; amd64, and arm64 for the worker). The worker runs as a systemd user service, also on headless servers (`clawdyx setup -headless`, linger); the token goes to the system keyring, or to a private file when no keyring exists; screens and Claude's screen tools work on X11; on Wayland screenshots go through the desktop portal and input tools are not available yet; `/camera` uses V4L2, clips need `ffmpeg`. Linux has been built and tested in CI, not yet on a Linux desktop.
+- **Settings.** Every option is in the app, including Claude Code's location and setting sources, budgets, queue and output limits, the child PATH, workspace allowed/denied command lists, log and state folders and retention; reset per section or everything; export and import. The app can also edit settings while the worker is down. Nothing tells you to edit `config.json` any more.
+- **Help.** A Help screen in the app, written for the operating system you run; the bot's `/help`, `/doctor` and error replies likewise. Shortcuts are ⌘ on macOS and Ctrl elsewhere; `?` opens Help.
+- **About** shows the operating system, architecture, session, the worker service, the folders, the worker and Claude Code versions, and copies a redacted diagnostics report. The update check offers the right file for your system. Optional notifications when a job ends while the window is hidden.
+- **Security.** Built-in per-OS deny lists and secret paths apply to every workspace in every tier; existing settings keep working. Claude still never gets the camera; `/screen off` still switches every capture path off. `clawdyx token delete` removes a configuration's token.
+- **Build and release.** CI on macOS, Windows and Linux; a release workflow that builds every file on its own system with `SHA256SUMS` into a draft release; one version source (the Makefile); `THIRD_PARTY_NOTICES.md` covers all targets; winget and Scoop manifests; `CONTRIBUTING.md`.
+- **Compatibility.** Settings and the state database of 0.4.x are read as they are; no database migration. macOS behaviour is unchanged.
+
 ## 0.4.1 — 2026-10-18
 
 - **Camera in Settings.** Turn the camera on or off in the app: **Settings → Features → Camera** (then restart the worker). Editing config.json is no longer needed. The bot's "camera is off" reply points there.

@@ -4,7 +4,7 @@
 make test               # go test -race ./...  (no network, no real claude; without gcc on Windows, no -race)
 make lint               # gofmt, go vet (+ staticcheck/govulncheck if installed)
 make check-secrets      # fails if a token-shaped string is tracked
-make check-wording      # fails if user-facing text tells people to edit config.json
+make check-wording      # fails if user-facing text sends people to the settings file instead of the app
 make check-docs         # fails if a per-OS section of README, RUNBOOK or PRIVACY names another OS
 make test-desktop       # desktop module (Go) + frontend type check and Vitest
 make vet-windows        # type-checks both modules, tests included, for Windows

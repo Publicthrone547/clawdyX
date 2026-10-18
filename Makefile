@@ -3,7 +3,7 @@ EXE     := $(if $(filter windows,$(GOHOSTOS)),.exe,)
 BIN     := bin/clawdyx$(EXE)
 GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
-VERSION := 0.4.1
+VERSION := 1.0.0
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
 # WINARCH=arm64 builds the Windows files for arm64 (make build-windows WINARCH=arm64).
 WINARCH ?= amd64
