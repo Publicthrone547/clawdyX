@@ -40,5 +40,8 @@ func defaultLogDir(home string) string { return filepath.Join(defaultStateDir(ho
 // pathEqual compares canonical paths; Linux file systems are case-sensitive.
 func pathEqual(a, b string) bool { return a == b }
 
+// pathKey is the form of a canonical path used to find duplicates.
+func pathKey(p string) string { return p }
+
 // gitBashUsed: claude.git_bash_path matters only on Windows.
 const gitBashUsed = false

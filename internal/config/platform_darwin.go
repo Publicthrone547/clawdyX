@@ -28,5 +28,8 @@ func defaultLogDir(home string) string { return filepath.Join(home, "Library", "
 // by default.
 func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }
 
+// pathKey is the form of a canonical path used to find duplicates.
+func pathKey(p string) string { return strings.ToLower(p) }
+
 // gitBashUsed: claude.git_bash_path matters only on Windows.
 const gitBashUsed = false

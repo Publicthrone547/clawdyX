@@ -67,5 +67,8 @@ func Executable(st os.FileInfo) bool {
 // pathEqual compares canonical paths; NTFS is case-insensitive.
 func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }
 
+// pathKey is the form of a canonical path used to find duplicates.
+func pathKey(p string) string { return strings.ToLower(p) }
+
 // gitBashUsed: claude.git_bash_path matters only on Windows.
 const gitBashUsed = true

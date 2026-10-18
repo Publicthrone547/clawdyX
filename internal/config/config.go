@@ -641,13 +641,13 @@ func (c *Config) validate() error {
 		if filepath.Dir(canon) == canon {
 			add("workspace %q must not be the filesystem root", w.Name)
 		}
-		if home, _ := os.UserHomeDir(); canon == filepath.Clean(home) {
+		if home, _ := os.UserHomeDir(); pathEqual(canon, filepath.Clean(home)) {
 			add("workspace %q must not be the home directory itself", w.Name)
 		}
-		if seenPath[canon] {
+		if seenPath[pathKey(canon)] {
 			add("workspace %q duplicates another workspace path", w.Name)
 		}
-		seenPath[canon] = true
+		seenPath[pathKey(canon)] = true
 		w.Canonical = canon
 		if !w.IKnowWhatIAmDoing {
 			for _, m := range MinimumDenied {
