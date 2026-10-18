@@ -220,9 +220,11 @@ func (a *App) cmdLook(m *models.Message, args []string) {
 		var ds []screen.Display
 		var imgs []agent.Image
 		for _, c := range caps {
-			defer a.broker.Discard(c.ID)
 			ds = append(ds, c.Display)
 			imgs = append(imgs, agent.Image{MediaType: "image/jpeg", Data: c.Preview.JPEG})
+			// The job has its own copy; drop the capture before anything slow
+			// (the replies below are paced).
+			a.broker.Discard(c.ID)
 		}
 		var prompt string
 		if len(caps) == 1 {
