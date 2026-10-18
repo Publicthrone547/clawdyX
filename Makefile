@@ -16,7 +16,7 @@ RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all check-wording app dmg build-windows installer-windows helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all check-wording app dmg build-windows installer-windows package-linux appimage-linux helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -98,6 +98,18 @@ vet-windows: ## type-check everything (including tests) for Windows
 build-linux: ## build the Linux worker for amd64 and arm64 into bin/linux/<arch>/clawdyx
 	for a in amd64 arm64; do $(LINENV) GOARCH=$$a go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(LINDIR)/$$a/clawdyx ./cmd/clawdyx || exit 1; done
 	@ls -lh $(LINDIR)/*/clawdyx
+
+NFPM := go run github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.47.0
+
+package-linux: app-linux ## build the .deb, .rpm and .tar.gz for this machine's architecture into bin/release-$(VERSION)/ (Linux only)
+	mkdir -p $(REL)
+	for p in deb rpm; do VERSION=$(VERSION) ARCH=$$(go env GOARCH) $(NFPM) package -f desktop/build/linux/nfpm.yaml -p $$p -t $(REL)/ || exit 1; done
+	n=clawdyX-$(VERSION)-linux-$$(go env GOARCH); rm -rf bin/tar && mkdir -p bin/tar/$$n && cp -R $(LINDIR)/clawdyX/. bin/tar/$$n/ && \
+		tar -C bin/tar -czf $(REL)/$$n.tar.gz $$n && rm -rf bin/tar
+	@ls -lh $(REL)/*.deb $(REL)/*.rpm $(REL)/*linux*.tar.gz
+
+appimage-linux: app-linux ## build the AppImage (Linux only; downloads linuxdeploy; needs the host's WebKitGTK at run time)
+	desktop/build/linux/appimage/build.sh $(VERSION) $$(go env GOARCH)
 
 vet-linux: ## type-check everything (including tests) for Linux; the app's cgo part only on Linux
 	$(LINENV) go vet $(PKG)

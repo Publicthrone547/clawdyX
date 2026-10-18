@@ -1,0 +1,57 @@
+# .deb and .rpm of clawdyX (nfpm, https://nfpm.goreleaser.com, MIT).
+# make package-linux sets VERSION and ARCH (amd64 | arm64) and runs nfpm from
+# the repository root on the files app-linux writes to bin/linux/clawdyX/.
+name: clawdyx
+arch: ${ARCH}
+platform: linux
+version: ${VERSION}
+release: "1"
+section: devel
+priority: optional
+maintainer: clawdyX maintainers
+vendor: clawdyX
+homepage: https://github.com/Publicthrone547/clawdyX
+license: PolyForm-Noncommercial-1.0.0
+description: |-
+  Control panel and Telegram bot for the local Claude Code CLI.
+  clawdyX runs a private Telegram bot that drives the Claude Code already
+  installed and signed in on this computer, and a desktop app to set it
+  up and watch it. The worker also runs alone on a server.
+
+overrides:
+  deb:
+    depends:
+      - libwebkit2gtk-4.1-0
+      - libgtk-3-0
+    recommends:
+      - xdg-utils
+    suggests:
+      - ffmpeg
+  rpm:
+    depends:
+      - webkit2gtk4.1
+      - gtk3
+    recommends:
+      - xdg-utils
+    suggests:
+      - ffmpeg
+
+contents:
+  - src: bin/linux/clawdyX/clawdyX
+    dst: /usr/bin/clawdyX
+    file_info: { mode: 0755 }
+  - src: bin/linux/clawdyX/clawdyx
+    dst: /usr/bin/clawdyx
+    file_info: { mode: 0755 }
+  - src: desktop/build/linux/clawdyX.desktop
+    dst: /usr/share/applications/clawdyX.desktop
+    file_info: { mode: 0644 }
+  - src: desktop/build/linux/icons/hicolor
+    dst: /usr/share/icons/hicolor
+    type: tree
+  - src: LICENSE
+    dst: /usr/share/doc/clawdyx/LICENSE
+    file_info: { mode: 0644 }
+  - src: THIRD_PARTY_NOTICES.md
+    dst: /usr/share/doc/clawdyx/THIRD_PARTY_NOTICES.md
+    file_info: { mode: 0644 }
