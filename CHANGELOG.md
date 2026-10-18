@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.1 — 2026-10-18
+
+- **Camera in Settings.** Turn the camera on or off in the app: **Settings → Features → Camera** (then restart the worker). Editing config.json is no longer needed. The bot's "camera is off" reply points there.
+- **Diagnostics shows the camera:** off, or the cameras found and whether macOS granted the Camera permission, with a button to the Camera page of System Settings. The check never takes a photo.
+- **Fix:** Settings → Logs → "Show in Finder" works again (broken in 0.4.0). A test now checks that every method the app's UI calls exists in the app.
+
 ## 0.4.0 — 2026-10-18
 
 - **Windows (preview).** clawdyX now builds for Windows 10/11 x64: the bot (`clawdyx.exe`) and the desktop app (`clawdyX.exe`), cross-compiled from a Mac with `make build-windows`. The Telegram bot, sessions, jobs, models, tiers, `/open` (default browser), `/processes` and `/doctor` work; the token goes into the Windows Credential Manager; `clawdyx service start` runs the worker in the background and at every login without administrator rights. Screens and the camera reply that they are macOS only. **Not yet tested on a real Windows PC.** Download: `clawdyX-0.4.0-windows-amd64.zip`. Details: [Windows in the README](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/README.md#windows-preview) and [the runbook](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/docs/RUNBOOK.md#windows).

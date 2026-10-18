@@ -1141,7 +1141,7 @@ Phase 1 is implemented on the local `main` branch. README.md, docs/RUNBOOK.md an
 - **Screen control (added on owner request).** It is gated by `desktop.screen_control` and offered only in automation sessions. The bot binary serves an MCP stdio server (`mcp-screen`) with screenshot, click, move, scroll, type and key tools, built on `screencapture`, `sips` and JXA CGEvent / System Events. Claude Code receives it through `--mcp-config` with `--strict-mcp-config` and a safety system prompt. No allow rule is added, so auto mode's classifier still reviews these calls. A live run confirmed the real CLI reaches the tool. Owner-typed `/screenshot` sends a photo to the private chat.
 - **Not built yet (Phase 2+):** attaching external sessions (`/resume <uuid>` currently only switches between bot sessions), `/run` capabilities, stopping background agents with `claude stop`, the approval relay, warm sessions, and attachments.
 
-## Implementation status (v0.4.0, 2026-10-18)
+## Implementation status (v0.4.1, 2026-10-18)
 
 The v2 product plan (desktop app plus worker) is implemented. Deviations from the plan, with reasons:
 
