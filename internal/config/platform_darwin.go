@@ -1,10 +1,8 @@
-//go:build !windows
-
 package config
 
 import (
-	"os"
 	"path/filepath"
+	"strings"
 )
 
 func defaultClaudeBinary(string) string { return "/opt/homebrew/bin/claude" }
@@ -14,14 +12,18 @@ func DefaultChildPath() string {
 	return "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 }
 
+// configDir is ~/.config/clawdyx on macOS too (not ~/Library), as in 0.x.
+func configDir(home string) string { return filepath.Join(home, ".config", "clawdyx") }
+
+// legacyConfigPath: the macOS config never moved.
+func legacyConfigPath(string) string { return "" }
+
 func defaultStateDir(home string) string {
 	return filepath.Join(home, "Library", "Application Support", "clawdyx")
 }
 
 func defaultLogDir(home string) string { return filepath.Join(home, "Library", "Logs", "clawdyx") }
 
-// Private reports whether only the owner can read the file (mode 0600).
-func Private(st os.FileInfo) bool { return st.Mode().Perm()&0o077 == 0 }
-
-// Executable reports whether st is a regular file with an execute bit.
-func Executable(st os.FileInfo) bool { return st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0 }
+// pathEqual compares canonical paths; macOS volumes are case-insensitive
+// by default.
+func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }

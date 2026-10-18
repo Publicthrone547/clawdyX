@@ -24,10 +24,26 @@ func DefaultChildPath() string {
 }
 
 func localAppData(home string) string {
-	if d := os.Getenv("LOCALAPPDATA"); d != "" {
+	if d := os.Getenv("LOCALAPPDATA"); d != "" && filepath.IsAbs(d) {
 		return d
 	}
 	return filepath.Join(home, "AppData", "Local")
+}
+
+func roamingAppData(home string) string {
+	if d := os.Getenv("APPDATA"); d != "" && filepath.IsAbs(d) {
+		return d
+	}
+	return filepath.Join(home, "AppData", "Roaming")
+}
+
+// configDir is %APPDATA%\clawdyx, the Windows place for per-user settings
+// (0.4.x used %USERPROFILE%\.config\clawdyx; see MigrateLegacy).
+func configDir(home string) string { return filepath.Join(roamingAppData(home), "clawdyx") }
+
+// legacyConfigPath is where 0.4.x kept config.json on Windows.
+func legacyConfigPath(home string) string {
+	return filepath.Join(home, ".config", "clawdyx", "config.json")
 }
 
 func defaultStateDir(home string) string { return filepath.Join(localAppData(home), "clawdyx") }
@@ -47,3 +63,6 @@ func Executable(st os.FileInfo) bool {
 	}
 	return false
 }
+
+// pathEqual compares canonical paths; NTFS is case-insensitive.
+func pathEqual(a, b string) bool { return strings.EqualFold(a, b) }

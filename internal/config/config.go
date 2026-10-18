@@ -241,19 +241,45 @@ var (
 	appNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9 ._()]{0,63}$`)
 )
 
-// DefaultPath returns the default config path.
+// DefaultPath returns the default config path: CLAWDYX_CONFIG when set,
+// else config.json in the OS's settings folder (~/.config/clawdyx on macOS,
+// $XDG_CONFIG_HOME/clawdyx on Linux, %APPDATA%\clawdyx on Windows). Until
+// MigrateDefault has moved an earlier release's file there, that file is
+// used where it is.
 func DefaultPath() string {
 	if p := os.Getenv("CLAWDYX_CONFIG"); p != "" {
 		return p
 	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "clawdyx", "config.json")
+	std := StandardPath()
+	if old := LegacyPath(); old != "" && !exists(std) && exists(old) {
+		return old
+	}
+	return std
 }
 
-// DefaultEnvPath returns the default secrets file path.
-func DefaultEnvPath() string {
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return err == nil
+}
+
+// StandardPath is the OS's default config path, ignoring CLAWDYX_CONFIG.
+func StandardPath() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "clawdyx", ".env")
+	return filepath.Join(configDir(home), "config.json")
+}
+
+// DefaultEnvPath returns the default secrets file path: .env next to the
+// default config file.
+func DefaultEnvPath() string { return EnvPathFor(DefaultPath()) }
+
+// EnvPathFor is the .env file that belongs to a config file.
+func EnvPathFor(configPath string) string { return filepath.Join(filepath.Dir(configPath), ".env") }
+
+// LegacyPath is where an earlier release kept the config on this OS, or ""
+// when it never moved.
+func LegacyPath() string {
+	home, _ := os.UserHomeDir()
+	return legacyConfigPath(home)
 }
 
 func applyDefaults(c *Config) {

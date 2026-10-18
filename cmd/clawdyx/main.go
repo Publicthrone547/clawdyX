@@ -141,6 +141,22 @@ func main() {
 	}
 }
 
+// migrateLegacy moves an earlier release's settings to this OS's standard
+// folder (Windows 0.4.x: %USERPROFILE%\.config\clawdyx) and returns the
+// config path to use from now on. It runs only while no worker uses the
+// old file. If the move fails, the old file keeps working.
+func migrateLegacy(cfgPath string) string {
+	moved, from, err := config.MigrateDefault(cfgPath)
+	switch {
+	case err != nil:
+		fmt.Fprintln(os.Stderr, "note: the settings stay in", filepath.Dir(from)+"; moving them failed:", observability.Redact(err.Error()))
+	case moved:
+		fmt.Printf("moved the settings from %s to %s (the stored token too)\n", filepath.Dir(from), filepath.Dir(config.StandardPath()))
+		return config.StandardPath()
+	}
+	return cfgPath
+}
+
 func loadConfigOnly(path string) (*config.Config, error) {
 	st, err := os.Stat(path)
 	if err != nil {
@@ -202,6 +218,10 @@ func run(cfgPath, envPath string) (code int, background bool) {
 		return exitError, background
 	}
 	defer st.Close()
+	if from := config.TakeMigratedMarker(cfgPath); from != "" {
+		_ = st.SetSetting("migrated_from", from)
+		log.Info("settings were moved to the standard folder", "from", from, "to", filepath.Dir(cfgPath))
+	}
 
 	app, err := telegram.New(cfg, st, log, telegram.Options{})
 	if err != nil {

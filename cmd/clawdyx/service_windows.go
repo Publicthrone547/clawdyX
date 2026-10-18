@@ -100,6 +100,9 @@ func service(sub, cfgPath string, purge bool) int {
 				return exitError
 			}
 		}
+		// The worker is stopped: move 0.4.x settings to %APPDATA% now, so
+		// the login entry below already points at the new place.
+		cfgPath = migrateLegacy(cfgPath)
 		exe, err := os.Executable()
 		if err == nil {
 			exe, err = filepath.EvalSymlinks(exe)
