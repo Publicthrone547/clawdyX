@@ -1,0 +1,63 @@
+{
+  "telegram": {
+    "owner_user_id": 111111111,
+    "allowed_users": [
+      {
+        "id": 111111111,
+        "role": "owner"
+      }
+    ],
+    "poll_timeout_seconds": 30
+  },
+  "claude": {
+    "binary": "@CLAUDE@",
+    "default_model": "fable",
+    "default_effort": "auto",
+    "setting_sources": "",
+    "strict_mcp_config": false,
+    "job_timeout": "15m0s",
+    "max_turns": 60,
+    "max_budget_usd": 0,
+    "max_concurrent_jobs": 2,
+    "max_queue_per_session": 5,
+    "max_output_bytes": 1048576,
+    "max_child_rss_mb": 2048,
+    "bg_wait_ceiling_ms": 60000,
+    "child_path": "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "extra_disallowed_tools": null
+  },
+  "workspaces": [
+    {
+      "name": "app",
+      "path": "@WORKSPACE@",
+      "default_mode": "observe",
+      "allowed_commands": null,
+      "denied_commands": [
+        "Bash(rm *)",
+        "Bash(sudo *)",
+        "Bash(git push *)"
+      ]
+    }
+  ],
+  "default_workspace": "app",
+  "shutdown_command_enabled": false,
+  "desktop": {
+    "open_urls": null,
+    "browser_app": "Safari",
+    "screen_control": false
+  },
+  "modes": {
+    "automation_enabled": false
+  },
+  "state_dir": "@STATE@",
+  "log_dir": "@LOGS@",
+  "logging": {
+    "level": "info"
+  },
+  "retention": {
+    "jobs_days": 90,
+    "job_events_days": 14,
+    "processed_updates_days": 7,
+    "audit_days": 180
+  }
+}

@@ -5,3 +5,4 @@
 *.ico binary
 *.icns binary
 *.syso binary
+*.db binary

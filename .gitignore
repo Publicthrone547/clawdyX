@@ -12,6 +12,8 @@ secrets/
 *.db-wal
 *.db-shm
 *.sqlite
+# Synthetic test fixtures (written by tests, no real data)
+!internal/store/testdata/state-*.db
 *.log
 state/
 tmp/
