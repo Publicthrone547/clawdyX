@@ -1,3 +1,5 @@
+//go:build !windows
+
 package main
 
 import (
@@ -10,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/gofrs/flock"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 )
@@ -79,18 +79,6 @@ func serviceState() (loaded bool, pid string) {
 		}
 	}
 	return true, ""
-}
-
-// lockHeld reports whether some clawdyx instance (foreground or launchd) is running.
-func lockHeld(cfg *config.Config) bool {
-	_ = os.MkdirAll(cfg.StateDir, 0o700)
-	l := flock.New(filepath.Join(cfg.StateDir, "bot.lock"))
-	ok, err := l.TryLock()
-	if err != nil || !ok {
-		return true
-	}
-	_ = l.Unlock()
-	return false
 }
 
 // writePlist (re)generates the LaunchAgent plist for the running executable.

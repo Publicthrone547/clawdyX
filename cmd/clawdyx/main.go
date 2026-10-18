@@ -47,7 +47,8 @@ Usage:
   clawdyx setup                     guided first-time setup: token, your Telegram ID, project folder
   clawdyx run                       run the bot in the foreground (Ctrl-C stops it)
   clawdyx service start|stop|restart|status
-                                    background service (LaunchAgent) that also starts at login
+                                    background service that also starts at login
+                                    (macOS: LaunchAgent; Windows: detached process + login entry)
   clawdyx check                     validate config, token, CLI, auth and Telegram (read-only)
   clawdyx service uninstall [--purge-state]
   clawdyx backup                    write a consistent copy of the state database
@@ -93,7 +94,8 @@ func main() {
 	case "setup":
 		os.Exit(runSetup(*cfgPath, *envPath, so, os.Stdin, os.Stdout))
 	case "run":
-		os.Exit(run(*cfgPath, *envPath))
+		code, background := run(*cfgPath, *envPath)
+		os.Exit(relaunch(code, background))
 	case "check":
 		os.Exit(check(*cfgPath, *envPath))
 	case "service":
@@ -154,33 +156,41 @@ func loadConfigOnly(path string) (*config.Config, error) {
 	return config.Parse(b)
 }
 
-func run(cfgPath, envPath string) int {
+// run serves the bot until it is stopped. background reports whether it
+// ran without a console (Windows only; see detachConsole).
+func run(cfgPath, envPath string) (code int, background bool) {
 	cfg, err := config.Load(cfgPath, envPath)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, observability.Redact(err.Error()))
 		fmt.Fprintln(os.Stderr, "Run `clawdyx setup` (or `make setup`) to create the configuration.")
-		return exitConfig
+		return exitConfig, false
 	}
+	background = detachConsole(cfg.LogDir)
 	if err := os.MkdirAll(cfg.StateDir, 0o700); err != nil {
 		fmt.Fprintln(os.Stderr, "state dir:", err)
-		return exitError
+		return exitError, background
 	}
 	_ = os.Chmod(cfg.StateDir, 0o700)
 	logFile, err := observability.OpenRotating(filepath.Join(cfg.LogDir, "bot.log"), 20<<20, 5)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "log file:", err)
-		return exitError
+		return exitError, background
 	}
 	defer logFile.Close()
-	log := observability.NewLogger(io.MultiWriter(os.Stderr, logFile), cfg.Logging.Level)
+	var console io.Writer = os.Stderr
+	if background {
+		console = io.Discard // no console; a failing writer would stop io.MultiWriter
+	}
+	log := observability.NewLogger(io.MultiWriter(console, logFile), cfg.Logging.Level)
 
 	lock := flock.New(filepath.Join(cfg.StateDir, "bot.lock"))
 	locked, err := lock.TryLock()
 	if err != nil || !locked {
 		log.Error("another clawdyx instance is running (state lock held); exiting")
-		return exitLocked
+		return exitLocked, background
 	}
 	defer lock.Unlock()
+	defer writePID(cfg.StateDir)()
 
 	if os.Getenv("ANTHROPIC_API_KEY") != "" || os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != "" {
 		log.Warn("an Anthropic credential variable is set in the bot environment; it is NOT passed to claude (the bot uses the local claude.ai login only)")
@@ -189,14 +199,14 @@ func run(cfgPath, envPath string) int {
 	st, err := store.Open(filepath.Join(cfg.StateDir, "state.db"))
 	if err != nil {
 		log.Error("open state database", "err", err)
-		return exitError
+		return exitError, background
 	}
 	defer st.Close()
 
 	app, err := telegram.New(cfg, st, log, telegram.Options{})
 	if err != nil {
 		log.Error("start telegram", "err", observability.Redact(err.Error()))
-		return exitError
+		return exitError, background
 	}
 	if abs, err := filepath.Abs(cfgPath); err == nil {
 		app.ConfigPath = abs
@@ -220,18 +230,19 @@ func run(cfgPath, envPath string) int {
 	}
 	if err := app.Run(ctx); err != nil {
 		log.Error("run", "err", observability.Redact(err.Error()))
-		return exitError
+		return exitError, background
 	}
 	select {
 	case <-app.RestartRequested:
 		// A non-zero exit makes launchd start the worker again (KeepAlive
-		// with SuccessfulExit=false); in a terminal, start it again by hand.
+		// with SuccessfulExit=false; on Windows see relaunch); in a
+		// terminal, start it again by hand.
 		log.Info("stopped for a restart")
-		return exitRestart
+		return exitRestart, background
 	default:
 	}
 	log.Info("stopped")
-	return exitOK
+	return exitOK, background
 }
 
 func check(cfgPath, envPath string) int {

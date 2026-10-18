@@ -25,6 +25,7 @@ var ctlMethods = []string{
 	"log.tail {lines,level}", "diagnostics.run",
 	"telegram.allowlist.get", "telegram.allowlist.set {users:[{id,label,role}]}", "telegram.detect.start {seconds}", "telegram.detect.result", "telegram.detect.stop",
 	"telegram.token.status", "telegram.token.test {token}", "telegram.token.set {token}",
+	"settings.get", "settings.set {…}", "workspace.setDefault {name}", "worker.restart", "worker.stop",
 }
 
 func ctl(cfgPath string, args []string) int {

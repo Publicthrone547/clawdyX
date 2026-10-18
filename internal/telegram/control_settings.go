@@ -150,4 +150,14 @@ func (a *App) registerSettingsControl(srv *control.Server) {
 		a.requestRestart()
 		return map[string]bool{"restarting": true}, nil
 	}))
+	// worker.stop ends the worker cleanly (exit 0). `clawdyx service stop`
+	// uses it on Windows, where a detached process cannot be sent SIGTERM.
+	srv.Handle("worker.stop", 5*time.Second, typed(func(context.Context, none) (any, error) {
+		a.log.Info("stop requested over the control socket")
+		go func() {
+			time.Sleep(500 * time.Millisecond) // let the reply reach the client
+			a.Stop()
+		}()
+		return map[string]bool{"stopping": true}, nil
+	}))
 }
