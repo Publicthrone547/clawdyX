@@ -15,6 +15,7 @@ The one exception is a button: **Settings → Check for updates** in the desktop
 | Backups | `~/Library/Application Support/clawdyx/backups/` | 0600 | copies of `state.db` only |
 | Claude transcripts | `~/.claude/projects/…` | owned by Claude Code | Claude Code keeps these under its own retention (`cleanupPeriodDays`, 30 days by default). They are what makes a session resumable. As with any Claude Code use, prompts are also added to Claude Code's global prompt history (`~/.claude/history.jsonl`) |
 | Screenshots | memory only | — | see below |
+| Camera photos and clips | memory only | — | see below |
 
 ## The desktop app
 
@@ -22,7 +23,7 @@ The app stores only per-window conveniences (appearance, last screen) in its own
 
 ## What leaves the Mac
 
-- **To Telegram:** the replies the bot sends to the allowed users' private chats, including Claude's answers, job status, and screenshots that the owner explicitly requested with a command. Telegram stores chat history on its servers under its own terms.
+- **To Telegram:** the replies the bot sends to the allowed users' private chats, including Claude's answers, job status, and screenshots, camera photos and clips that the owner explicitly requested with a command. Telegram stores chat history on its servers under its own terms.
 - **To Anthropic, through Claude Code:** your prompts, the files and command output Claude reads while working in the selected workspace, and screenshots only when a screen tool was used in an automation session or you asked Claude to look at the screen. This is the normal Claude Code request flow under your own account and its data settings.
 - **Nothing else.** clawdyX never uploads files, logs or diagnostics anywhere.
 
@@ -34,6 +35,16 @@ The app stores only per-window conveniences (appearance, last screen) in its own
 - Where each capture went is recorded in the audit table (display, size, destination, who asked); pixels are never stored.
 - `/screen off` (or the app's switch) disables every capture path, including Claude's screenshot tool in a running job; only someone at the Mac can switch it on again.
 - macOS asks for Screen Recording permission and, on macOS 15 and later, asks again about once a month. clawdyX cannot grant itself these permissions.
+
+## Camera
+
+- Disabled by default (`"desktop": {"camera": false}`). macOS only; it needs the clawdyX app (its `clawdyx-camera` helper) and the macOS Camera permission, which macOS asks for on the Mac at the first `/camera`.
+- A capture happens only when the owner types `/camera` (one photo) or `/camera video SECONDS` (a clip of 1–60 s, **without sound**) in their private chat. `/cameras` only lists cameras. Nothing is captured at startup or on a timer. Allowed users with the `user` role cannot use the camera.
+- The photo or clip goes only to the private chat that asked. It is kept in memory for at most five minutes (in practice it is dropped as soon as it was sent). AVFoundation writes to a private temporary folder (0700) that is deleted before the media is used.
+- Every capture is recorded in the audit table: kind (photo or video), camera, clip length, size, destination and who asked; pixels are never stored.
+- `/screen off` (or the app's switch) turns the camera off too; only someone at the Mac can switch it on again.
+- **Claude gets no camera access.** There is no camera tool for Claude, no control-socket method for the camera, and the helper refuses to capture unless the clawdyx worker itself started it. One limit remains: in the opt-in automation tier Claude can run shell commands as your user, and macOS passes the app's permissions on to every program the worker starts. A program written for that purpose could use the camera. Leave the camera off (or do not use automation) if that matters to you.
+- macOS shows the green camera light while the camera is on.
 
 ## Deleting your data
 

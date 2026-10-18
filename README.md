@@ -92,6 +92,7 @@ The wizard can detect your Telegram ID: leave the ID empty, send any message to 
 | Claude settings | `/model [name\|alias\|reset] [--default]` `/effort [low\|medium\|high\|xhigh\|max\|auto] [--default]` `/mode observe\|assisted` `/aliases` `/alias set fast haiku` |
 | Jobs | `/stop [j-ID\|S-ID\|all]` `/cancel j-ID` `/jobs [n]` `/logs j-ID [lines]` |
 | Machine | `/processes` `/usage` `/doctor` `/open youtube.com` (opens a website in the Mac's browser; typed by you, never by Claude) |
+| Camera | `/cameras` (list cameras, no capture) · `/camera` (photo from the built-in camera) · `/camera 2` · `/camera video 10` (a 10 s clip, at most 60 s, no sound); opt-in, owner only, see [Camera](#camera-opt-in) |
 | Screens | `/screens` (list displays, no capture) · `/screen 2` · `/screen all` (photos sent only to you) · `/look 2 what is wrong here?` (Claude looks at display 2) · `/look all question` (Claude looks at every display at once) · `/screen off` |
 | Bot | `/start` (resume) `/pause` `/confirm` `/deny` `/shutdown` (disabled by default) |
 
@@ -118,7 +119,7 @@ The owner can allow other numeric Telegram IDs (`clawdyx ctl telegram.allowlist.
 | Role | Can | Cannot |
 | --- | --- | --- |
 | `owner` (exactly one) | everything | — |
-| `user` | chat with Claude, list/create/switch/rename sessions, `/new`, `/newf`, `/clear`, set model and effort for the active session, stop or cancel their own jobs | change tiers or defaults, use screens or `/open`, forget sessions or delete history, `/doctor`, `/processes`, `/logs`, pause, shut down, stop other people's jobs |
+| `user` | chat with Claude, list/create/switch/rename sessions, `/new`, `/newf`, `/clear`, set model and effort for the active session, stop or cancel their own jobs | change tiers or defaults, use screens, the camera or `/open`, forget sessions or delete history, `/doctor`, `/processes`, `/logs`, pause, shut down, stop other people's jobs |
 
 Users share the bot's sessions and workspaces with the owner and get answers in their own chat. Confirmation buttons work only for the person who asked. To find someone's ID, arm detection (`clawdyx ctl telegram.detect.start`), let them message the bot, then read `telegram.detect.result`; nothing is recorded unless detection is armed, and nobody gets a reply.
 
@@ -149,6 +150,17 @@ Nothing is captured at startup or on a timer. Captures stay in memory for at mos
 - **Monthly reminder:** macOS 15 and later ask about once a month whether a program may keep capturing the screen without the system picker. The dialog appears on the Mac; until someone answers it there, captures from Telegram fail with a timeout.
 - **Rebuilds:** macOS ties these grants to the binary's signature, so rebuilding `clawdyx` may require granting them again.
 - **Limits:** clicks are coordinate-based, so expect occasional misses.
+
+### Camera (opt-in)
+
+With `"desktop": {"camera": true}` in config.json (macOS, with the clawdyX app installed):
+
+- **`/cameras`** lists the cameras (built-in first). It never captures.
+- **`/camera`** sends you a photo from the built-in camera; **`/camera N`** uses camera N. **`/camera video 10`** (or `/camera 2 video 10`) records a 10-second clip **without sound** and sends it to you. Clips are 1–60 seconds; longer requests are refused.
+- The same rules as for screens: owner only, only to the private chat that asked, in memory for at most five minutes, nothing captured at startup or on a timer, every capture in the audit table (kind, camera, length, size, destination; never pixels). **`/screen off` switches the camera off too.**
+- **Claude never gets the camera:** there is no camera tool, and the bundled helper only captures when the worker starts it. See [`docs/PRIVACY.md`](docs/PRIVACY.md#camera) for the one remaining limit in the automation tier.
+- **Permission:** macOS asks once, on the Mac, whether clawdyX may use the camera (at the first `/camera`). If it was refused, the bot says so; allow it in System Settings → Privacy & Security → **Camera**. The green camera light is on while it records.
+- **Windows:** not supported; the commands reply that the camera is macOS only.
 
 Every job also passes `--settings` that disables bypass and auto modes and blocks file-tool reads outside the working directory. Secret locations are denied in every tier: `~/.ssh`, `~/.aws`, `~/.config`, `~/.claude`, keychains, and browser profiles. One consequence is that Claude Code's auto-memory cannot write under `~/.claude`. Claude reports those writes as denied and carries on.
 
@@ -189,7 +201,7 @@ clawdyX also builds for **Windows 10/11 (64-bit, x64)**. This build is new and h
 
 | Works on Windows | macOS only (clear error on Windows) |
 | --- | --- |
-| Telegram bot, sessions, jobs, models, tiers, `/open` (default browser), `/processes`, `/doctor` | Screens: `/screens`, `/screen`, `/look`, Claude's screen tools |
+| Telegram bot, sessions, jobs, models, tiers, `/open` (default browser), `/processes`, `/doctor` | Screens: `/screens`, `/screen`, `/look`, Claude's screen tools; the camera (`/cameras`, `/camera`) |
 | Token in the Windows Credential Manager (or `-token-file`) | Capture helper, Screen Recording and Accessibility settings |
 | Background worker that starts at login (no administrator rights) | |
 | Desktop app (`clawdyX.exe`, needs the WebView2 runtime, which Windows 10/11 include) | |
@@ -221,6 +233,8 @@ internal/policy      tiers → CLI permission flags, path checks
 internal/processes   ps/sysctl sampling, cached `claude agents --json`
 internal/store       SQLite state (modernc, no CGO)
 internal/render      Markdown → escaped Telegram HTML, chunking
+internal/screen      displays, capture broker, MCP screen tools
+internal/camera      cameras, photo/clip broker (macOS helper)
 internal/observability  redaction, logging, counters
 ```
 
