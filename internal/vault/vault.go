@@ -1,4 +1,7 @@
-// Package vault stores the bot token outside ordinary files. On macOS it
+// Package vault stores the bot token outside ordinary files: the Windows
+// Credential Manager, the Secret Service on Linux, the Keychain on macOS.
+// Where Linux has no Secret Service (a server), Available is false and the
+// token stays in the private .env file instead. On macOS it
 // uses the login Keychain through Apple's /usr/bin/security tool (the secret
 // is passed on stdin, never in argv). Items created that way belong to the
 // security tool, so the worker and the desktop app can both read them and
@@ -23,6 +26,11 @@ const Service = "clawdyx"
 // ErrNotFound means no item is stored.
 var ErrNotFound = errors.New("vault: not found")
 
+// ErrUnavailable means the OS has no secret store this process can use (a
+// Linux server without a Secret Service). Callers fall back to the private
+// token file; every other error fails closed.
+var ErrUnavailable = errors.New("vault: no system keyring is available")
+
 // Store is a small secret store.
 type Store interface {
 	Get(account string) (string, error)
@@ -42,11 +50,16 @@ func TokenAccount(configPath string) string {
 	return "telegram-bot-token@" + hex.EncodeToString(h[:6])
 }
 
-// Keychain is the macOS login Keychain (via /usr/bin/security).
+// Keychain is the system secret store: the macOS login Keychain (via
+// /usr/bin/security), the Windows Credential Manager, or the Secret Service
+// on Linux (GNOME Keyring, KWallet).
 type Keychain struct{}
 
 // Get reads an item.
 func (Keychain) Get(account string) (string, error) {
+	if !Available() {
+		return "", ErrUnavailable
+	}
 	v, err := keyring.Get(Service, account)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return "", ErrNotFound
@@ -55,10 +68,18 @@ func (Keychain) Get(account string) (string, error) {
 }
 
 // Set creates or replaces an item.
-func (Keychain) Set(account, value string) error { return keyring.Set(Service, account, value) }
+func (Keychain) Set(account, value string) error {
+	if !Available() {
+		return ErrUnavailable
+	}
+	return keyring.Set(Service, account, value)
+}
 
 // Delete removes an item.
 func (Keychain) Delete(account string) error {
+	if !Available() {
+		return ErrUnavailable
+	}
 	err := keyring.Delete(Service, account)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return ErrNotFound

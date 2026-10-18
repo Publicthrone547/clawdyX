@@ -12,6 +12,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/setup"
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 func fakeClaude(t *testing.T) string {
@@ -183,5 +184,27 @@ func TestSetupTokenFileAndMigration(t *testing.T) {
 	}
 	if tok, _ := config.StoredToken(cfgPath); tok != token {
 		t.Fatal("vault changed")
+	}
+}
+
+func TestSetupWithoutKeyringUsesTheTokenFile(t *testing.T) {
+	old, oldAvail := getMeFunc, vault.Available
+	getMeFunc = func(context.Context, string) (string, error) { return "testbot", nil }
+	vault.Available = func() bool { return false }
+	defer func() { getMeFunc, vault.Available = old, oldAvail }()
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	dir, ws, bin := t.TempDir(), t.TempDir(), fakeClaude(t)
+	cfgPath, envPath := filepath.Join(dir, "config.json"), filepath.Join(dir, ".env")
+	token := "123456789:" + strings.Repeat("K", 35)
+	var out bytes.Buffer
+	opts := setupOptions{OwnerID: 111111111, Workspace: ws, ClaudeBinary: bin, TokenStdin: true, NoCheck: true}
+	if code := runSetup(cfgPath, envPath, opts, strings.NewReader(token+"\n"), &out); code != exitOK {
+		t.Fatalf("%d %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), platform.W.NoKeyringNote) {
+		t.Fatalf("the reason must be printed:\n%s", out.String())
+	}
+	if tok, err := config.LoadToken(envPath); err != nil || tok != token {
+		t.Fatalf("token file: %v", err)
 	}
 }

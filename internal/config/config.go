@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
@@ -227,8 +228,12 @@ type Config struct {
 
 	// Token is loaded separately from the environment or the .env file.
 	Token string `json:"-"`
-	// TokenSource says where Token came from: "env", "file" or "keychain".
+	// TokenSource says where Token came from: "env", "file" or "keychain"
+	// (the system token store of any OS).
 	TokenSource string `json:"-"`
+	// NoKeyring is set when the OS has no usable token store (a Linux
+	// server without a Secret Service) and the token file was used.
+	NoKeyring bool `json:"-"`
 }
 
 // MinimumDenied are deny rules every workspace must contain unless it opts out.
@@ -368,8 +373,8 @@ func Parse(data []byte) (*Config, error) {
 	return &c, nil
 }
 
-// TokenVault is where the bot token is kept (macOS login Keychain by
-// default). Tests replace it. CLAWDYX_TOKEN_STORE=file skips it.
+// TokenVault is where the bot token is kept (the system token store by
+// default: Keychain, Credential Manager or Secret Service). Tests replace it. CLAWDYX_TOKEN_STORE=file skips it.
 var TokenVault vault.Store = vault.Keychain{}
 
 func vaultEnabled() bool { return TokenVault != nil && os.Getenv("CLAWDYX_TOKEN_STORE") != "file" }
@@ -389,7 +394,7 @@ func StoreToken(configPath, tok string) error {
 		return errors.New("config: that does not look like a Telegram bot token")
 	}
 	if !vaultEnabled() {
-		return errors.New("config: the Keychain is disabled (CLAWDYX_TOKEN_STORE=file)")
+		return errors.New("config: the system token store is disabled (CLAWDYX_TOKEN_STORE=file)")
 	}
 	return TokenVault.Set(vault.TokenAccount(configPath), tok)
 }
@@ -407,8 +412,10 @@ func DeleteStoredToken(configPath string) error {
 }
 
 // Load reads the config file and the token: the TELEGRAM_BOT_TOKEN
-// environment variable (development), else the Keychain item, else the
-// private .env file. The config file must be private (0600).
+// environment variable (development), else the system token store, else
+// the private .env file. Only a missing token store (vault.ErrUnavailable)
+// falls through to the file; any other token-store error fails closed. The
+// config file must be private (0600).
 func Load(configPath, envPath string) (*Config, error) {
 	if err := checkPrivate(configPath); err != nil {
 		return nil, err
@@ -430,12 +437,14 @@ func Load(configPath, envPath string) (*Config, error) {
 	}
 	if tok, err := StoredToken(configPath); err == nil {
 		if !tokenRe.MatchString(tok) {
-			return nil, errors.New("config: the token stored in the Keychain has an invalid format; run `clawdyx setup` to replace it")
+			return nil, errors.New("config: the stored token has an invalid format; run `clawdyx setup` to replace it")
 		}
 		c.Token, c.TokenSource = tok, "keychain"
 		return c, nil
+	} else if errors.Is(err, vault.ErrUnavailable) {
+		c.NoKeyring = true
 	} else if !errors.Is(err, vault.ErrNotFound) {
-		return nil, fmt.Errorf("config: reading the bot token from the Keychain failed: %v", err)
+		return nil, fmt.Errorf("config: reading the bot token from the token store failed: %v (is %s locked?)", err, platform.W.TokenStore)
 	}
 	tok, err := LoadToken(envPath)
 	if err != nil {

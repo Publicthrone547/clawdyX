@@ -17,6 +17,7 @@ type Words struct {
 
 	TokenStore      string `json:"tokenStore"`      // "the macOS Keychain", …
 	TokenStoreShort string `json:"tokenStoreShort"` // "Keychain", …
+	NoKeyringNote   string `json:"noKeyringNote"`   // why the token went to a private file
 
 	ServiceKind   string `json:"serviceKind"`   // how the background worker runs
 	ServiceLoaded string `json:"serviceLoaded"` // status text when it is registered
@@ -50,7 +51,8 @@ var Darwin = Words{
 	SettingsApp: "System Settings", FileManager: "Finder", Terminal: "Terminal", Shell: "zsh",
 	TrayName:   "menu-bar item",
 	TokenStore: "the macOS Keychain", TokenStoreShort: "Keychain",
-	ServiceKind: "LaunchAgent", ServiceLoaded: "loaded in launchd",
+	NoKeyringNote: "The macOS Keychain is not available; the token is kept in a private file (mode 0600) instead.",
+	ServiceKind:   "LaunchAgent", ServiceLoaded: "loaded in launchd",
 	LaunchAtLogin: "Open at login (menu-bar item)",
 	ShortcutMod:   "⌘",
 	InstallClaude: "brew install --cask claude-code",
@@ -79,7 +81,8 @@ var Windows = Words{
 	SettingsApp: "Windows Settings", FileManager: "File Explorer", Terminal: "PowerShell", Shell: "PowerShell",
 	TrayName:   "tray icon",
 	TokenStore: "the Windows Credential Manager", TokenStoreShort: "Credential Manager",
-	ServiceKind: "login task", ServiceLoaded: "login task registered",
+	NoKeyringNote: "The Windows Credential Manager is not available; the token is kept in a private file instead.",
+	ServiceKind:   "login task", ServiceLoaded: "login task registered",
 	LaunchAtLogin: "Start with Windows",
 	ShortcutMod:   "Ctrl",
 	InstallClaude: "winget install Anthropic.ClaudeCode",
@@ -108,7 +111,8 @@ var Linux = Words{
 	SettingsApp: "the system settings", FileManager: "file manager", Terminal: "a terminal", Shell: "bash",
 	TrayName:   "tray icon",
 	TokenStore: "the system keyring", TokenStoreShort: "keyring",
-	ServiceKind: "systemd user service", ServiceLoaded: "systemd unit loaded",
+	NoKeyringNote: "No system keyring was found (normal on a server); the token is kept in a private file (mode 0600) instead.",
+	ServiceKind:   "systemd user service", ServiceLoaded: "systemd unit loaded",
 	LaunchAtLogin: "Start on login (desktop autostart)",
 	ShortcutMod:   "Ctrl",
 	InstallClaude: "curl -fsSL https://claude.ai/install.sh | bash",

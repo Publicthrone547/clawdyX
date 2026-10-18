@@ -23,3 +23,19 @@ func TestMemoryAndAccounts(t *testing.T) {
 		t.Fatalf("%s %s", a1, a2)
 	}
 }
+
+func TestKeychainUnavailable(t *testing.T) {
+	old := Available
+	Available = func() bool { return false }
+	defer func() { Available = old }()
+	k := Keychain{}
+	if _, err := k.Get("x"); !errors.Is(err, ErrUnavailable) {
+		t.Fatal(err)
+	}
+	if err := k.Set("x", "y"); !errors.Is(err, ErrUnavailable) {
+		t.Fatal(err)
+	}
+	if err := k.Delete("x"); !errors.Is(err, ErrUnavailable) {
+		t.Fatal(err)
+	}
+}

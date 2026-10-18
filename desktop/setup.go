@@ -15,6 +15,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/setup"
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // SetupState tells the UI whether the first-run wizard is needed.
@@ -208,14 +209,24 @@ func (s *SetupService) Finish(p FinishParams) (FinishResult, error) {
 	if err := setup.WriteConfig(cfgPath, setup.GenerateConfig(p.OwnerID, fc.Path, browser, bin)); err != nil {
 		return FinishResult{}, errors.New(observability.Redact(err.Error()))
 	}
-	if err := config.StoreToken(cfgPath, tok); err != nil {
-		return FinishResult{}, errors.New("could not store the token in " + platform.W.TokenStore + ": " + observability.Redact(err.Error()))
+	var res FinishResult
+	if !vault.Available() {
+		// No system token store (a Linux desktop without a keyring): the
+		// private .env file next to the config, as `clawdyx setup` does.
+		if err := setup.WritePrivate(config.EnvPathFor(cfgPath), []byte("TELEGRAM_BOT_TOKEN="+tok+"\n")); err != nil {
+			return FinishResult{}, errors.New("could not write the token file: " + err.Error())
+		}
+		res.Message = "Saved. " + platform.W.NoKeyringNote + " Settings are in " + homeRel(cfgPath) + "."
+	} else {
+		if err := config.StoreToken(cfgPath, tok); err != nil {
+			return FinishResult{}, errors.New("could not store the token in " + platform.W.TokenStore + ": " + observability.Redact(err.Error()))
+		}
+		if got, err := config.StoredToken(cfgPath); err != nil || got != tok {
+			return FinishResult{}, errors.New("the token could not be read back from " + platform.W.TokenStore)
+		}
+		_ = os.Remove(config.EnvPathFor(cfgPath))
+		res.Message = "Saved. The token is in " + platform.W.TokenStore + "; settings are in " + homeRel(cfgPath) + "."
 	}
-	if got, err := config.StoredToken(cfgPath); err != nil || got != tok {
-		return FinishResult{}, errors.New("the token could not be read back from " + platform.W.TokenStore)
-	}
-	_ = os.Remove(config.DefaultEnvPath())
-	res := FinishResult{Message: "Saved. The token is in " + platform.W.TokenStore + "; settings are in " + homeRel(cfgPath) + "."}
 	if p.StartService {
 		out, err := runWorker(40*time.Second, "service", "install")
 		if err != nil {

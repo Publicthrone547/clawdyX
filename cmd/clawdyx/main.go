@@ -218,6 +218,9 @@ func run(cfgPath, envPath string) (code int, background bool) {
 	defer lock.Unlock()
 	defer writePID(cfg.StateDir)()
 
+	if cfg.NoKeyring {
+		log.Warn(platform.W.NoKeyringNote)
+	}
 	if os.Getenv("ANTHROPIC_API_KEY") != "" || os.Getenv("CLAUDE_CODE_OAUTH_TOKEN") != "" {
 		log.Warn("an Anthropic credential variable is set in the bot environment; it is NOT passed to claude (the bot uses the local claude.ai login only)")
 	}
@@ -290,8 +293,11 @@ func check(cfgPath, envPath string) int {
 		return exitConfig
 	}
 	line(true, "config %s (owner %d, %d workspace(s), default %s)", cfgPath, cfg.Telegram.OwnerUserID, len(cfg.Workspaces), cfg.DefaultWorkspace)
-	line(true, "token loaded from %s (value not shown)", map[string]string{"keychain": platform.W.TokenStore, "file": envPath, "env": "the TELEGRAM_BOT_TOKEN variable"}[cfg.TokenSource])
-	if cfg.TokenSource == "file" {
+	line(true, "token loaded from %s (value not shown)", map[string]string{"keychain": platform.W.TokenStore, "file": "the token file " + envPath, "env": "the TELEGRAM_BOT_TOKEN variable"}[cfg.TokenSource])
+	switch {
+	case cfg.NoKeyring:
+		fmt.Println("       " + platform.W.NoKeyringNote)
+	case cfg.TokenSource == "file":
 		fmt.Println("       tip: clawdyx setup -migrate-token moves it into " + platform.W.TokenStore)
 	}
 	_ = os.MkdirAll(cfg.StateDir, 0o700)

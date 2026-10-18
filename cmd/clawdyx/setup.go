@@ -115,12 +115,19 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 	if f, ok := in.(*os.File); ok && !o.TokenStdin && term.IsTerminal(int(f.Fd())) {
 		w.tty = f
 	}
+	noKeyring := !o.TokenFile && !vault.Available()
+	if noKeyring {
+		o.TokenFile = true
+	}
 	where := platform.W.TokenStore + " (item \"" + vault.Service + "\")"
 	if o.TokenFile {
 		where = envPath + " (mode 0600)"
 	}
 	w.say("clawdyX setup — writes %s (private, mode 0600) and stores the bot token in %s.", cfgPath, where)
-	w.say("Nothing leaves this Mac except one call to Telegram's Bot API to verify the token.")
+	if noKeyring {
+		w.say("%s", platform.W.NoKeyringNote)
+	}
+	w.say("Nothing leaves %s except one call to Telegram's Bot API to verify the token.", platform.W.ThisComputer)
 	w.say("")
 
 	_, verr := config.StoredToken(cfgPath)

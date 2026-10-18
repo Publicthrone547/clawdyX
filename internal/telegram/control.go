@@ -718,6 +718,7 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 		add(control.DiagnosticCheck{ID: "telegram", Label: "Telegram bot token", Detail: observability.Truncate(observability.Redact(meErr.Error()), 160),
 			Fix: "Check the network. If Telegram says Unauthorized, the token was revoked: replace it on the Telegram page."})
 	}
+	add(a.tokenStoreCheck())
 	add(control.DiagnosticCheck{ID: "webhook", Label: "No webhook configured", OK: !webhookSet && meErr == nil,
 		Detail: map[bool]string{true: "a webhook is set: someone else may have your token", false: "none (long polling)"}[webhookSet],
 		Fix:    map[bool]string{true: "Rotate the token in @BotFather, then restart the worker.", false: ""}[webhookSet]})
@@ -770,4 +771,21 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 		add(control.DiagnosticCheck{ID: "disk", Label: "Disk space for logs and state", OK: free > 500<<20, Warn: free < 2<<30, Detail: gib(free) + " free"})
 	}
 	return out
+}
+
+// tokenStoreCheck says where the bot token is kept.
+func (a *App) tokenStoreCheck() control.DiagnosticCheck {
+	c := control.DiagnosticCheck{ID: "token-store", Label: "Token storage", OK: true}
+	switch {
+	case a.cfg.TokenSource == "keychain":
+		c.Detail = "in " + a.words.TokenStore
+	case a.cfg.TokenSource == "env":
+		c.Warn, c.Detail = true, "from the TELEGRAM_BOT_TOKEN variable (meant for development)"
+	case a.cfg.NoKeyring:
+		c.Detail = a.words.NoKeyringNote
+	default:
+		c.Warn, c.Detail = true, "in the private token file"
+		c.Fix = "Move it into " + a.words.TokenStore + ": clawdyx setup -migrate-token, then restart the worker."
+	}
+	return c
 }
