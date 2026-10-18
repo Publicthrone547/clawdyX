@@ -1372,6 +1372,12 @@ func (a *App) cmdDoctor(m *models.Message) {
 			names = append(names, k)
 		}
 		fmt.Fprintf(&sb, "Child environment (names only): %s\n", Esc(strings.Join(names, ", ")))
+		for _, c := range a.platformChecks(ctx) {
+			fmt.Fprintf(&sb, "%s %s: %s\n", ok(c.OK), Esc(c.Label), Esc(c.Detail))
+			if !c.OK && c.Fix != "" {
+				sb.WriteString("   → " + Esc(c.Fix) + "\n")
+			}
+		}
 		fmt.Fprintf(&sb, "Settings sources for jobs: %s · strict MCP: %v · bypass/auto disabled via --settings\n", Esc(a.cfg.Claude.SettingSources), a.cfg.Claude.StrictMCPConfig)
 		if a.cfg.Desktop.ScreenControl {
 			acc, _ := a.broker.Check(ctx)

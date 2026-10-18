@@ -739,6 +739,9 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	default:
 		add(control.DiagnosticCheck{ID: "auth", Label: "Claude login", Detail: "not logged in", Fix: "Open Terminal, run: claude — and log in. clawdyX never logs in for you."})
 	}
+	for _, c := range a.platformChecks(ctx) {
+		add(c)
+	}
 	probe := filepath.Join(a.cfg.StateDir, ".write-test")
 	werr := os.WriteFile(probe, []byte("x"), 0o600)
 	_ = os.Remove(probe)
