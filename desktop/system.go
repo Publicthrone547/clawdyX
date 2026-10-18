@@ -162,6 +162,15 @@ func (s *SystemService) Open(key string) error {
 	return openURL(u)
 }
 
+// RevealLogs opens the log folder (Finder on macOS, Explorer on Windows).
+func (s *SystemService) RevealLogs() error {
+	cfg, err := loadConfig()
+	if err != nil {
+		return err
+	}
+	return openFolder(cfg.LogDir)
+}
+
 // RequestScreenAccess asks macOS for Screen Recording on behalf of the
 // worker's capture helper (the prompt appears once; afterwards the user
 // enables it in System Settings).

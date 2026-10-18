@@ -4,6 +4,10 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -83,5 +87,24 @@ func TestCheckForUpdate(t *testing.T) {
 	}
 	if err := s.OpenRelease("1.0.0; rm -rf /"); err == nil {
 		t.Fatal("invalid version accepted")
+	}
+}
+
+// TestBindingsMatchServices catches a Go method that was removed or renamed
+// while the generated TypeScript bindings (and so the UI) still call it.
+func TestBindingsMatchServices(t *testing.T) {
+	dir := filepath.Join("frontend", "bindings", "github.com", "Publicthrone547", "clawdyX", "desktop")
+	re := regexp.MustCompile(`(?m)^export function (\w+)\(`)
+	for file, svc := range map[string]any{"systemservice.ts": &SystemService{}, "workerservice.ts": &WorkerService{}, "setupservice.ts": &SetupService{}} {
+		b, err := os.ReadFile(filepath.Join(dir, file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		typ := reflect.TypeOf(svc)
+		for _, m := range re.FindAllStringSubmatch(string(b), -1) {
+			if _, ok := typ.MethodByName(m[1]); !ok {
+				t.Errorf("%s calls %s, but %s has no such method (run make bindings or restore it)", file, m[1], typ.Elem().Name())
+			}
+		}
 	}
 }

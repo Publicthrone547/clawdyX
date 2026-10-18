@@ -79,7 +79,7 @@ export function RestartService(): $CancellablePromise<string> {
 }
 
 /**
- * RevealLogs opens the log folder in Finder.
+ * RevealLogs opens the log folder (Finder on macOS, Explorer on Windows).
  */
 export function RevealLogs(): $CancellablePromise<void> {
     return $Call.ByID(572005158);
@@ -93,7 +93,7 @@ export function SaveDiagnostics(text: string): $CancellablePromise<string> {
 }
 
 /**
- * Service reports the LaunchAgent state.
+ * Service reports the background worker's state (macOS: the LaunchAgent).
  */
 export function Service(): $CancellablePromise<$models.ServiceInfo> {
     return $Call.ByID(3452174723);
