@@ -18,7 +18,7 @@ RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all check-wording check-docs check-version check-notices check-attribution app dmg build-windows installer-windows package-linux appimage-linux helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all release-workers release-darwin release-windows release-linux release-sums check-wording check-docs check-version check-notices check-attribution app dmg build-windows installer-windows package-linux appimage-linux helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -59,10 +59,12 @@ app: build helper frontend ## build bin/clawdyX.app (desktop app + worker + scre
 	cd desktop && $(MACENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.version=$(VERSION)" -o ../bin/clawdyX-gui .
 	VERSION=$(VERSION) scripts/bundle.sh
 
-dmg: app ## build bin/clawdyX-$(VERSION).dmg for installing by drag and drop
+DMG := bin/clawdyX-$(VERSION)-darwin-arm64.dmg
+
+dmg: app ## build bin/clawdyX-$(VERSION)-darwin-arm64.dmg for installing by drag and drop
 	rm -rf bin/dmg && mkdir -p bin/dmg && cp -R bin/clawdyX.app bin/dmg/ && ln -s /Applications bin/dmg/Applications
-	hdiutil create -volname clawdyX -srcfolder bin/dmg -ov -format UDZO bin/clawdyX-$(VERSION).dmg >/dev/null
-	rm -rf bin/dmg && ls -lh bin/clawdyX-$(VERSION).dmg
+	hdiutil create -volname clawdyX -srcfolder bin/dmg -ov -format UDZO $(DMG) >/dev/null
+	rm -rf bin/dmg && ls -lh $(DMG)
 
 ## Windows (cross-compiled from this Mac; no CGO, no extra toolchain)
 build-windows: frontend ## build bin/windows/clawdyX/ for Windows $(WINARCH): clawdyX.exe (app), helpers/clawdyx.exe (worker), helpers/clawdyxw.exe (login launcher)
@@ -134,14 +136,50 @@ vet-darwin:
 	cd desktop && $(DARENV) go vet ./host
 
 ## Release
-release: check-all dmg build-windows ## build every release file into bin/release-$(VERSION) with SHA256SUMS
-	rm -rf $(REL) bin/tar && mkdir -p $(REL) bin/tar/clawdyx-$(VERSION)-darwin-arm64
-	cp bin/clawdyx LICENSE THIRD_PARTY_NOTICES.md README.md bin/tar/clawdyx-$(VERSION)-darwin-arm64/
-	tar -C bin/tar -czf $(REL)/clawdyx-$(VERSION)-darwin-arm64.tar.gz clawdyx-$(VERSION)-darwin-arm64
-	cp bin/clawdyX-$(VERSION).dmg $(REL)/
-	cd bin/windows && rm -f ../../$(REL)/clawdyX-$(VERSION)-windows-$(WINARCH).zip && zip -qr -X ../../$(REL)/clawdyX-$(VERSION)-windows-$(WINARCH).zip clawdyX
-	rm -rf bin/tar
-	cd $(REL) && shasum -a 256 *.dmg *.tar.gz *.zip > SHA256SUMS && cat SHA256SUMS
+# Release files. Each OS builds its own app files (the macOS app and the
+# Linux app need their OS; the Windows camera helper needs MSVC); the
+# worker-only Linux tarballs cross-compile anywhere. The release workflow
+# (.github/workflows/release.yml) runs these per OS and adds SHA256SUMS.
+release: check-all ## build this computer's release files into bin/release-$(VERSION)/ with SHA256SUMS (CI builds the rest)
+	rm -rf $(REL) && mkdir -p $(REL)
+	$(MAKE) --no-print-directory release-workers
+	@case "$(GOHOSTOS)" in \
+	darwin) $(MAKE) --no-print-directory release-darwin ;; \
+	windows) $(MAKE) --no-print-directory release-windows ;; \
+	linux) $(MAKE) --no-print-directory release-linux ;; esac
+	$(MAKE) --no-print-directory release-sums
+	@echo "built here: $$(cd $(REL) && ls | grep -v SHA256SUMS | tr '\n' ' ')"
+	@echo "from CI only: the files of the other systems (see docs/RELEASE.md)"
+
+# worker-tar OS ARCH SRC: clawdyx-<version>-<os>-<arch>.tar.gz with the worker and the license files.
+define worker-tar
+	n=clawdyx-$(VERSION)-$(1)-$(2); rm -rf bin/tar && mkdir -p bin/tar/$$n && cp $(3) bin/tar/$$n/clawdyx && \
+	cp LICENSE THIRD_PARTY_NOTICES.md README.md bin/tar/$$n/ && tar -C bin/tar -czf $(REL)/$$n.tar.gz $$n && rm -rf bin/tar
+endef
+
+release-workers: build-linux ## the worker-only Linux tarballs (amd64, arm64)
+	mkdir -p $(REL)
+	$(call worker-tar,linux,amd64,$(LINDIR)/amd64/clawdyx)
+	$(call worker-tar,linux,arm64,$(LINDIR)/arm64/clawdyx)
+
+release-darwin: dmg ## the macOS release files (on a Mac): the .dmg and the worker tarball
+	mkdir -p $(REL)
+	cp $(DMG) $(REL)/
+	$(call worker-tar,darwin,arm64,bin/clawdyx)
+
+release-windows: installer-windows ## the Windows release files (on Windows): the installer and the .zip
+	mkdir -p $(REL)
+	z=clawdyX-$(VERSION)-windows-$(WINARCH).zip; rm -f $(REL)/$$z; \
+	bsdtar="$$(cygpath -u "$${SYSTEMROOT:-C:/Windows}" 2>/dev/null)/System32/tar.exe"; \
+	if command -v zip >/dev/null; then (cd bin/windows && zip -qr -X ../../$(REL)/$$z clawdyX); \
+	elif [ -x "$$bsdtar" ]; then (cd bin/windows && "$$bsdtar" -a -cf ../../$(REL)/$$z clawdyX); \
+	else echo "no zip tool (zip, or Windows' tar.exe)"; exit 1; fi
+
+release-linux: package-linux ## the Linux release files (on Linux): .deb, .rpm, the app tarball; the AppImage with appimage-linux
+
+release-sums: ## SHA256SUMS of everything in bin/release-$(VERSION)/
+	cd $(REL) && rm -f SHA256SUMS && files=$$(ls | sort) && \
+	if command -v sha256sum >/dev/null; then sha256sum $$files; else shasum -a 256 $$files; fi | sed 's/ [*]/  /' > SHA256SUMS && cat SHA256SUMS
 
 helper:
 	swiftc -O -parse-as-library -target $$(uname -m)-apple-macos14.0 desktop/helper/main.swift -o bin/clawdyx-screenshot
