@@ -5,7 +5,9 @@ GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
 VERSION := 0.4.1
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
-WINENV  := GOOS=windows GOARCH=amd64 CGO_ENABLED=0
+# WINARCH=arm64 builds the Windows files for arm64 (make build-windows WINARCH=arm64).
+WINARCH ?= amd64
+WINENV  := GOOS=windows GOARCH=$(WINARCH) CGO_ENABLED=0
 LINENV  := GOOS=linux CGO_ENABLED=0
 DARENV  := GOOS=darwin CGO_ENABLED=0
 LINDIR  := bin/linux
@@ -63,32 +65,33 @@ dmg: app ## build bin/clawdyX-$(VERSION).dmg for installing by drag and drop
 	rm -rf bin/dmg && ls -lh bin/clawdyX-$(VERSION).dmg
 
 ## Windows (cross-compiled from this Mac; no CGO, no extra toolchain)
-build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX.exe (app), helpers/clawdyx.exe (worker), helpers/clawdyxw.exe (login launcher)
+build-windows: frontend ## build bin/windows/clawdyX/ for Windows $(WINARCH): clawdyX.exe (app), helpers/clawdyx.exe (worker), helpers/clawdyxw.exe (login launcher)
 	rm -rf bin/windows && mkdir -p $(WINDIR)/helpers
 	$(WINENV) go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyx.exe ./cmd/clawdyx
 	$(WINENV) go build -trimpath -ldflags="-H windowsgui -X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyxw.exe ./cmd/clawdyxw
 	@if command -v wails3 >/dev/null; then \
 		sed 's/__VERSION__/$(VERSION)/g' desktop/build/windows/info.json > bin/windows/info.json && \
-		wails3 generate syso -arch amd64 -icon desktop/build/windows/icon.ico -manifest desktop/build/windows/clawdyX.exe.manifest \
-			-info bin/windows/info.json -out desktop/rsrc_windows_amd64.syso >/dev/null; \
+		wails3 generate syso -arch $(WINARCH) -icon desktop/build/windows/icon.ico -manifest desktop/build/windows/clawdyX.exe.manifest \
+			-info bin/windows/info.json -out desktop/rsrc_windows_$(WINARCH).syso >/dev/null; \
 	else echo "note: wails3 not installed; clawdyX.exe gets no icon or manifest (see make bindings)"; fi
 	cd desktop && $(WINENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version=$(VERSION)" -o ../$(WINDIR)/clawdyX.exe .
-	rm -f desktop/rsrc_windows_amd64.syso bin/windows/info.json
-	@if [ "$(GOHOSTOS)" = windows ]; then $(MAKE) --no-print-directory helper-windows; \
-	elif [ -f bin/clawdyx-camera.exe ]; then cp bin/clawdyx-camera.exe $(WINDIR)/helpers/; \
+	rm -f desktop/rsrc_windows_$(WINARCH).syso bin/windows/info.json
+	@if [ "$(GOHOSTOS)" = windows ]; then $(MAKE) --no-print-directory helper-windows || \
+		{ [ "$(WINARCH)" = arm64 ] && echo "note: no arm64 MSVC tools here; this arm64 build has no camera"; }; \
+	elif [ "$(WINARCH)" = amd64 ] && [ -f bin/clawdyx-camera.exe ]; then cp bin/clawdyx-camera.exe $(WINDIR)/helpers/; \
 	else echo "note: the Windows camera helper is built on Windows (make helper-windows) or in CI; this build has no camera"; fi
 	cp LICENSE THIRD_PARTY_NOTICES.md README.md $(WINDIR)/
 	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe $(WINDIR)/helpers/clawdyxw.exe
 
 installer-windows: build-windows ## build the per-user Windows installer (NSIS: makensis) into bin/release-$(VERSION)/
 	mkdir -p $(REL)
-	makensis -V2 -DVERSION=$(VERSION) -DSRC="$(CURDIR)/$(WINDIR)" -DOUT="$(CURDIR)/$(REL)/clawdyX-$(VERSION)-windows-amd64-setup.exe" desktop/build/windows/installer.nsi
-	@ls -lh $(REL)/clawdyX-$(VERSION)-windows-amd64-setup.exe
+	makensis -V2 -DVERSION=$(VERSION) -DSRC="$(CURDIR)/$(WINDIR)" -DOUT="$(CURDIR)/$(REL)/clawdyX-$(VERSION)-windows-$(WINARCH)-setup.exe" desktop/build/windows/installer.nsi
+	@ls -lh $(REL)/clawdyX-$(VERSION)-windows-$(WINARCH)-setup.exe
 
 # The Windows camera helper (C++, Media Foundation) needs MSVC: it builds on a
 # Windows host with the Visual Studio Build Tools, and in CI.
 helper-windows: ## build bin/windows/clawdyX/helpers/clawdyx-camera.exe with MSVC (Windows only)
-	powershell -NoProfile -ExecutionPolicy Bypass -File desktop/helper/windows/build.ps1 -Out $(WINDIR)/helpers/clawdyx-camera.exe
+	powershell -NoProfile -ExecutionPolicy Bypass -File desktop/helper/windows/build.ps1 -Arch $(if $(filter arm64,$(WINARCH)),arm64,x64) -Out $(WINDIR)/helpers/clawdyx-camera.exe
 
 vet-windows: ## type-check everything (including tests) for Windows
 	$(WINENV) go vet $(PKG)
@@ -135,7 +138,7 @@ release: check-all dmg build-windows ## build every release file into bin/releas
 	cp bin/clawdyx LICENSE THIRD_PARTY_NOTICES.md README.md bin/tar/clawdyx-$(VERSION)-darwin-arm64/
 	tar -C bin/tar -czf $(REL)/clawdyx-$(VERSION)-darwin-arm64.tar.gz clawdyx-$(VERSION)-darwin-arm64
 	cp bin/clawdyX-$(VERSION).dmg $(REL)/
-	cd bin/windows && rm -f ../../$(REL)/clawdyX-$(VERSION)-windows-amd64.zip && zip -qr -X ../../$(REL)/clawdyX-$(VERSION)-windows-amd64.zip clawdyX
+	cd bin/windows && rm -f ../../$(REL)/clawdyX-$(VERSION)-windows-$(WINARCH).zip && zip -qr -X ../../$(REL)/clawdyX-$(VERSION)-windows-$(WINARCH).zip clawdyX
 	rm -rf bin/tar
 	cd $(REL) && shasum -a 256 *.dmg *.tar.gz *.zip > SHA256SUMS && cat SHA256SUMS
 
