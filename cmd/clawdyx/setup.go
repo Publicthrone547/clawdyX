@@ -34,6 +34,7 @@ type setupOptions struct {
 	Force        bool // replace existing files without asking
 	NoCheck      bool // skip the read-only checks at the end
 	Yes          bool // never prompt: use flags and defaults, fail when something is missing
+	Headless     bool // a server without a desktop: no browser, /open off, the service steps for it
 }
 
 // wizard bundles the I/O of one setup run so tests can drive it.
@@ -115,6 +116,8 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 	if f, ok := in.(*os.File); ok && !o.TokenStdin && term.IsTerminal(int(f.Fd())) {
 		w.tty = f
 	}
+	// A Linux machine without a graphical session is a server.
+	headless := o.Headless || platform.Current().Headless
 	noKeyring := !o.TokenFile && !vault.Available()
 	if noKeyring {
 		o.TokenFile = true
@@ -215,7 +218,7 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 			return exitConfig
 		}
 		browser := o.Browser
-		if browser == "" {
+		if browser == "" && !headless {
 			if browser, err = w.ask("Browser app used by /open", setup.DetectBrowser()); err != nil {
 				return exitConfig
 			}
@@ -228,7 +231,12 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 			w.say("The claude CLI was not found. Install Claude Code (%s), run `claude` once to log in, then rerun setup. Pass -claude-binary PATH if it lives elsewhere.", platform.W.InstallClaude)
 			return exitConfig
 		}
-		if err := setup.WriteConfig(cfgPath, setup.GenerateConfig(owner, ws, browser, claudeBin)); err != nil {
+		gen := setup.GenerateConfig(owner, ws, browser, claudeBin)
+		if headless {
+			off := false
+			gen.Desktop.OpenURLs, gen.Desktop.BrowserApp = &off, ""
+		}
+		if err := setup.WriteConfig(cfgPath, gen); err != nil {
 			w.say("Could not write the configuration:\n%s", observability.Redact(err.Error()))
 			return exitConfig
 		}
@@ -260,7 +268,7 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 			w.say("\nSome checks failed. Fix them, then run `clawdyx check` (or `make doctor`) again.")
 		}
 	}
-	w.say("\nDone. Next:\n  make start      run the bot in the background now and at every login\n  make run        or run it in the foreground (Ctrl-C stops it)\nThen open Telegram and send /start to @%s.", botName)
+	w.say("\nDone. Next:\n  %s\nThen open Telegram and send /start to @%s.", nextSteps(headless), botName)
 	return exitOK
 }
 
@@ -416,4 +424,15 @@ func migrateToken(cfgPath, envPath string, out io.Writer) int {
 	}
 	fmt.Fprintf(out, "✓ Moved the bot token into %s (item %q) and removed %s.\nRestart the worker to use it: clawdyx service restart\n", platform.W.TokenStore, vault.Service, envPath)
 	return exitOK
+}
+
+// nextSteps is the end of setup: how to start the worker on this OS, and on
+// a server how to keep it running without a login.
+func nextSteps(headless bool) string {
+	if headless && platform.IsLinux {
+		return "clawdyx service start           install and start the systemd user service\n" +
+			"  loginctl enable-linger $USER    once: keep it running from boot, without a login\n" +
+			"  clawdyx service status          check it (logs: journalctl --user -u clawdyx)"
+	}
+	return platform.W.SetupNext
 }

@@ -64,7 +64,7 @@ Usage:
 
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
 Setup flags (optional, for scripts): -owner-id N -workspace DIR -browser NAME -claude-binary PATH
-                                     -token-stdin -token-file -migrate-token -force -no-check -yes
+                                     -token-stdin -token-file -migrate-token -force -no-check -yes -headless
 `, version, platform.W.ServiceKind, config.DefaultPath(), config.DefaultEnvPath())
 }
 
@@ -90,6 +90,7 @@ func main() {
 	fs.BoolVar(&so.Force, "force", false, "setup: replace existing config and token files")
 	fs.BoolVar(&so.NoCheck, "no-check", false, "setup: skip the read-only checks at the end")
 	fs.BoolVar(&so.Yes, "yes", false, "setup: never prompt; use flags and defaults")
+	fs.BoolVar(&so.Headless, "headless", false, "setup: a server without a desktop (no browser, /open off); automatic without a graphical session")
 	sub := ""
 	if cmd == "service" && len(rest) > 0 {
 		sub, rest = rest[0], rest[1:]

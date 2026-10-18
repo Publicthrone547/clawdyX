@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"strings"
@@ -206,5 +207,52 @@ func TestSetupWithoutKeyringUsesTheTokenFile(t *testing.T) {
 	}
 	if tok, err := config.LoadToken(envPath); err != nil || tok != token {
 		t.Fatalf("token file: %v", err)
+	}
+}
+
+func TestSetupHeadless(t *testing.T) {
+	old := getMeFunc
+	getMeFunc = func(context.Context, string) (string, error) { return "testbot", nil }
+	defer func() { getMeFunc = old }()
+	t.Setenv("TELEGRAM_BOT_TOKEN", "")
+	dir, ws, bin := t.TempDir(), t.TempDir(), fakeClaude(t)
+	cfgPath, envPath := filepath.Join(dir, "config.json"), filepath.Join(dir, ".env")
+	token := "123456789:" + strings.Repeat("H", 35)
+	var out bytes.Buffer
+	// No -browser: a headless setup must not ask for one.
+	opts := setupOptions{OwnerID: 111111111, Workspace: ws, ClaudeBinary: bin, TokenStdin: true, NoCheck: true, Headless: true}
+	if code := runSetup(cfgPath, envPath, opts, strings.NewReader(token+"\n"), &out); code != exitOK {
+		t.Fatalf("%d %s", code, out.String())
+	}
+	c, err := config.Load(cfgPath, envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Desktop.OpenURLs == nil || *c.Desktop.OpenURLs {
+		t.Fatalf("headless config keeps /open: %+v", c.Desktop)
+	}
+	if !strings.Contains(out.String(), nextSteps(true)) {
+		t.Fatalf("next steps missing:\n%s", out.String())
+	}
+	if platform.IsLinux && !strings.Contains(nextSteps(true), "loginctl enable-linger") {
+		t.Fatal("a Linux server needs the linger step")
+	}
+	if !platform.IsLinux && nextSteps(true) != platform.W.SetupNext {
+		t.Fatal("headless changes the steps only on Linux")
+	}
+}
+
+func TestSetupEndsWithThisOSsSteps(t *testing.T) {
+	if got := nextSteps(false); got != platform.W.SetupNext || (!platform.IsDarwin && strings.Contains(got, "make start")) {
+		t.Fatalf("next steps %q", got)
+	}
+}
+
+func TestHeadlessFlag(t *testing.T) {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	var so setupOptions
+	fs.BoolVar(&so.Headless, "headless", false, "")
+	if err := fs.Parse([]string{"-headless"}); err != nil || !so.Headless {
+		t.Fatalf("flag: %v %v", err, so.Headless)
 	}
 }
