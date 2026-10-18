@@ -79,7 +79,7 @@ type Status struct {
 
 // ScreenStatus is the state of the screen features.
 type ScreenStatus struct {
-	Configured bool `json:"configured"` // desktop.screen_control in config.json
+	Configured bool `json:"configured"` // the screen_control setting
 	Enabled    bool `json:"enabled"`    // runtime switch (/screen off, GUI switch)
 }
 

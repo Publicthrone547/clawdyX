@@ -131,11 +131,11 @@ Users share the bot's sessions and workspaces with the owner and get answers in 
 | `assisted` | The above, plus edit files inside the workspace and run the workspace `allowed_commands` | Run `rm`, `sudo`, `git push`, `git remote`, `curl`, `wget`, `brew`, `claude`, use the web, read outside the workspace, touch secret paths |
 | `automation` (opt-in) | Run shell commands anywhere on the Mac, such as opening apps and websites, reading files you name, scripts, or `osascript`, whenever Claude Code's auto-mode safety classifier approves them | The same deny list as `assisted`, plus secret paths. Bypass mode stays off. |
 
-Automation requires `"modes": {"automation_enabled": true}` in config.json and a confirmation button for each session (`/mode automation`). `/mode observe` switches back.
+Automation is turned on in the clawdyX app (**Settings → Features → Automation tier available**) and needs a confirmation button for each session (`/mode automation`). `/mode observe` switches back.
 
 ### Screens and screen control (opt-in)
 
-With `"desktop": {"screen_control": true}` in config.json:
+With **Settings → Features → Screen features** turned on in the clawdyX app:
 
 - **`/screens`** lists every connected display (number, name, resolution). It never captures.
 - **`/screen N`** sends you a photo of display N (1 is the main display); **`/screen all`** sends one photo per display. Photos go only to the private chat that asked.
@@ -153,7 +153,7 @@ Nothing is captured at startup or on a timer. Captures stay in memory for at mos
 
 ### Camera (opt-in)
 
-Turn it on in the clawdyX app: **Settings → Features → Camera**, then restart the worker (macOS, with the clawdyX app installed). Without the app, `"desktop": {"camera": true}` in config.json does the same.
+Turn it on in the clawdyX app: **Settings → Features → Camera**, then restart the worker (macOS, with the clawdyX app installed).
 
 - **`/cameras`** lists the cameras (built-in first). It never captures.
 - **`/camera`** sends you a photo from the built-in camera; **`/camera N`** uses camera N. **`/camera video 10`** (or `/camera 2 video 10`) records a 10-second clip **without sound** and sends it to you. Clips are 1–60 seconds; longer requests are refused.

@@ -44,7 +44,7 @@ Scripted setup: `printf '%s\n' "$TOKEN" | bin/clawdyx setup -token-stdin -owner-
    printf 'TELEGRAM_BOT_TOKEN=%s\n' '<token>' > ~/.config/clawdyx/.env && chmod 600 ~/.config/clawdyx/.env
    cp config.example.json ~/.config/clawdyx/config.json && chmod 600 ~/.config/clawdyx/config.json
    ```
-3. Edit config.json: set `telegram.owner_user_id` to your numeric Telegram user ID (the bot refuses to start while it is 0) and list your `workspaces`. Only directories listed there can ever be used. Avoid `~/Desktop`, `~/Documents` and `~/Downloads`: macOS privacy protection can block a launchd-started process there.
+3. Better: run `clawdyx setup -yes -owner-id <your numeric Telegram user ID> -workspace <project folder> -token-stdin` (or the app's wizard), which writes this file for you; afterwards change everything in the app's Settings. The bot refuses to start without an owner, and only the listed `workspaces` can ever be used. Only directories listed there can ever be used. Avoid `~/Desktop`, `~/Documents` and `~/Downloads`: macOS privacy protection can block a launchd-started process there.
 4. `make doctor` validates the config and token format, runs `claude --version` and `claude auth status` (about 30 s), calls Telegram `getMe`/`getWebhookInfo`, and checks the instance lock. It changes nothing.
 5. `make run` runs the bot in the foreground; send `/start` from the owner account.
 

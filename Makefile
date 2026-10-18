@@ -16,7 +16,7 @@ RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all app dmg build-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all check-wording app dmg build-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -153,9 +153,12 @@ check-secrets:
 	@if git grep -nIE '[0-9]{8,10}:[A-Za-z0-9_-]{35}|sk-ant-[A-Za-z0-9_-]{10,}' -- . ':!Makefile' ':!docs/*' ':!internal/observability/*' ; then \
 		echo "possible secret found"; exit 1; else echo "no secrets found"; fi
 
+check-wording: ## fail when user-facing text tells people to edit config.json
+	@scripts/check-wording.sh
+
 check: lint test check-secrets
 
-check-all: check test-desktop vet-windows vet-linux vet-darwin ## everything: tests, the desktop app's tests and the type checks for all three OSes
+check-all: check check-wording test-desktop vet-windows vet-linux vet-darwin ## everything: tests, the desktop app's tests and the type checks for all three OSes
 
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh

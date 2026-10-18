@@ -1,0 +1,19 @@
+{
+  "comment": "Words that must not appear in user-facing text rendered for an OS (case-sensitive, word boundaries; the glyph ⌘ anywhere). Shared by the Go guard tests and the Vitest guard (make frontend copies it to desktop/frontend/src/__tests__/forbidden.json).",
+  "forbidden": {
+    "darwin": ["Windows", "PowerShell", "Credential Manager", "Task Scheduler", "File Explorer", "Explorer", "WebView2", "SmartScreen", "winget", "%APPDATA%", "%LOCALAPPDATA%", ".exe", "Ctrl", "Linux", "systemd", "systemctl", "GNOME", "KDE", "Wayland", "X11", "xdg-open", "apt", "dnf", "pacman", "Secret Service", "keyring", "tray icon"],
+    "windows": ["macOS", "Mac", "Macs", "MacBook", "Apple", "Finder", "Keychain", "LaunchAgent", "launchd", "launchctl", "Homebrew", "brew", "⌘", "Cmd", "System Settings", "menu bar", "menu-bar", "Xcode", "iTerm", "osascript", "Dock", "Spotlight", ".dmg", ".app", "Linux", "systemd", "systemctl", "GNOME", "KDE", "Wayland", "X11", "xdg-open", "apt", "dnf", "pacman", "Secret Service", "keyring"],
+    "linux": ["macOS", "Mac", "Macs", "MacBook", "Apple", "Finder", "Keychain", "LaunchAgent", "launchd", "launchctl", "Homebrew", "brew", "⌘", "Cmd", "System Settings", "menu bar", "menu-bar", "Xcode", "iTerm", "osascript", ".dmg", ".app", "Windows", "PowerShell", "Credential Manager", "Task Scheduler", "File Explorer", "Explorer", "WebView2", "SmartScreen", "winget", "%APPDATA%", "%LOCALAPPDATA%", ".exe"]
+  },
+  "allowed": {
+    "all": {
+      "Claude Code": "product name",
+      "Ctrl-C": "interrupting a terminal program is Ctrl-C on every OS"
+    },
+    "darwin": {
+      "clawdyX.app": "the macOS app bundle"
+    },
+    "windows": {},
+    "linux": {}
+  }
+}
