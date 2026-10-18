@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.0 — 2026-10-18
+
+- **Windows (preview).** clawdyX now builds for Windows 10/11 x64: the bot (`clawdyx.exe`) and the desktop app (`clawdyX.exe`), cross-compiled from a Mac with `make build-windows`. The Telegram bot, sessions, jobs, models, tiers, `/open` (default browser), `/processes` and `/doctor` work; the token goes into the Windows Credential Manager; `clawdyx service start` runs the worker in the background and at every login without administrator rights. Screens and the camera reply that they are macOS only. **Not yet tested on a real Windows PC.** Download: `clawdyX-0.4.0-windows-amd64.zip`. Details: [Windows in the README](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/README.md#windows-preview) and [the runbook](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/docs/RUNBOOK.md#windows).
+- **Camera (opt-in, macOS).** With `"desktop": {"camera": true}`: `/cameras` lists the cameras, `/camera [N]` sends you a photo, `/camera video SECONDS [N]` a clip of 1–60 seconds without sound. Owner only, sent only to the private chat that asked, kept in memory for at most five minutes, every capture in the audit table, and `/screen off` switches the camera off too. Claude gets no camera access. macOS asks for the Camera permission on the Mac at the first `/camera`; a missing permission is named in the reply. See [Camera](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/README.md#camera-opt-in) and [PRIVACY](https://github.com/Publicthrone547/clawdyX/blob/v0.4.0/docs/PRIVACY.md#camera).
+- **Screens:** `/look` drops its captures as soon as the job is queued instead of after the reply.
+- **Worker:** new control method `worker.stop` (clean exit; `clawdyx ctl worker.stop`). `clawdyx ctl help` lists the settings and worker methods.
+- **State database v4** (camera audit columns). A backup is written to `backups/` before the upgrade; 0.3.x cannot open a v4 database, so restore that backup to downgrade.
+- **Build:** `make release` builds every release file with checksums; `make check-all` also type-checks the Windows build; `THIRD_PARTY_NOTICES.md` covers the Windows-only modules.
+
 ## 0.3.3 — 2026-10-17
 
 - **Claude can look at every display.** `/look all question` sends a screenshot of each display in one prompt; `/look question` still uses the main display and `/look N` one display.

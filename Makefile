@@ -1,7 +1,7 @@
 BIN     := bin/clawdyx
 GOBIN   := $(shell go env GOPATH)/bin
 PKG     := ./...
-VERSION := 0.3.3
+VERSION := 0.4.0
 MACENV  := CGO_ENABLED=1 MACOSX_DEPLOYMENT_TARGET=14.0 CGO_CFLAGS=-mmacosx-version-min=14.0 CGO_LDFLAGS=-mmacosx-version-min=14.0
 WINENV  := GOOS=windows GOARCH=amd64 CGO_ENABLED=0
 WINDIR  := bin/windows/clawdyX

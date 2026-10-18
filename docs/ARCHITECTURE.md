@@ -1141,7 +1141,7 @@ Phase 1 is implemented on the local `main` branch. README.md, docs/RUNBOOK.md an
 - **Screen control (added on owner request).** It is gated by `desktop.screen_control` and offered only in automation sessions. The bot binary serves an MCP stdio server (`mcp-screen`) with screenshot, click, move, scroll, type and key tools, built on `screencapture`, `sips` and JXA CGEvent / System Events. Claude Code receives it through `--mcp-config` with `--strict-mcp-config` and a safety system prompt. No allow rule is added, so auto mode's classifier still reviews these calls. A live run confirmed the real CLI reaches the tool. Owner-typed `/screenshot` sends a photo to the private chat.
 - **Not built yet (Phase 2+):** attaching external sessions (`/resume <uuid>` currently only switches between bot sessions), `/run` capabilities, stopping background agents with `claude stop`, the approval relay, warm sessions, and attachments.
 
-## Implementation status (v0.3.3, 2026-10-17)
+## Implementation status (v0.4.0, 2026-10-18)
 
 The v2 product plan (desktop app plus worker) is implemented. Deviations from the plan, with reasons:
 
@@ -1149,4 +1149,6 @@ The v2 product plan (desktop app plus worker) is implemented. Deviations from th
 - **Screen Recording check:** inferring the permission from window titles (JXA) proved wrong on macOS 27 (it reported "granted" while captures were refused). The worker now reports the state from the last real capture, or from the bundled helper's `CGPreflightScreenCaptureAccess` when the app is installed; otherwise "unknown".
 - **App memory is above the plan's 60 MB budget** (about 120–137 MB plus WebKit helpers; see `docs/RELEASE.md`). Destroying the window on close did not reduce it. The worker (29 MB) is independent of the app.
 - **Token storage:** the Keychain item is created through `/usr/bin/security` (go-keyring), so the worker and the app can read it without prompts and rebuilds do not invalidate it; any process of the same macOS user can also read it with the same tool.
-- **Not built yet:** command palette, chat companion view, native notifications, periodic monitor refresh, attaching external Claude sessions, warm sessions, approval relay, self-update, Windows.
+- **Windows (0.4.0, preview, untested on real hardware):** the worker and the app cross-compile with plain `GOOS=windows` (Wails v3 needs no CGO there). Platform files replace process groups (`taskkill /T /F`), launchd (a per-user Run entry plus a detached worker, stopped through `worker.stop`), sysctl/ps (Win32 calls) and the peer-uid check (the socket file's ACL in `%LOCALAPPDATA%`). Screens and the camera are macOS only. See `docs/RUNBOOK.md#windows`.
+- **Camera (0.4.0, opt-in):** `desktop.camera` enables owner-typed `/cameras` and `/camera [N] [video SECONDS]` through a second bundled helper (`clawdyx-camera`, AVFoundation). It follows the screen rules (one broker, memory only for at most five minutes, audit rows, `/screen off`). Claude gets no camera tool; the helper captures only when the worker is its parent. The automation tier's shell access remains a residual path (`docs/PRIVACY.md#camera`).
+- **Not built yet:** command palette, chat companion view, native notifications, periodic monitor refresh, attaching external Claude sessions, warm sessions, approval relay, self-update, screens and camera on Windows.

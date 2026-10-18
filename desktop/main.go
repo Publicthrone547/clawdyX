@@ -19,7 +19,7 @@ var assets embed.FS
 //go:embed build/tray-template.png
 var trayIcon []byte
 
-var version = "0.3.3"
+var version = "0.4.0"
 
 func main() {
 	worker := &WorkerService{}
