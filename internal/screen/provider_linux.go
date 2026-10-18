@@ -56,3 +56,11 @@ func (linux) Scroll(ctx context.Context, x, y float64, dx, dy int) error {
 func (linux) TypeText(ctx context.Context, t string) error { return Session().TypeText(ctx, t) }
 func (linux) PressKey(ctx context.Context, c string) error { return Session().PressKey(ctx, c) }
 func (linux) Trusted(ctx context.Context) bool             { return Session().Trusted(ctx) }
+
+// InputError implements InputReporter.
+func (linux) InputError() error {
+	if r, ok := Session().(InputReporter); ok {
+		return r.InputError()
+	}
+	return nil
+}

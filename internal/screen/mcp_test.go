@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"strings"
 	"testing"
@@ -182,5 +183,39 @@ func TestSplitCombo(t *testing.T) {
 		if _, _, err := SplitCombo(bad); err == nil {
 			t.Errorf("accepted %q", bad)
 		}
+	}
+}
+
+// waylandDesk: screenshots work, input refuses with its own text.
+type waylandDesk struct{ fakeDesk }
+
+var errNoInput = errors.New("mouse and keyboard tools are not available on Wayland yet")
+
+func (w *waylandDesk) Click(context.Context, float64, float64, string, int) error { return errNoInput }
+func (w *waylandDesk) Trusted(context.Context) bool                               { return false }
+func (w *waylandDesk) InputError() error                                          { return errNoInput }
+
+func TestInputUnavailableIsReported(t *testing.T) {
+	d := &waylandDesk{}
+	s := &Server{D: d, Session: "wayland", Displays: func(context.Context) ([]Display, error) {
+		return []Display{{Index: 1, Name: "Wayland screen", PixelW: 1920, PixelH: 1080, Main: true}}, nil
+	}}
+	ctx := context.Background()
+	txt := s.call(ctx, "list_displays", nil).Content[0].Text
+	for _, want := range []string{"Session: wayland.", "Mouse and keyboard tools: not available (" + errNoInput.Error() + ")"} {
+		if !strings.Contains(txt, want) {
+			t.Errorf("missing %q in %q", want, txt)
+		}
+	}
+	if r := s.call(ctx, "screenshot", nil); r.IsError {
+		t.Fatalf("screenshot: %+v", r)
+	}
+	r := s.call(ctx, "click", json.RawMessage(`{"x":10,"y":10}`))
+	if !r.IsError || !strings.Contains(r.Content[0].Text, errNoInput.Error()) {
+		t.Fatalf("click: %+v", r)
+	}
+	ok := &Server{D: &fakeDesk{}, Displays: s.Displays}
+	if txt := ok.call(ctx, "list_displays", nil).Content[0].Text; !strings.Contains(txt, "Mouse and keyboard tools: available.") || strings.Contains(txt, "Session:") {
+		t.Errorf("trusted desktop: %q", txt)
 	}
 }

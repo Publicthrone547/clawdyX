@@ -123,7 +123,7 @@ func main() {
 			exe = p
 		}
 		d := screen.NewDesktop(exe)
-		srv := &screen.Server{D: d, Version: version}
+		srv := &screen.Server{D: d, Version: version, Session: string(platform.Detect().Session)}
 		if p, ok := d.(screen.Provider); ok {
 			srv.Displays = p.Displays
 		}

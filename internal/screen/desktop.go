@@ -121,6 +121,9 @@ func (u Unsupported) PressKey(context.Context, string) error { return u.err() }
 // Trusted implements Desktop.
 func (u Unsupported) Trusted(context.Context) bool { return false }
 
+// InputError implements InputReporter.
+func (u Unsupported) InputError() error { return u.err() }
+
 // ErrCaptureDenied means the OS or the desktop refused a capture (a
 // permission or a portal dialog). Providers return their own text through
 // Denied; errors.Is matches it.

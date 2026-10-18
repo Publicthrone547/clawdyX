@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -23,6 +24,9 @@ type Server struct {
 	Authorize func(ctx context.Context, display string) error
 	// Displays lists the connected displays for list_displays (captures nothing).
 	Displays func(ctx context.Context) ([]Display, error)
+	// Session is the kind of graphical session (platform.Session), reported
+	// by list_displays.
+	Session string
 
 	mu   sync.Mutex
 	last *Shot // last screenshot, used to map image pixels to screen points
@@ -146,6 +150,25 @@ func (s *Server) Serve(ctx context.Context, r io.Reader, w io.Writer) error {
 	return sc.Err()
 }
 
+// InputReporter is a Desktop that knows its mouse and keyboard tools
+// cannot work here (Wayland, no graphical session).
+type InputReporter interface {
+	InputError() error
+}
+
+// inputError says why the mouse and keyboard tools cannot work, or nil.
+func (s *Server) inputError(ctx context.Context) error {
+	if r, ok := s.D.(InputReporter); ok {
+		if err := r.InputError(); err != nil {
+			return err
+		}
+	}
+	if !s.D.Trusted(ctx) {
+		return errors.New("the input permission is not granted on the computer")
+	}
+	return nil
+}
+
 func fail(format string, a ...any) toolResult {
 	return toolResult{IsError: true, Content: []content{{Type: "text", Text: fmt.Sprintf(format, a...)}}}
 }
@@ -204,6 +227,14 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		fmt.Fprintf(&b, "%d display(s). Pass the number as display to screenshot.\n", len(ds))
 		for _, d := range ds {
 			b.WriteString(d.Label() + "\n")
+		}
+		if s.Session != "" {
+			fmt.Fprintf(&b, "Session: %s.\n", s.Session)
+		}
+		if err := s.inputError(ctx); err != nil {
+			fmt.Fprintf(&b, "Mouse and keyboard tools: not available (%v).\n", err)
+		} else {
+			b.WriteString("Mouse and keyboard tools: available.\n")
 		}
 		return okText(strings.TrimSpace(b.String()))
 	case "screenshot":

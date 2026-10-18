@@ -152,3 +152,6 @@ func (Wayland) PressKey(context.Context, string) error { return ErrNoWaylandInpu
 
 // Trusted implements Desktop: input is not available.
 func (Wayland) Trusted(context.Context) bool { return false }
+
+// InputError implements InputReporter.
+func (Wayland) InputError() error { return ErrNoWaylandInput }
