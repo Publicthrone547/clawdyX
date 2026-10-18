@@ -177,11 +177,3 @@ func captureRect(x, y, w, h int32) (*image.RGBA, error) {
 	BGRAToRGBA(img.Pix)
 	return img, nil
 }
-
-// BGRAToRGBA swaps the blue and red bytes of 32-bit GDI pixels in place and
-// makes them opaque (GDI leaves the alpha byte undefined).
-func BGRAToRGBA(pix []byte) {
-	for i := 0; i+3 < len(pix); i += 4 {
-		pix[i], pix[i+2], pix[i+3] = pix[i+2], pix[i], 0xff
-	}
-}

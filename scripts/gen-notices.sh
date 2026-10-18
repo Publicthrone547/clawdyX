@@ -1,6 +1,6 @@
 #!/bin/sh
 # Regenerates THIRD_PARTY_NOTICES.md from the Go modules linked into the
-# shipped binaries (macOS and Windows) (and, when present, the desktop frontend's production
+# shipped binaries (macOS, Windows and Linux) (and, when present, the desktop frontend's production
 # npm dependencies). Run from the repository root: scripts/gen-notices.sh
 set -eu
 out=THIRD_PARTY_NOTICES.md
@@ -17,10 +17,12 @@ out=THIRD_PARTY_NOTICES.md
   echo "| --- | --- | --- |"
   fmt='{{if and (not .Standard) .Module}}{{if not .Module.Main}}{{if not (eq .Module.Path "github.com/Publicthrone547/clawdyX")}}{{.Module.Path}} {{.Module.Version}} {{.Module.Dir}}{{end}}{{end}}{{end}}'
   {
-    go list -deps -f "$fmt" ./cmd/clawdyx
-    GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go list -deps -f "$fmt" ./cmd/clawdyx
+    for os in darwin windows linux; do
+      GOOS=$os GOARCH=amd64 CGO_ENABLED=0 go list -deps -f "$fmt" ./cmd/clawdyx ./cmd/clawdyxw
+    done
     if [ -f desktop/go.mod ]; then
-      (cd desktop && CGO_ENABLED=1 go list -deps -f "$fmt" .)
+      (cd desktop && GOOS=darwin GOARCH=arm64 CGO_ENABLED=1 go list -deps -tags production -f "$fmt" .)
+      (cd desktop && GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go list -deps -tags production,gtk3 -f "$fmt" .)
       (cd desktop && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go list -deps -tags production -f "$fmt" .)
     fi
   } | sort -u > /tmp/clawdyx-mods.$$

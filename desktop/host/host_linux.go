@@ -13,11 +13,12 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/config"
 )
 
-// ScreenSupported reports whether this OS has screen capture.
-const ScreenSupported = false
+// ScreenSupported: the worker picks X11 or Wayland per session and
+// explains a session without a screen itself.
+const ScreenSupported = true
 
-// ErrScreenUnsupported explains the missing screen capture.
-var ErrScreenUnsupported = errors.New("screen capture is not available on this computer yet")
+// ErrScreenUnsupported is nil where screens are supported.
+var ErrScreenUnsupported error
 
 func xdgConfigHome() string {
 	if d := os.Getenv("XDG_CONFIG_HOME"); d != "" && filepath.IsAbs(d) {
