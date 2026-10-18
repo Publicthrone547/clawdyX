@@ -1,7 +1,7 @@
 import { reactive } from "vue";
 import { Events } from "@wailsio/runtime";
 import { Worker, System, Setup, errMsg, type Status, type D } from "./api";
-import { notifications } from "./prefs";
+import { notifications, pref } from "./prefs";
 
 export type View = "overview" | "telegram" | "sessions" | "jobs" | "monitors" | "settings" | "diagnostics" | "help";
 
@@ -104,7 +104,14 @@ export function initStore() {
     .then((p) => (store.platform = p))
     .catch(() => {});
   System.Info()
-    .then((i) => (store.appVersion = i.version))
+    .then((i) => {
+      store.appVersion = i.version;
+      // Once: without a tray, closing the window quits the app.
+      if (!i.trayAvailable && pref.get("noTrayHint", "") !== "shown") {
+        toast("Your desktop shows no tray icons, so closing the window quits the app. The worker keeps running.");
+        pref.set("noTrayHint", "shown");
+      }
+    })
     .catch(() => {});
   Events.On("worker:connection", (ev) => {
     const c = ev.data as D.Connection;

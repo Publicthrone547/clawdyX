@@ -44,26 +44,12 @@ func main() {
 	worker := &WorkerService{}
 	system := &SystemService{w: worker}
 	notes := notifications.New()
-	app := application.New(application.Options{
-		Name:        "clawdyX",
-		Description: "Control panel for the clawdyX Telegram bot and the local Claude Code CLI",
-		Services: []application.Service{
-			application.NewService(worker),
-			application.NewService(system),
-			application.NewService(&SetupService{}),
-			application.NewService(notes),
-		},
-		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
-		Mac: application.MacOptions{
-			// Closing the window keeps the app (and its menu-bar item) alive.
-			ApplicationShouldTerminateAfterLastWindowClosed: false,
-		},
-		SingleInstance: &application.SingleInstanceOptions{
-			UniqueID: instanceID,
-			// Starting the app again brings the running one to the front.
-			OnSecondInstanceLaunch: func(application.SecondInstanceData) { showWindow() },
-		},
-	})
+	app := application.New(appOptions([]application.Service{
+		application.NewService(worker),
+		application.NewService(system),
+		application.NewService(&SetupService{}),
+		application.NewService(notes),
+	}, showWindow))
 
 	window = app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:      "main",
@@ -185,4 +171,23 @@ func confirmQuit(app *application.App, worker *WorkerService) {
 	})
 	d.AddButton("Cancel").SetAsCancel()
 	d.Show()
+}
+
+// appOptions are the application's options: one app per user (starting it
+// again brings the running one to the front), and on macOS closing the
+// window keeps the app and its menu-bar item.
+func appOptions(services []application.Service, showWindow func()) application.Options {
+	return application.Options{
+		Name:        "clawdyX",
+		Description: "Control panel for the clawdyX Telegram bot and the local Claude Code CLI",
+		Services:    services,
+		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
+		Mac: application.MacOptions{
+			ApplicationShouldTerminateAfterLastWindowClosed: false,
+		},
+		SingleInstance: &application.SingleInstanceOptions{
+			UniqueID:               instanceID,
+			OnSecondInstanceLaunch: func(application.SecondInstanceData) { showWindow() },
+		},
+	}
 }
