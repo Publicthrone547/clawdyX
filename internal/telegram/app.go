@@ -18,6 +18,7 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/Publicthrone547/clawdyX/internal/agent"
+	"github.com/Publicthrone547/clawdyX/internal/camera"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/jobs"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
@@ -89,6 +90,7 @@ type App struct {
 	RestartRequested chan struct{}
 	restartOnce      sync.Once
 	broker           *screen.Broker
+	cams             *camera.Broker
 	quiet            quietJobs
 	events           atomic.Pointer[func(typ string, data any)]
 	nameMu           sync.Mutex
@@ -172,6 +174,8 @@ type Options struct {
 	Desktop screen.Desktop
 	// Screens enumerates and captures displays (default: Desktop if it can).
 	Screens screen.Provider
+	// Cameras takes photos and clips (default: the AVFoundation helper).
+	Cameras camera.Provider
 }
 
 // New builds the app and connects to Telegram (getMe).
@@ -237,6 +241,17 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 		a.desktop = mac
 	}
 	a.initScreens(opt.Screens)
+	cams := opt.Cameras
+	if cams == nil {
+		mac := camera.Mac{TmpDir: os.TempDir()}
+		if exe, err := os.Executable(); err == nil {
+			if exe, err = filepath.EvalSymlinks(exe); err == nil {
+				mac.Helper = camera.FindHelper(exe)
+			}
+		}
+		cams = mac
+	}
+	a.initCamera(cams)
 	return a, nil
 }
 
@@ -362,6 +377,8 @@ func (a *App) registerCommands() {
 		{Command: "screens", Description: "List the Mac's displays"},
 		{Command: "screen", Description: "Photo of a display: /screen 2 · /screen all · /screen off"},
 		{Command: "look", Description: "Ask Claude about a display: /look 2 what is wrong?"},
+		{Command: "cameras", Description: "List the Mac's cameras"},
+		{Command: "camera", Description: "Photo from the camera: /camera · /camera video 10"},
 		{Command: "pause", Description: "Stop accepting new prompts"},
 		{Command: "start", Description: "Menu; resume after /pause"},
 	}

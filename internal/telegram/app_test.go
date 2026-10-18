@@ -211,6 +211,12 @@ func startWith(t *testing.T, mut func(*config.Config), opener func(ctx context.C
 
 func startFull(t *testing.T, mut func(*config.Config), opener func(ctx context.Context, app, url string) error, desk screen.Desktop) *harness {
 	t.Helper()
+	return startOpts(t, mut, Options{Opener: opener, Desktop: desk})
+}
+
+// startOpts starts the app with opt (ServerURL is filled in).
+func startOpts(t *testing.T, mut func(*config.Config), opt Options) *harness {
+	t.Helper()
 	tg := newFakeTG()
 	srv := httptest.NewServer(tg)
 	t.Cleanup(srv.Close)
@@ -236,7 +242,8 @@ func startFull(t *testing.T, mut func(*config.Config), opener func(ctx context.C
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { st.Close() })
-	app, err := New(cfg, st, slog.New(slog.NewTextHandler(io.Discard, nil)), Options{ServerURL: srv.URL, Opener: opener, Desktop: desk})
+	opt.ServerURL = srv.URL
+	app, err := New(cfg, st, slog.New(slog.NewTextHandler(io.Discard, nil)), opt)
 	if err != nil {
 		t.Fatal(err)
 	}

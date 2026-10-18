@@ -45,7 +45,7 @@ const userHelpText = `<b>clawdyX</b> — send any message to talk to Claude in t
 /new [name] · /newf [name] · /clear
 /model [name|reset] · /effort [level] — for the active session
 /aliases · /stop · /cancel j-ID — your own jobs
-<i>Sessions are shared with the bot's owner. Tiers, defaults, screens and the machine are owner-only.</i>`
+<i>Sessions are shared with the bot's owner. Tiers, defaults, screens, the camera and the machine are owner-only.</i>`
 
 const helpText = `<b>Claude control center</b> — send any message to talk to Claude in the active session.
 
@@ -65,6 +65,7 @@ const helpText = `<b>Claude control center</b> — send any message to talk to C
 <b>Machine</b>
 /processes · /usage · /doctor · /open youtube.com — open a website in the Mac's browser
 /screens — list displays · /screen [N|all] — photo of display N · /look [N|all] [question] — ask Claude about display N or all of them · /screen off
+/cameras — list cameras · /camera [N] — photo · /camera video SECONDS [N] — clip of up to 60 s, no sound (/screen off switches the camera off too)
 <b>Bot</b>
 /pause · /start (resume) · /confirm TOKEN · /deny TOKEN`
 
@@ -198,6 +199,10 @@ func (a *App) command(ctx context.Context, m *models.Message, text, role string)
 		a.cmdScreen(m, args)
 	case "screens":
 		a.cmdScreens(m)
+	case "cameras":
+		a.cmdCameras(m)
+	case "camera":
+		a.cmdCamera(m, args)
 	case "look":
 		a.cmdLook(m, args)
 	case "doctor":
@@ -1369,6 +1374,10 @@ func (a *App) cmdDoctor(m *models.Message) {
 			if !granted || !a.desktop.Trusted(ctx) {
 				sb.WriteString("   → Grant both to the app that runs clawdyx (Terminal/iTerm when run by hand, the clawdyx binary under launchd) in System Settings → Privacy & Security, then restart the bot.\n")
 			}
+		}
+		if a.cfg.Desktop.Camera {
+			acc, _ := a.cams.Check(ctx)
+			fmt.Fprintf(&sb, "%s Camera permission: %s · camera %s\n", ok(acc != "denied"), acc, map[bool]string{true: "on", false: "switched off"}[a.CameraOn()])
 		}
 		if docErr == nil {
 			sb.WriteString("\n<b>claude doctor</b>\n<pre>" + Esc(observability.Truncate(observability.Redact(strings.TrimSpace(doc)), 1500)) + "</pre>")

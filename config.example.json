@@ -50,7 +50,7 @@
   "default_workspace": "my-project",
   "shutdown_command_enabled": false,
   "modes": { "automation_enabled": false },
-  "desktop": { "open_urls": true, "browser_app": "Safari", "screen_control": false },
+  "desktop": { "open_urls": true, "browser_app": "Safari", "screen_control": false, "camera": false },
   "state_dir": "",
   "log_dir": "",
   "logging": { "level": "info" },

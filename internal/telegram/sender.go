@@ -236,6 +236,16 @@ func (s *Sender) Photo(ctx context.Context, chat int64, jpeg []byte, caption str
 	return s.call(ctx, func() error { _, e := s.b.SendPhoto(ctx, params); return e })
 }
 
+// Video uploads an MP4 clip.
+func (s *Sender) Video(ctx context.Context, chat int64, mp4 []byte, seconds int, caption string, replyTo int) error {
+	params := &bot.SendVideoParams{ChatID: s.chat(chat), Video: &models.InputFileUpload{Filename: "camera.mp4", Data: bytes.NewReader(mp4)},
+		Duration: seconds, SupportsStreaming: true, Caption: caption}
+	if replyTo != 0 {
+		params.ReplyParameters = &models.ReplyParameters{MessageID: replyTo, AllowSendingWithoutReply: true}
+	}
+	return s.call(ctx, func() error { _, e := s.b.SendVideo(ctx, params); return e })
+}
+
 // Answer acknowledges a callback query.
 func (s *Sender) Answer(ctx context.Context, id, text string) {
 	_, _ = s.b.AnswerCallbackQuery(ctx, &bot.AnswerCallbackQueryParams{CallbackQueryID: id, Text: text})

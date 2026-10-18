@@ -188,6 +188,11 @@ type Desktop struct {
 	// use the mouse and keyboard (MCP tools mcp__screen__*), and enables
 	// /screenshot. Requires macOS Screen Recording and Accessibility grants.
 	ScreenControl bool `json:"screen_control"`
+	// Camera enables the owner's /cameras and /camera commands (photos and
+	// clips sent to the owner's private chat). Claude never gets a camera
+	// tool. /screen off switches the camera off too. macOS only; needs the
+	// Camera permission for clawdyX.
+	Camera bool `json:"camera,omitempty"`
 }
 
 // OpenEnabled reports whether /open is enabled.

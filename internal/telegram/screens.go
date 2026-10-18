@@ -45,6 +45,9 @@ func (a *App) SetScreenEnabled(on bool) {
 	if !on && a.broker != nil {
 		a.broker.Clear()
 	}
+	if !on && a.cams != nil {
+		a.cams.Clear()
+	}
 	a.st.Audit("screen", map[bool]string{true: "enable", false: "disable"}[on], "", "ok", 0)
 	a.emit("screen.state", a.screenStatus())
 }
@@ -132,11 +135,11 @@ func (a *App) cmdScreen(m *models.Message, args []string) {
 	}
 	if sel == "off" {
 		a.SetScreenEnabled(false)
-		a.replyTo(m, "🔒 Screen features switched off: no captures from Telegram, the app or Claude's screenshot tool. Switch them on again in the clawdyX app on the Mac.")
+		a.replyTo(m, "🔒 Screen and camera features switched off: no captures from Telegram, the app or Claude's screenshot tool, and no camera photos or clips. Switch them on again in the clawdyX app on the Mac.")
 		return
 	}
 	if sel == "on" {
-		a.replyTo(m, "Screen features can only be switched on from the Mac (clawdyX app → Monitors, or clawdyX ctl screens.enabled.set).")
+		a.replyTo(m, "Screen and camera features can only be switched on from the Mac (clawdyX app → Monitors, or clawdyx ctl screens.enabled.set).")
 		return
 	}
 	if err := a.screenAllowed(); err != nil {
