@@ -14,4 +14,4 @@ var ErrNoCameraAccess = Denied("no access to the camera device: add your user to
 const timeoutHint = "(another program may be using the camera)"
 
 // NewProvider returns this OS's camera provider.
-func NewProvider(string) Provider { return unsupported{} }
+func NewProvider(string, string) Provider { return unsupported{} }

@@ -246,7 +246,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 	a.initScreens(opt.Screens)
 	cams := opt.Cameras
 	if cams == nil {
-		cams = camera.NewProvider(a.jobs.ScreenCommand)
+		cams = camera.NewProvider(a.jobs.ScreenCommand, filepath.Join(cfg.StateDir, "tmp"))
 	}
 	a.initCamera(cams)
 	return a, nil

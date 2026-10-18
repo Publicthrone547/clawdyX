@@ -11,6 +11,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/camera"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 // fakeCamera is the camera backend for tests: two cameras, counted captures.
@@ -244,7 +245,8 @@ func TestCameraDiagnostics(t *testing.T) {
 		if c.OK != tc.ok || c.Warn != tc.warn || !strings.HasPrefix(c.Detail, tc.want) {
 			t.Fatalf("%s: %+v", tc.status, c)
 		}
-		if !tc.ok && c.Fix == "" {
+		// Only an OS that asks has something to say before the first capture.
+		if !tc.ok && c.Fix == "" && (tc.status != "notDetermined" || platform.W.CameraAskNote != "") {
 			t.Fatalf("%s: no fix offered", tc.status)
 		}
 	}

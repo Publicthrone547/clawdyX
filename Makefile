@@ -16,7 +16,7 @@ RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all check-wording app dmg build-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all check-wording app dmg build-windows helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -74,8 +74,16 @@ build-windows: frontend ## build bin/windows/clawdyX/ for Windows amd64: clawdyX
 	else echo "note: wails3 not installed; clawdyX.exe gets no icon or manifest (see make bindings)"; fi
 	cd desktop && $(WINENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version=$(VERSION)" -o ../$(WINDIR)/clawdyX.exe .
 	rm -f desktop/rsrc_windows_amd64.syso bin/windows/info.json
+	@if [ "$(GOHOSTOS)" = windows ]; then $(MAKE) --no-print-directory helper-windows; \
+	elif [ -f bin/clawdyx-camera.exe ]; then cp bin/clawdyx-camera.exe $(WINDIR)/helpers/; \
+	else echo "note: the Windows camera helper is built on Windows (make helper-windows) or in CI; this build has no camera"; fi
 	cp LICENSE THIRD_PARTY_NOTICES.md README.md $(WINDIR)/
 	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe $(WINDIR)/helpers/clawdyxw.exe
+
+# The Windows camera helper (C++, Media Foundation) needs MSVC: it builds on a
+# Windows host with the Visual Studio Build Tools, and in CI.
+helper-windows: ## build bin/windows/clawdyX/helpers/clawdyx-camera.exe with MSVC (Windows only)
+	powershell -NoProfile -ExecutionPolicy Bypass -File desktop/helper/windows/build.ps1 -Out $(WINDIR)/helpers/clawdyx-camera.exe
 
 vet-windows: ## type-check everything (including tests) for Windows
 	$(WINENV) go vet $(PKG)

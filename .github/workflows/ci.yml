@@ -82,6 +82,14 @@ jobs:
       - name: start the Linux app for 5 seconds
         if: runner.os == 'Linux'
         run: xvfb-run -a timeout 5 bin/clawdyX || test $? -eq 124
+      - name: Windows camera helper (MSVC)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          ./desktop/helper/windows/build.ps1 -Out bin/clawdyx-camera.exe
+          $out = & bin/clawdyx-camera.exe list
+          Write-Host $out
+          if (-not ($out | ConvertFrom-Json).ok) { throw "the helper's list failed" }
 
   secrets:
     runs-on: ubuntu-24.04
