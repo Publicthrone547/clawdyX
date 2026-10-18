@@ -1,6 +1,6 @@
 #!/bin/sh
 # Regenerates THIRD_PARTY_NOTICES.md from the Go modules linked into the
-# shipped binaries (and, when present, the desktop frontend's production
+# shipped binaries (macOS and Windows) (and, when present, the desktop frontend's production
 # npm dependencies). Run from the repository root: scripts/gen-notices.sh
 set -eu
 out=THIRD_PARTY_NOTICES.md
@@ -18,8 +18,10 @@ out=THIRD_PARTY_NOTICES.md
   fmt='{{if and (not .Standard) .Module}}{{if not .Module.Main}}{{if not (eq .Module.Path "github.com/Publicthrone547/clawdyX")}}{{.Module.Path}} {{.Module.Version}} {{.Module.Dir}}{{end}}{{end}}{{end}}'
   {
     go list -deps -f "$fmt" ./cmd/clawdyx
+    GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go list -deps -f "$fmt" ./cmd/clawdyx
     if [ -f desktop/go.mod ]; then
       (cd desktop && CGO_ENABLED=1 go list -deps -f "$fmt" .)
+      (cd desktop && GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go list -deps -tags production -f "$fmt" .)
     fi
   } | sort -u > /tmp/clawdyx-mods.$$
   while read -r p v d; do
