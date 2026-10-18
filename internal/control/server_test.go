@@ -11,12 +11,14 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func sockPath(t *testing.T) string {
 	t.Helper()
 	// t.TempDir() on macOS can exceed the 104-byte sun_path limit.
-	d, err := os.MkdirTemp("/tmp", "cx")
+	d, err := os.MkdirTemp(shortTmp, "cx")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,6 +53,9 @@ func dial(t *testing.T, p string) *Client {
 }
 
 func TestSocketPermissions(t *testing.T) {
+	if platform.IsWindows {
+		t.Skip("Windows protects the socket with the profile folder ACL, not file modes")
+	}
 	_, p := start(t, nil)
 	st, err := os.Stat(p)
 	if err != nil {
@@ -221,7 +226,7 @@ func FuzzFrames(f *testing.F) {
 	f.Add([]byte("\x00\xff{"))
 	s := NewServer(nil)
 	s.Handle("echo", time.Second, func(_ context.Context, raw json.RawMessage) (any, error) { return raw, nil })
-	d, _ := os.MkdirTemp("/tmp", "cxf")
+	d, _ := os.MkdirTemp(shortTmp, "cxf")
 	defer os.RemoveAll(d)
 	p := filepath.Join(d, "f.sock")
 	if err := s.Listen(p); err != nil {

@@ -30,9 +30,10 @@ func TestOpenOnlyKnownLinks(t *testing.T) {
 func TestSanitizeRedactsTokensAndHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
 	tok := "123456789:" + strings.Repeat("A", 35)
-	out := sanitize("token "+tok+" path "+home+"/Library/x", false, &WorkerService{})
-	if strings.Contains(out, tok) || strings.Contains(out, home) || !strings.Contains(out, "~/Library/x") {
+	out := sanitize("token "+tok+" path "+filepath.Join(home, "x", "y"), false, &WorkerService{})
+	if strings.Contains(out, tok) || strings.Contains(out, home) || !strings.Contains(out, "~"+filepath.Join("/x", "y")) {
 		t.Fatalf("not sanitized: %q", out)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func ws(t *testing.T) *config.Workspace {
@@ -116,6 +117,9 @@ func TestWithin(t *testing.T) {
 	outside := t.TempDir()
 	link := filepath.Join(w.Canonical, "escape")
 	if err := os.Symlink(outside, link); err != nil {
+		if platform.IsWindows {
+			t.Skipf("symbolic links are not available: %v", err)
+		}
 		t.Fatal(err)
 	}
 	if _, err := Within(w.Canonical, link); err == nil {
@@ -133,7 +137,9 @@ func TestCheckWorkspaceDirDetectsSwap(t *testing.T) {
 	}
 	other := t.TempDir()
 	link := filepath.Join(t.TempDir(), "ws")
-	os.Symlink(other, link)
+	if err := os.Symlink(other, link); err != nil && platform.IsWindows {
+		t.Skipf("symbolic links are not available: %v", err)
+	}
 	w.Path = link
 	if _, err := CheckWorkspaceDir(w); err == nil {
 		t.Fatal("swapped workspace accepted")
@@ -141,7 +147,8 @@ func TestCheckWorkspaceDirDetectsSwap(t *testing.T) {
 }
 
 func TestDisplayPath(t *testing.T) {
-	if DisplayPath("/a/b/c", []string{"/a/b"}) != "/a/b/c" || DisplayPath("/a/bc", []string{"/a/b"}) != "<outside workspace>" {
+	p := filepath.FromSlash
+	if DisplayPath(p("/a/b/c"), []string{p("/a/b")}) != p("/a/b/c") || DisplayPath(p("/a/bc"), []string{p("/a/b")}) != "<outside workspace>" {
 		t.Fatal("display path")
 	}
 }

@@ -56,3 +56,10 @@ func TestMacHelperProtocol(t *testing.T) {
 		t.Fatalf("video %q %v", v, err)
 	}
 }
+
+func TestMacWithoutHelperExplainsWhy(t *testing.T) {
+	_, err := Mac{}.Cameras(context.Background())
+	if !errors.Is(err, ErrNoHelper) {
+		t.Fatalf("no helper: %v", err)
+	}
+}

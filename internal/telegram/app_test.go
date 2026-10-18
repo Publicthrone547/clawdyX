@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/store"
 	"github.com/Publicthrone547/clawdyX/internal/vault"
@@ -34,7 +35,7 @@ var fakeBin string
 func TestMain(m *testing.M) {
 	config.TokenVault = vault.NewMemory() // never touch the real Keychain
 	dir, _ := os.MkdirTemp("", "fakeclaude")
-	fakeBin = filepath.Join(dir, "claude")
+	fakeBin = filepath.Join(dir, "claude"+platform.ExeSuffix)
 	if out, err := exec.Command("go", "build", "-o", fakeBin, "../agent/testdata/fakeclaude").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
@@ -229,7 +230,7 @@ func startOpts(t *testing.T, mut func(*config.Config), opt Options) *harness {
 		DefaultWorkspace: "w",
 		StateDir:         state, LogDir: state,
 		Claude: config.Claude{Binary: fakeBin, DefaultModel: "fable", DefaultEffort: "auto", JobTimeout: config.Duration{Duration: 20 * time.Second},
-			MaxTurns: 5, MaxConcurrentJobs: 2, MaxQueuePerSession: 3, MaxOutputBytes: 1 << 20, MaxChildRSSMB: 4096, ChildPath: "/usr/bin:/bin"},
+			MaxTurns: 5, MaxConcurrentJobs: 2, MaxQueuePerSession: 3, MaxOutputBytes: 1 << 20, MaxChildRSSMB: 4096, ChildPath: config.DefaultChildPath()},
 		Retention: config.Retention{JobsDays: 90, JobEventsDays: 14, ProcessedUpdatesDays: 7, AuditDays: 180},
 		Token:     "123456789:" + strings.Repeat("A", 35),
 		Desktop:   config.Desktop{BrowserApp: "Firefox"},
@@ -488,7 +489,7 @@ func TestOpenCommand(t *testing.T) {
 		return nil
 	})
 	h.tg.push(msg(owner, owner, "private", "/open youtube.com"))
-	h.tg.waitFor(t, "Opened https://youtube.com in Firefox")
+	h.tg.waitFor(t, "Opened https://youtube.com in "+browserName("Firefox"))
 	h.tg.push(msg(owner, owner, "private", "/open file:///etc/passwd"))
 	h.tg.waitFor(t, "Not opened")
 	h.tg.push(msg(42, 42, "private", "/open evil.com")) // stranger: silent, nothing opened

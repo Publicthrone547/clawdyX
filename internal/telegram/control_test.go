@@ -16,7 +16,7 @@ import (
 
 func withControl(t *testing.T, h *harness) *control.Client {
 	t.Helper()
-	d, err := os.MkdirTemp("/tmp", "cxa")
+	d, err := os.MkdirTemp(shortTmp, "cxa")
 	if err != nil {
 		t.Fatal(err)
 	}

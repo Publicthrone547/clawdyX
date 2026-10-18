@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func open(t *testing.T) *Store {
@@ -114,7 +116,7 @@ func TestBackupAndPerms(t *testing.T) {
 	}
 	defer s.Close()
 	st, _ := os.Stat(filepath.Join(dir, "state.db"))
-	if st.Mode().Perm()&0o077 != 0 {
+	if !platform.IsWindows && st.Mode().Perm()&0o077 != 0 {
 		t.Fatalf("db perms %v", st.Mode().Perm())
 	}
 	bk := filepath.Join(dir, "b.db")

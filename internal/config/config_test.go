@@ -1,15 +1,18 @@
 package config
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func fakeBinary(t *testing.T) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "claude")
+	p := filepath.Join(t.TempDir(), "claude"+platform.ExeSuffix)
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -20,8 +23,8 @@ func baseJSON(t *testing.T, owner string, ws string, extra string) string {
 	t.Helper()
 	bin := fakeBinary(t)
 	return `{"telegram":{"owner_user_id":` + owner + `},
-	"claude":{"binary":"` + bin + `"` + extra + `},
-	"workspaces":[{"name":"ws","path":"` + ws + `","denied_commands":["Bash(rm *)","Bash(sudo *)","Bash(git push *)"]}],
+	"claude":{"binary":` + jsonStr(bin) + extra + `},
+	"workspaces":[{"name":"ws","path":` + jsonStr(ws) + `,"denied_commands":["Bash(rm *)","Bash(sudo *)","Bash(git push *)"]}],
 	"default_workspace":"ws"}`
 }
 
@@ -76,9 +79,7 @@ func TestMinimumDenyList(t *testing.T) {
 func TestSymlinkWorkspaceResolved(t *testing.T) {
 	real := t.TempDir()
 	link := filepath.Join(t.TempDir(), "link")
-	if err := os.Symlink(real, link); err != nil {
-		t.Fatal(err)
-	}
+	symlink(t, real, link)
 	c, err := Parse([]byte(baseJSON(t, "111111111", link, "")))
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +98,7 @@ func TestLoadTokenAndPermissions(t *testing.T) {
 	if err := os.WriteFile(env, []byte(good), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := LoadToken(env); err == nil {
+	if _, err := LoadToken(env); err == nil && !platform.IsWindows {
 		t.Fatal("expected permission error for 0644 env file")
 	}
 	if err := os.Chmod(env, 0o600); err != nil {
@@ -183,5 +184,23 @@ func TestParseAllowedUsers(t *testing.T) {
 	}
 	if c.Telegram.OwnerUserID != 111111111 || len(c.Telegram.AllowedUsers) != 2 {
 		t.Fatalf("%+v", c.Telegram)
+	}
+}
+
+// jsonStr quotes a path for a JSON document (Windows paths have backslashes).
+func jsonStr(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
+}
+
+// symlink creates a symbolic link or skips the test where the OS refuses
+// (Windows without Developer Mode or administrator rights).
+func symlink(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		if platform.IsWindows {
+			t.Skipf("symbolic links are not available: %v", err)
+		}
+		t.Fatal(err)
 	}
 }

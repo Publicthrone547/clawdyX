@@ -12,6 +12,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/camera"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func writeConfig(t *testing.T, h *harness) string {
@@ -84,7 +85,7 @@ func TestAllowlistEditAndDetection(t *testing.T) {
 	if err != nil || len(cfg.Telegram.AllowedUsers) != 2 || cfg.Telegram.Role(member) != config.RoleUser {
 		t.Fatalf("config.json not updated: %v %+v", err, cfg)
 	}
-	if st, _ := os.Stat(p); st.Mode().Perm() != 0o600 {
+	if st, _ := os.Stat(p); !platform.IsWindows && st.Mode().Perm() != 0o600 {
 		t.Fatal("config.json lost its private mode")
 	}
 	// The new user works immediately, without a restart.

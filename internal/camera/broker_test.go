@@ -148,10 +148,3 @@ func TestBrokerAccessFromLastCapture(t *testing.T) {
 		t.Fatalf("after a denied capture: %s", acc)
 	}
 }
-
-func TestMacWithoutHelperExplainsWhy(t *testing.T) {
-	_, err := Mac{}.Cameras(context.Background())
-	if !errors.Is(err, ErrNoHelper) {
-		t.Fatalf("no helper: %v", err)
-	}
-}

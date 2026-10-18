@@ -15,6 +15,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/agent"
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/sessions"
 	"github.com/Publicthrone547/clawdyX/internal/store"
 )
@@ -26,7 +27,7 @@ var waitTimeout = 20 * time.Second
 
 func TestMain(m *testing.M) {
 	dir, _ := os.MkdirTemp("", "fakeclaude")
-	fakeBin = filepath.Join(dir, "claude")
+	fakeBin = filepath.Join(dir, "claude"+platform.ExeSuffix)
 	if out, err := exec.Command("go", "build", "-o", fakeBin, "../agent/testdata/fakeclaude").CombinedOutput(); err != nil {
 		panic(string(out))
 	}
@@ -106,7 +107,7 @@ func setup(t *testing.T, mut func(*config.Config)) *env {
 		Workspaces:       []config.Workspace{{Name: "w", Path: dir, Canonical: canon, DefaultMode: "observe", DeniedCommands: []string{"Bash(rm *)"}}},
 		DefaultWorkspace: "w",
 		Claude: config.Claude{Binary: fakeBin, DefaultModel: "fable", DefaultEffort: "auto", JobTimeout: config.Duration{Duration: 20 * time.Second},
-			MaxTurns: 5, MaxConcurrentJobs: 2, MaxQueuePerSession: 3, MaxOutputBytes: 1 << 20, MaxChildRSSMB: 4096, ChildPath: "/usr/bin:/bin"},
+			MaxTurns: 5, MaxConcurrentJobs: 2, MaxQueuePerSession: 3, MaxOutputBytes: 1 << 20, MaxChildRSSMB: 4096, ChildPath: config.DefaultChildPath()},
 	}
 	if mut != nil {
 		mut(cfg)
@@ -319,7 +320,7 @@ func TestRecoverKillsOwnedOrphan(t *testing.T) {
 		Allowed        []string
 		Disallowed     []string
 		SettingsJSON   string
-	}{PermissionMode: "dontAsk"}, Env: agent.ChildEnv("/usr/bin:/bin", 0)})
+	}{PermissionMode: "dontAsk"}, Env: agent.ChildEnv(config.DefaultChildPath(), 0)})
 	if err != nil {
 		t.Fatal(err)
 	}

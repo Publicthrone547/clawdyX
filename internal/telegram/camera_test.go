@@ -223,6 +223,9 @@ type preflightCamera struct {
 func (p preflightCamera) Preflight(context.Context) (string, error) { return p.status, nil }
 
 func TestCameraDiagnostics(t *testing.T) {
+	if !camera.Supported {
+		t.Skip("no camera backend on this OS yet")
+	}
 	ctx := context.Background()
 	shots := &atomic.Int64{}
 	off := startCam(t, nil, fakeCamera{shots: shots})

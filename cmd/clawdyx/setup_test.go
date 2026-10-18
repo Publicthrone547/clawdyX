@@ -10,12 +10,13 @@ import (
 	"testing"
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/setup"
 )
 
 func fakeClaude(t *testing.T) string {
 	t.Helper()
-	p := filepath.Join(t.TempDir(), "claude")
+	p := filepath.Join(t.TempDir(), "claude"+platform.ExeSuffix)
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +78,7 @@ func TestSetupNonInteractive(t *testing.T) {
 	if strings.Contains(out.String(), token) {
 		t.Fatal("the token was echoed")
 	}
-	if st, err := os.Stat(cfgPath); err != nil || st.Mode().Perm() != 0o600 {
+	if st, err := os.Stat(cfgPath); err != nil || (!platform.IsWindows && st.Mode().Perm() != 0o600) {
 		t.Fatalf("%s: want mode 0600, got %v (%v)", cfgPath, st, err)
 	}
 	if fileExists(envPath) {
@@ -86,7 +87,7 @@ func TestSetupNonInteractive(t *testing.T) {
 	if tok, err := config.StoredToken(cfgPath); err != nil || tok != token {
 		t.Fatalf("token not in the vault: %v", err)
 	}
-	if st, _ := os.Stat(filepath.Dir(cfgPath)); st.Mode().Perm() != 0o700 {
+	if st, _ := os.Stat(filepath.Dir(cfgPath)); !platform.IsWindows && st.Mode().Perm() != 0o700 {
 		t.Fatalf("config dir mode %v want 0700", st.Mode().Perm())
 	}
 	c, err := config.Load(cfgPath, envPath)
@@ -153,7 +154,7 @@ func TestSetupTokenFileAndMigration(t *testing.T) {
 	if code := runSetup(cfgPath, envPath, opts, strings.NewReader(token+"\n"), &out); code != exitOK {
 		t.Fatalf("%d %s", code, out.String())
 	}
-	if st, err := os.Stat(envPath); err != nil || st.Mode().Perm() != 0o600 {
+	if st, err := os.Stat(envPath); err != nil || (!platform.IsWindows && st.Mode().Perm() != 0o600) {
 		t.Fatal("token file missing or not private")
 	}
 	if c, err := config.Load(cfgPath, envPath); err != nil || c.TokenSource != "file" {
