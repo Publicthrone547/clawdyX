@@ -75,6 +75,9 @@ func TestCheckForUpdate(t *testing.T) {
 	latestReleaseAPI = srv.URL
 	defer func() { latestReleaseAPI = old }()
 	s := &SystemService{}
+	oldV := version
+	version = "1.2.3"
+	defer func() { version = oldV }()
 
 	u, err := s.CheckForUpdate()
 	if err != nil || !u.Newer || u.Latest != "99.0.0" || u.Current != version || !strings.HasSuffix(u.URL, "/tag/v99.0.0") {
@@ -89,6 +92,12 @@ func TestCheckForUpdate(t *testing.T) {
 	if u, err = s.CheckForUpdate(); err != nil || u.Newer || u.URL != releasesURL+"/tag/v"+version {
 		t.Fatalf("same release / foreign URL: %+v %v", u, err)
 	}
+	version = "0.0.0-dev"
+	answer = `{"tag_name":"v1.0.0"}`
+	if u, err = s.CheckForUpdate(); err != nil || !u.Newer {
+		t.Fatalf("a development build must see every release as newer: %+v %v", u, err)
+	}
+	version = "1.2.3"
 	answer = `{"tag_name":"nightly"}`
 	if _, err = s.CheckForUpdate(); err == nil {
 		t.Fatal("non-version tag accepted")

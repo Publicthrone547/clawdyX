@@ -1,9 +1,9 @@
 #!/bin/sh
 # Regenerates THIRD_PARTY_NOTICES.md from the Go modules linked into the
 # shipped binaries (macOS, Windows and Linux) (and, when present, the desktop frontend's production
-# npm dependencies). Run from the repository root: scripts/gen-notices.sh
+# npm dependencies). Run from the repository root: scripts/gen-notices.sh [OUT]
 set -eu
-out=THIRD_PARTY_NOTICES.md
+out=${1:-THIRD_PARTY_NOTICES.md}  # check-notices writes elsewhere and compares
 {
   echo "# Third-party notices"
   echo

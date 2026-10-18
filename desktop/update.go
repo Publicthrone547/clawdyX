@@ -69,7 +69,10 @@ func (s *SystemService) CheckForUpdate() (UpdateInfo, error) {
 	if strings.HasPrefix(r.HTMLURL, releasesURL+"/") {
 		u = r.HTMLURL
 	}
-	info := UpdateInfo{Current: version, Latest: latest, Newer: newerVersion(latest, version), URL: u}
+	// A development build (0.0.0-dev) compares as its core version: every
+	// release is newer.
+	core, _, _ := strings.Cut(version, "-")
+	info := UpdateInfo{Current: version, Latest: latest, Newer: newerVersion(latest, core), URL: u}
 	if a, kind, ok := pickAsset(r.Assets, platform.Current()); ok {
 		info.AssetName, info.AssetURL, info.AssetBytes, info.Kind = a.Name, a.URL, a.Size, kind
 	}

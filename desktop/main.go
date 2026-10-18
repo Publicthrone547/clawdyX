@@ -22,7 +22,9 @@ var assets embed.FS
 //go:embed build/tray-template.png
 var trayIcon []byte
 
-var version = "0.4.1"
+// version is set at build time (-ldflags "-X main.version=..."; the Makefile's
+// VERSION is the only source).
+var version = "0.0.0-dev"
 
 // instanceID keeps one app per user; development builds pass a different
 // one (-ldflags "-X main.instanceID=…dev") so they do not just focus the

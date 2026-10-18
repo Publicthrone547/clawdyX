@@ -30,7 +30,7 @@ import (
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
-var version = "0.4.1"
+var version = "0.0.0-dev"
 
 const (
 	exitOK      = 0

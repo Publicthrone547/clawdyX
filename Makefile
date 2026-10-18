@@ -18,7 +18,7 @@ RACE    := $(if $(filter windows,$(GOHOSTOS)),$(if $(shell command -v gcc 2>/dev
 WINDIR  := bin/windows/clawdyX
 REL     := bin/release-$(VERSION)
 
-.PHONY: check-all check-wording check-docs app dmg build-windows installer-windows package-linux appimage-linux helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
+.PHONY: check-all check-wording check-docs check-version check-notices check-attribution app dmg build-windows installer-windows package-linux appimage-linux helper-windows vet-windows build-linux vet-linux vet-darwin app-linux release helper frontend bindings dev test-desktop identities notices help setup run start stop restart status logs doctor build test test-integration lint fmt check-secrets check install clean
 
 help: ## list the everyday commands
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -71,11 +71,12 @@ build-windows: frontend ## build bin/windows/clawdyX/ for Windows $(WINARCH): cl
 	$(WINENV) go build -trimpath -ldflags="-H windowsgui -X main.version=$(VERSION)" -o $(WINDIR)/helpers/clawdyxw.exe ./cmd/clawdyxw
 	@if command -v wails3 >/dev/null; then \
 		sed 's/__VERSION__/$(VERSION)/g' desktop/build/windows/info.json > bin/windows/info.json && \
-		wails3 generate syso -arch $(WINARCH) -icon desktop/build/windows/icon.ico -manifest desktop/build/windows/clawdyX.exe.manifest \
+		sed 's/__VERSION__/$(VERSION)/g' desktop/build/windows/clawdyX.exe.manifest > bin/windows/clawdyX.exe.manifest && \
+		wails3 generate syso -arch $(WINARCH) -icon desktop/build/windows/icon.ico -manifest bin/windows/clawdyX.exe.manifest \
 			-info bin/windows/info.json -out desktop/rsrc_windows_$(WINARCH).syso >/dev/null; \
 	else echo "note: wails3 not installed; clawdyX.exe gets no icon or manifest (see make bindings)"; fi
 	cd desktop && $(WINENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -H windowsgui -X main.version=$(VERSION)" -o ../$(WINDIR)/clawdyX.exe .
-	rm -f desktop/rsrc_windows_$(WINARCH).syso bin/windows/info.json
+	rm -f desktop/rsrc_windows_$(WINARCH).syso bin/windows/info.json bin/windows/clawdyX.exe.manifest
 	@if [ "$(GOHOSTOS)" = windows ]; then $(MAKE) --no-print-directory helper-windows || \
 		{ [ "$(WINARCH)" = arm64 ] && echo "note: no arm64 MSVC tools here; this arm64 build has no camera"; }; \
 	elif [ "$(WINARCH)" = amd64 ] && [ -f bin/clawdyx-camera.exe ]; then cp bin/clawdyx-camera.exe $(WINDIR)/helpers/; \
@@ -187,9 +188,24 @@ check-docs: ## per-OS sections of the docs name only their OS
 check-wording: ## fail when user-facing text tells people to edit config.json
 	@scripts/check-wording.sh
 
+check-version: ## VERSION is CHANGELOG.md's first entry and has release notes (TAG=vX.Y.Z also checks a tag)
+	@v=$$(sed -n 's/^## \([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\) .*/\1/p' CHANGELOG.md | head -1); \
+	[ "$$v" = "$(VERSION)" ] || { echo "CHANGELOG.md starts with $$v, the Makefile says $(VERSION)"; exit 1; }; \
+	[ -f desktop/build/release-notes/$(VERSION).md ] || { echo "missing desktop/build/release-notes/$(VERSION).md"; exit 1; }; \
+	[ -z "$(TAG)" ] || [ "$(TAG)" = "v$(VERSION)" ] || { echo "the tag $(TAG) is not v$(VERSION)"; exit 1; }; \
+	echo "version $(VERSION) ok"
+
+check-notices: ## THIRD_PARTY_NOTICES.md is up to date (needs desktop/frontend/node_modules)
+	@sh scripts/gen-notices.sh bin/notices.md >/dev/null && \
+	if diff -u THIRD_PARTY_NOTICES.md bin/notices.md >/dev/null; then echo "notices up to date"; rm -f bin/notices.md; \
+	else diff -u THIRD_PARTY_NOTICES.md bin/notices.md | head -40; echo "run scripts/gen-notices.sh and commit THIRD_PARTY_NOTICES.md"; exit 1; fi
+
+check-attribution: ## no commit names Claude as an author or co-author
+	@sh scripts/check-attribution.sh
+
 check: lint test check-secrets
 
-check-all: check check-wording check-docs test-desktop vet-windows vet-linux vet-darwin ## everything: tests, the desktop app's tests and the type checks for all three OSes
+check-all: check check-wording check-docs check-version check-attribution test-desktop vet-windows vet-linux vet-darwin ## everything: tests, the desktop app's tests and the type checks for all three OSes
 
 notices: ## regenerate THIRD_PARTY_NOTICES.md
 	scripts/gen-notices.sh
