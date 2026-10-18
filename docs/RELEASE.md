@@ -30,10 +30,10 @@ go test ./internal/screen/ -run XXX -bench EncodeLargeDisplay            # re-en
 
 ## Release checklist
 
-1. `make check-all` is green (Go race tests, vet, gofmt, secret scan, desktop Go tests, frontend type check and Vitest).
+1. `make check-all` is green (Go race tests, vet, gofmt, secret scan, desktop Go tests, frontend type check and Vitest, Windows type check).
 2. `scripts/gen-notices.sh` regenerated `THIRD_PARTY_NOTICES.md`; review new licenses (anything not MIT/BSD/ISC/Apache/MPL needs a decision).
-3. Version: `VERSION` in the Makefile, `version` in `cmd/clawdyx/main.go` and `desktop/main.go`, `desktop/frontend/package.json`, `CHANGELOG.md`.
-4. Build: `make dmg` (local) or, for distribution, `CLAWDYX_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" CLAWDYX_HARDENED=1 make dmg`, then `xcrun notarytool submit bin/clawdyX-<v>.dmg --keychain-profile <profile> --wait` and `xcrun stapler staple bin/clawdyX-<v>.dmg`. Never commit signing material.
+3. Version: `VERSION` in the Makefile, `version` in `cmd/clawdyx/main.go` and `desktop/main.go`, `desktop/frontend/package.json` and `package-lock.json`, `CHANGELOG.md`. (The Windows file version comes from `VERSION` via `desktop/build/windows/info.json`.)
+4. Build: `make release` runs `check-all`, `make dmg` and `make build-windows` and writes `bin/release-<version>/` (dmg, darwin tar.gz, Windows zip, `SHA256SUMS`); add the release notes as `NOTES.md` there, with absolute links. For distribution on macOS, sign and notarize: `CLAWDYX_SIGN_IDENTITY="Developer ID Application: … (TEAMID)" CLAWDYX_HARDENED=1 make dmg`, then `xcrun notarytool submit bin/clawdyX-<v>.dmg --keychain-profile <profile> --wait` and `xcrun stapler staple bin/clawdyX-<v>.dmg`. Never commit signing material.
 5. Smoke test the built app: wizard on an unconfigured account, Start/Stop, a Telegram prompt, a capture (with permission), Quit dialog, reopen.
 6. Privacy scan of everything that will be published (review every hit by hand; a clean scan is not a guarantee):
 

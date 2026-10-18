@@ -1,6 +1,6 @@
 # clawdyx runbook
 
-All commands run as the logged-in macOS user. Paths:
+All commands run as the logged-in macOS user (Windows: see [Windows](#windows)). Paths:
 
 | What | Where |
 | --- | --- |
@@ -148,3 +148,24 @@ security delete-generic-password -s clawdyx   # Keychain token (repeat until "co
 ```
 
 Claude Code itself is never modified.
+
+## Windows
+
+Preview build for Windows 10/11 x64, cross-compiled from macOS with `make build-windows` (plain `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build`; Wails v3 needs no CGO on Windows). **Not yet tested on a real Windows machine.**
+
+| What | Where |
+| --- | --- |
+| Token | Windows Credential Manager, generic credential `clawdyx` (or `.env` with `setup -token-file`) |
+| Config | `%USERPROFILE%\.config\clawdyx\config.json` |
+| State | `%LOCALAPPDATA%\clawdyx\` (`state.db`, `bot.lock`, `worker.pid`, `control.sock`) |
+| Logs | `%LOCALAPPDATA%\clawdyx\logs\` (`bot.log`; `stderr.log` for crashes of the background worker) |
+| Login entry | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, value `local.clawdyx` |
+
+- **Background worker.** `clawdyx service start` writes the login entry and starts `clawdyx run` as a detached process without a window. At login, Windows starts it from the Run entry; it closes its console window at once (it may flash briefly). `service stop` asks the worker to exit cleanly (`worker.stop` over the control socket), waits up to 40 s, then ends its process tree, and removes the login entry. `service restart` and the app's **Restart** start a fresh worker. There is no automatic restart after a crash: run `clawdyx service start` again (`stderr.log` shows the crash).
+- **Control socket.** An AF_UNIX socket (Windows 10 1803+). Windows has no peer credentials, so access is decided by the file's ACL: `%LOCALAPPDATA%` is private to your account (plus SYSTEM and administrators). The 0600 file-mode checks are skipped on Windows for the same reason.
+- **Cancelling a job** ends Claude immediately (`taskkill /T /F`); there is no SIGINT step, so the interrupted turn may be missing from the transcript.
+- **Claude Code** is looked up on `PATH`, then `%USERPROFILE%\.local\bin\claude.exe`, then `%APPDATA%\npm\claude.cmd`. The native `claude.exe` is recommended: restart recovery only recognises a process named `claude`. Children get your `PATH` and the Windows profile variables (`USERPROFILE`, `APPDATA`, `SystemRoot`, `CLAUDE_CODE_GIT_BASH_PATH`, …), never the bot token or API keys.
+- **Not available:** screens and screen control (`/screens`, `/screen`, `/look`, the MCP screen tools) reply that they are macOS only. `/open` always uses the default browser. `/processes` shows memory but no load average.
+- **Desktop app.** `clawdyX.exe` looks for the worker in `helpers\clawdyx.exe` next to it (a separate folder because Windows file names ignore case). Some screens still use macOS wording (Keychain, System Settings).
+- **Uninstall:** `helpers\clawdyx.exe service uninstall -purge-state`, delete the folder, `%USERPROFILE%\.config\clawdyx`, and the `clawdyx` entry in Credential Manager.
+

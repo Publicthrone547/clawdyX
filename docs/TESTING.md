@@ -5,7 +5,11 @@ make test               # go test -race ./...  (no network, no real claude)
 make lint               # gofmt, go vet (+ staticcheck/govulncheck if installed)
 make check-secrets      # fails if a token-shaped string is tracked
 make test-desktop       # desktop module (Go) + frontend type check and Vitest
+make vet-windows        # type-checks both modules, tests included, for windows/amd64
+make check-all          # all of the above
 ```
+
+Windows code is compiled and vetted on every `make check-all`, but its tests cannot run on the Mac: the Windows-only paths (Run-key service, taskkill, Win32 process and disk queries, the socket ACL model) are untested until someone runs them on Windows.
 
 ## What the suites cover
 
@@ -22,7 +26,7 @@ make test-desktop       # desktop module (Go) + frontend type check and Vitest
 | `internal/control` | Socket 0600 in a 0700 dir, peer-uid rejection, typed errors (invalid params, unknown method, timeout, panic), live-socket takeover refused, oversize and garbage frames, ordered events to several clients, backpressure; `FuzzFrames` |
 | `internal/screen` | Display ordering (main first) and durable keys, never-upscale JPEG encoding, broker switch/limits/TTL/discard/audit, access state from the last real capture, MCP screenshot on a second display maps clicks to global points, worker authorization before each screenshot |
 | `internal/vault` | Memory store semantics, per-config Keychain accounts. Tests never touch the real Keychain (`TestMain` swaps in a memory store). |
-| `cmd/clawdyx` | Setup stores the token in the vault by default, `-token-file` writes a 0600 file, `-migrate-token` moves it and deletes the file only after a read-back, env > Keychain > file order |
+| `cmd/clawdyx` | Windows Run-key command quoting and parsing; setup stores the token in the vault by default, `-token-file` writes a 0600 file, `-migrate-token` moves it and deletes the file only after a read-back, env > Keychain > file order |
 | `desktop` (Go) | LaunchAgent plist parsing, home-path shortening, only allowlisted links can be opened, diagnostics report redaction, calls fail cleanly when the worker is down |
 | `desktop/frontend` (Vitest) | Secret input masked until shown, status badges always carry a text label, allowlist ID validation, formatting helpers |
 | `internal/setup` | Owner detection keeps private-chat humans only and acknowledges pending updates; workspace and name checks |

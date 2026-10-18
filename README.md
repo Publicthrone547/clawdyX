@@ -168,6 +168,10 @@ Every job also passes `--settings` that disables bypass and auto modes and block
     <td>The bot only, for the terminal: <code>clawdyx setup</code>, then <code>clawdyx service start</code>.</td>
   </tr>
   <tr>
+    <td><a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><code>clawdyX-&lt;version&gt;-windows-amd64.zip</code></a></td>
+    <td>Windows preview: the desktop app (<code>clawdyX.exe</code>) and the bot (<code>helpers\clawdyx.exe</code>). See <a href="#windows-preview">Windows</a>.</td>
+  </tr>
+  <tr>
     <td><code>SHA256SUMS</code></td>
     <td>Checksums: <code>shasum -a 256 -c SHA256SUMS</code>.</td>
   </tr>
@@ -178,6 +182,31 @@ Requirements: macOS 14 or later on Apple silicon, and [Claude Code](https://clau
 <p align="center">
   <a href="https://github.com/Publicthrone547/clawdyX/releases/latest"><img alt="Download the latest release" src="https://img.shields.io/badge/Download_the_latest_release-c2410c?style=for-the-badge&logo=github&logoColor=white" height="36"></a>
 </p>
+
+## Windows (preview)
+
+clawdyX also builds for **Windows 10/11 (64-bit, x64)**. This build is new and has **not been tested on a real Windows PC yet**; please report what does and does not work.
+
+| Works on Windows | macOS only (clear error on Windows) |
+| --- | --- |
+| Telegram bot, sessions, jobs, models, tiers, `/open` (default browser), `/processes`, `/doctor` | Screens: `/screens`, `/screen`, `/look`, Claude's screen tools |
+| Token in the Windows Credential Manager (or `-token-file`) | Capture helper, Screen Recording and Accessibility settings |
+| Background worker that starts at login (no administrator rights) | |
+| Desktop app (`clawdyX.exe`, needs the WebView2 runtime, which Windows 10/11 include) | |
+
+**Install:** download `clawdyX-<version>-windows-amd64.zip` from the [latest release](https://github.com/Publicthrone547/clawdyX/releases/latest), extract the `clawdyX` folder somewhere permanent (for example `%LOCALAPPDATA%\Programs\clawdyX`), and open `clawdyX.exe`. The wizard sets everything up and starts the worker (`helpers\clawdyx.exe`). The build is not code-signed, so SmartScreen may warn: **More info → Run anyway**.
+
+**Terminal only:** in PowerShell, from the extracted folder:
+
+```powershell
+.\helpers\clawdyx.exe setup            # token, your Telegram ID, project folder
+.\helpers\clawdyx.exe service start    # runs now and at every login
+.\helpers\clawdyx.exe service status   # or: service stop | restart
+```
+
+Requirements: [Claude Code for Windows](https://claude.com/claude-code) installed and signed in (the native installer puts `claude.exe` in `%USERPROFILE%\.local\bin`; Claude Code needs Git for Windows). Settings live in `%USERPROFILE%\.config\clawdyx`, state and logs in `%LOCALAPPDATA%\clawdyx`. Details and differences: [`docs/RUNBOOK.md`](https://github.com/Publicthrone547/clawdyX/blob/main/docs/RUNBOOK.md#windows).
+
+**Build it from a Mac:** `make build-windows` writes `bin/windows/clawdyX/` (plain Go cross-compilation, no extra toolchain).
 
 ## Layout
 
