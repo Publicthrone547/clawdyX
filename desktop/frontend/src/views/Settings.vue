@@ -94,7 +94,7 @@ async function addWorkspace() {
     if (!fc?.path) return;
     if (!fc.ok) return toast(fc.error ?? "That folder cannot be used", "danger");
     if (fc.warning) toast(fc.warning);
-    await patch({ addWorkspace: { name: "", path: fc.path, defaultMode: "observe", allowedCommands: [], deniedCommands: [], isDefault: false } }, "Workspace added. Restart the worker to use it.");
+    await patch({ addWorkspace: { name: "", path: fc.path, defaultMode: "observe", allowedCommands: [], deniedCommands: [], iKnowWhatIAmDoing: false, isDefault: false } }, "Workspace added. Restart the worker to use it.");
   } catch (e) {
     fail(e);
   }
