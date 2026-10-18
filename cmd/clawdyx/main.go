@@ -22,10 +22,10 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/store"
 	"github.com/Publicthrone547/clawdyX/internal/telegram"
-	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -260,9 +260,9 @@ func check(cfgPath, envPath string) int {
 		return exitConfig
 	}
 	line(true, "config %s (owner %d, %d workspace(s), default %s)", cfgPath, cfg.Telegram.OwnerUserID, len(cfg.Workspaces), cfg.DefaultWorkspace)
-	line(true, "token loaded from %s (value not shown)", map[string]string{"keychain": vault.Name, "file": envPath, "env": "the TELEGRAM_BOT_TOKEN variable"}[cfg.TokenSource])
+	line(true, "token loaded from %s (value not shown)", map[string]string{"keychain": platform.W.TokenStore, "file": envPath, "env": "the TELEGRAM_BOT_TOKEN variable"}[cfg.TokenSource])
 	if cfg.TokenSource == "file" {
-		fmt.Println("       tip: clawdyx setup -migrate-token moves it into " + vault.Name)
+		fmt.Println("       tip: clawdyx setup -migrate-token moves it into " + platform.W.TokenStore)
 	}
 	_ = os.MkdirAll(cfg.StateDir, 0o700)
 	cli := agent.CLI{Binary: cfg.Claude.Binary, Env: agent.ChildEnv(cfg.Claude.ChildPath, 0), Dir: cfg.StateDir}

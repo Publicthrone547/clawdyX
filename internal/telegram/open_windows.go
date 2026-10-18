@@ -11,14 +11,6 @@ import (
 	"golang.org/x/sys/windows"
 )
 
-// Platform wording for replies.
-const (
-	thisComputer    = "this PC"
-	startAgainHint  = "Start it again on the PC with: clawdyx service start (or from the clawdyX app)."
-	stopServiceHint = "Stop the service on the PC: clawdyx service stop"
-	startNeedsHint  = "You will need the PC (clawdyx service start or the clawdyX app) to start it again."
-)
-
 // browserName: Windows always uses the default browser (desktop.browser_app
 // is a macOS application name).
 func browserName(string) string { return "the default browser" }

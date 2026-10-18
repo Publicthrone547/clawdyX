@@ -15,7 +15,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -163,33 +162,11 @@ func WorkspaceOK(p string) error {
 	return nil
 }
 
-// PrivacyWarning flags folders that macOS privacy protection can hide from
-// a background (launchd) process.
+// PrivacyWarning flags folders that the OS can hide from a background
+// worker (macOS privacy protection); "" when there is nothing to say.
 func PrivacyWarning(p string) string {
-	if runtime.GOOS != "darwin" {
-		return ""
-	}
 	home, _ := os.UserHomeDir()
-	for _, d := range []string{"Desktop", "Documents", "Downloads"} {
-		root := filepath.Join(home, d)
-		if p == root || strings.HasPrefix(p, root+string(filepath.Separator)) {
-			return fmt.Sprintf("%s is protected by macOS privacy settings; the background service may be denied access there. A folder such as ~/projects/<name> avoids that.", root)
-		}
-	}
-	return ""
-}
-
-// DetectBrowser picks an installed browser for /open.
-func DetectBrowser() string {
-	if runtime.GOOS == "windows" {
-		return "default" // /open uses the default browser on Windows
-	}
-	for _, c := range [][2]string{{"/Applications/Firefox.app", "Firefox"}, {"/Applications/Google Chrome.app", "Google Chrome"}, {"/Applications/Brave Browser.app", "Brave Browser"}, {"/Applications/Arc.app", "Arc"}} {
-		if st, err := os.Stat(c[0]); err == nil && st.IsDir() {
-			return c[1]
-		}
-	}
-	return "Safari"
+	return privacyWarning(home, p)
 }
 
 // DetectClaude finds the claude CLI (PATH first, then the usual places).
@@ -201,10 +178,10 @@ func DetectClaude() string {
 		return p
 	}
 	home, _ := os.UserHomeDir()
-	candidates := []string{"/opt/homebrew/bin/claude", "/usr/local/bin/claude", filepath.Join(home, ".local", "bin", "claude")}
-	if runtime.GOOS == "windows" {
-		candidates = []string{filepath.Join(home, ".local", "bin", "claude.exe"), filepath.Join(os.Getenv("APPDATA"), "npm", "claude.cmd")}
-	}
+	return firstFile(claudeCandidates(home))
+}
+
+func firstFile(candidates []string) string {
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p

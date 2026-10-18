@@ -13,8 +13,8 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/agent"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/setup"
-	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // SetupState tells the UI whether the first-run wizard is needed.
@@ -209,13 +209,13 @@ func (s *SetupService) Finish(p FinishParams) (FinishResult, error) {
 		return FinishResult{}, errors.New(observability.Redact(err.Error()))
 	}
 	if err := config.StoreToken(cfgPath, tok); err != nil {
-		return FinishResult{}, errors.New("could not store the token in " + vault.Name + ": " + observability.Redact(err.Error()))
+		return FinishResult{}, errors.New("could not store the token in " + platform.W.TokenStore + ": " + observability.Redact(err.Error()))
 	}
 	if got, err := config.StoredToken(cfgPath); err != nil || got != tok {
-		return FinishResult{}, errors.New("the token could not be read back from " + vault.Name)
+		return FinishResult{}, errors.New("the token could not be read back from " + platform.W.TokenStore)
 	}
 	_ = os.Remove(config.DefaultEnvPath())
-	res := FinishResult{Message: "Saved. The token is in " + vault.Name + "; settings are in " + homeRel(cfgPath) + "."}
+	res := FinishResult{Message: "Saved. The token is in " + platform.W.TokenStore + "; settings are in " + homeRel(cfgPath) + "."}
 	if p.StartService {
 		out, err := runWorker(40*time.Second, "service", "install")
 		if err != nil {

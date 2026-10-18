@@ -22,6 +22,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/jobs"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 	"github.com/Publicthrone547/clawdyX/internal/processes"
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/sessions"
@@ -55,6 +56,7 @@ type App struct {
 	started  time.Time
 	opener   func(ctx context.Context, app, url string) error
 	desktop  screen.Desktop
+	words    platform.Words
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -176,12 +178,18 @@ type Options struct {
 	Screens screen.Provider
 	// Cameras takes photos and clips (default: the AVFoundation helper).
 	Cameras camera.Provider
+	// Words is the OS vocabulary of replies (default: platform.W; tests
+	// render the replies of other OSes).
+	Words platform.Words
 }
 
 // New builds the app and connects to Telegram (getMe).
 func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*App, error) {
 	a := &App{cfg: cfg, st: st, log: log, counters: &observability.Counters{}, started: time.Now(),
-		confirms: NewConfirms(), ShutdownRequested: make(chan struct{}), RestartRequested: make(chan struct{}), serverURL: opt.ServerURL}
+		confirms: NewConfirms(), ShutdownRequested: make(chan struct{}), RestartRequested: make(chan struct{}), serverURL: opt.ServerURL, words: opt.Words}
+	if a.words.OS == "" {
+		a.words = platform.W
+	}
 	a.sess = sessions.New(st, cfg)
 	users := cfg.Telegram.AllowedUsers
 	if len(users) == 0 && cfg.Telegram.OwnerUserID > 0 {

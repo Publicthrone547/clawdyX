@@ -74,5 +74,5 @@ func (a *App) cmdOpen(m *models.Message, args []string) {
 		return
 	}
 	a.st.Audit("desktop", "open", parsed.Hostname(), "ok", 0)
-	a.replyTo(m, fmt.Sprintf("🌐 Opened %s in %s on %s.", Esc(u), Esc(browserName(app)), thisComputer))
+	a.replyTo(m, fmt.Sprintf("🌐 Opened %s in %s on %s.", Esc(u), Esc(browserName(app)), a.words.TheComputer))
 }

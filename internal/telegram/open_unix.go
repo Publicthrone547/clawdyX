@@ -13,14 +13,6 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 )
 
-// Platform wording for replies.
-const (
-	thisComputer    = "the Mac"
-	startAgainHint  = "launchd will not restart a clean exit; start it again with: launchctl kickstart gui/$(id -u)/local.clawdyx"
-	stopServiceHint = "Stop the service from macOS: launchctl bootout gui/$(id -u)/local.clawdyx"
-	startNeedsHint  = "You will need macOS (launchctl) to start it again."
-)
-
 func browserName(app string) string { return app }
 
 // openURL launches the URL with /usr/bin/open (argument array, no shell).
