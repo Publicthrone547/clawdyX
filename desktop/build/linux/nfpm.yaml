@@ -5,7 +5,6 @@ name: clawdyx
 arch: ${ARCH}
 platform: linux
 version: ${VERSION}
-release: "1"
 section: devel
 priority: optional
 maintainer: clawdyX maintainers

@@ -88,7 +88,7 @@ jobs:
         run: |
           desktop-file-validate desktop/build/linux/clawdyX.desktop
           make package-linux VERSION=0.0.0
-          sudo apt-get install -y ./bin/release-0.0.0/clawdyx_0.0.0-1_amd64.deb
+          sudo apt-get install -y ./bin/release-0.0.0/clawdyx_0.0.0_amd64.deb
           clawdyx version
           test -x /usr/bin/clawdyX
           test -f /usr/share/icons/hicolor/256x256/apps/clawdyx.png
