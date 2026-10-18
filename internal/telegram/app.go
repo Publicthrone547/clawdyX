@@ -229,6 +229,7 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 	a.send = NewSender(b, cfg.Telegram.OwnerUserID, log, a.counters)
 	a.outbox = NewOutbox(a.send, log, 200)
 	a.jobs = jobs.New(cfg, st, a.sess, log, a, opt.Start)
+	a.jobs.Words = a.words
 	a.opener = opt.Opener
 	if a.opener == nil {
 		a.opener = openURL
@@ -369,11 +370,11 @@ func (a *App) registerCommands() {
 		{Command: "cwd", Description: "Workspaces for new sessions"},
 		{Command: "aliases", Description: "Custom model aliases"},
 		{Command: "doctor", Description: "Read-only diagnostics"},
-		{Command: "open", Description: "Open a website in the Mac's browser: /open youtube.com"},
-		{Command: "screens", Description: "List the Mac's displays"},
+		{Command: "open", Description: "Open a website on " + a.words.ThisComputer + ": /open youtube.com"},
+		{Command: "screens", Description: "List the displays of " + a.words.ThisComputer},
 		{Command: "screen", Description: "Photo of a display: /screen 2 · /screen all · /screen off"},
 		{Command: "look", Description: "Ask Claude about a display: /look 2 what is wrong?"},
-		{Command: "cameras", Description: "List the Mac's cameras"},
+		{Command: "cameras", Description: "List the cameras of " + a.words.ThisComputer},
 		{Command: "camera", Description: "Photo from the camera: /camera · /camera video 10"},
 		{Command: "pause", Description: "Stop accepting new prompts"},
 		{Command: "start", Description: "Menu; resume after /pause"},

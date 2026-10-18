@@ -124,3 +124,7 @@ func TrayAvailable() bool {
 
 // InstalledBrowsers: /open uses the default browser here; there is no choice.
 func InstalledBrowsers() []string { return []string{} }
+
+// SettingsLinks: desktops differ too much for links; Fix texts name the
+// commands instead.
+var SettingsLinks = map[string]string{}

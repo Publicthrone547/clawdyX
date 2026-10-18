@@ -109,3 +109,10 @@ func TrayAvailable() bool { return true }
 
 // InstalledBrowsers: /open uses the default browser here; there is no choice.
 func InstalledBrowsers() []string { return []string{} }
+
+// SettingsLinks are the Windows Settings pages the app can open, by the
+// keys of Diagnostics' FixKey and the UI.
+var SettingsLinks = map[string]string{
+	"camera":       "ms-settings:privacy-webcam",
+	"startup-apps": "ms-settings:startupapps",
+}

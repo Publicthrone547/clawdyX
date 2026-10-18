@@ -290,8 +290,8 @@ func (a *App) JobFinished(j *store.Job, s *store.Session, o jobs.Outcome) {
 			sb.WriteString("Use /mode assisted to allow edits and the workspace command allowlist.\n")
 		}
 		for _, d := range o.Denials {
-			if strings.HasPrefix(d, "Bash open ") {
-				sb.WriteString("Claude cannot open apps or websites. To open a website on the Mac yourself, send /open ADDRESS (for example /open youtube.com).")
+			if strings.HasPrefix(d, "Bash "+a.words.OpenCommand+" ") {
+				sb.WriteString("Claude cannot open apps or websites. To open a website on " + a.words.TheComputer + " yourself, send /open ADDRESS (for example /open youtube.com).")
 				break
 			}
 		}

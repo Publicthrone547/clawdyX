@@ -67,7 +67,7 @@ func TestCurrentIsComplete(t *testing.T) {
 }
 
 // optional fields may be empty for an OS that has no such thing.
-var optional = map[string]bool{"ScreenPermission": true, "InputPermission": true}
+var optional = map[string]bool{"ScreenPermission": true, "InputPermission": true, "ScreenNote": true, "CameraAskNote": true, "ScreenGrantNote": true}
 
 func TestWordsAreCompleteAndClean(t *testing.T) {
 	for _, w := range All {

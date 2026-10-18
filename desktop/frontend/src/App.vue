@@ -6,6 +6,7 @@ import Toasts from "./components/Toasts.vue";
 import Badge from "./components/Badge.vue";
 import Overview from "./views/Overview.vue";
 import { botTone, botLabel } from "./util";
+import { isMac, words } from "./platform";
 
 const Telegram = defineAsyncComponent(() => import("./views/Telegram.vue"));
 const Sessions = defineAsyncComponent(() => import("./views/Sessions.vue"));
@@ -29,8 +30,12 @@ const views: Record<View, unknown> = { overview: Overview, telegram: Telegram, s
 const needsSetup = computed(() => store.ready && store.setup !== null && (!store.setup.configExists || !store.setup.tokenStored));
 const botState = computed(() => (store.connection.connected ? store.status?.bot.state : undefined));
 
+// Shortcuts use ⌘ on macOS and Ctrl elsewhere; with the other modifier or
+// Alt the key is not ours.
 function onKey(e: KeyboardEvent) {
-  if (!e.metaKey || e.altKey || e.ctrlKey) return;
+  const mod = isMac.value ? e.metaKey : e.ctrlKey;
+  const other = isMac.value ? e.ctrlKey : e.metaKey;
+  if (!mod || other || e.altKey) return;
   const n = nav.find((x) => x.key === e.key);
   if (n) {
     store.view = n.id;
@@ -49,6 +54,8 @@ onMounted(() => {
   window.addEventListener("keydown", onKey);
 });
 onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
+// "⌘1" on macOS, "Ctrl+1" elsewhere.
+const shortcut = (k: string) => (isMac.value ? words.value.shortcutMod + k : (words.value.shortcutMod || "Ctrl") + "+" + k);
 </script>
 
 <template>
@@ -70,7 +77,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
             class="flex w-full items-center gap-3 rounded-md px-3 py-1.5 text-left"
             :class="store.view === n.id ? 'bg-surface-2 font-semibold' : 'text-muted hover:bg-surface-2'"
             :aria-current="store.view === n.id ? 'page' : undefined"
-            :title="`${n.label} (⌘${n.key})`"
+            :title="`${n.label} (${shortcut(n.key)})`"
             @click="store.view = n.id"
           >
             <Icon :name="n.id" :size="16" />
@@ -80,7 +87,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKey));
           </button>
         </li>
       </ul>
-      <div class="mt-auto px-4 text-xs text-muted">⌘1–7 switch · ⌘R refresh</div>
+      <div class="mt-auto px-4 text-xs text-muted">{{ shortcut("1") }}–7 switch · {{ shortcut("R") }} refresh</div>
     </nav>
     <main class="min-w-0 flex-1">
       <div v-if="!store.ready" class="flex h-full items-center justify-center text-muted">Loading…</div>

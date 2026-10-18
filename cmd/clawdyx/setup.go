@@ -29,8 +29,8 @@ type setupOptions struct {
 	Browser      string
 	ClaudeBinary string
 	TokenStdin   bool // read the token from the first line of stdin (implies Yes)
-	TokenFile    bool // keep the token in the 0600 .env file instead of the Keychain
-	MigrateToken bool // move an existing .env token into the Keychain and stop
+	TokenFile    bool // keep the token in the 0600 .env file instead of the token store
+	MigrateToken bool // move an existing .env token into the token store and stop
 	Force        bool // replace existing files without asking
 	NoCheck      bool // skip the read-only checks at the end
 	Yes          bool // never prompt: use flags and defaults, fail when something is missing
@@ -225,7 +225,7 @@ func runSetup(cfgPath, envPath string, o setupOptions, in io.Reader, out io.Writ
 			claudeBin = setup.DetectClaude()
 		}
 		if claudeBin == "" {
-			w.say("The claude CLI was not found. Install Claude Code (brew install --cask claude-code), run `claude` once to log in, then rerun setup. Pass -claude-binary PATH if it lives elsewhere.")
+			w.say("The claude CLI was not found. Install Claude Code (%s), run `claude` once to log in, then rerun setup. Pass -claude-binary PATH if it lives elsewhere.", platform.W.InstallClaude)
 			return exitConfig
 		}
 		if err := setup.WriteConfig(cfgPath, setup.GenerateConfig(owner, ws, browser, claudeBin)); err != nil {
@@ -393,13 +393,13 @@ func storeAndVerify(cfgPath, token string) error {
 		return err
 	}
 	if got != token {
-		return errors.New("the token read back from the Keychain differs")
+		return errors.New("the token read back from " + platform.W.TokenStore + " differs")
 	}
 	return nil
 }
 
-// migrateToken moves a token from the .env file into the Keychain. The file
-// is deleted only after the Keychain copy was read back successfully.
+// migrateToken moves a token from the .env file into the token store. The file
+// is deleted only after the stored copy was read back successfully.
 func migrateToken(cfgPath, envPath string, out io.Writer) int {
 	tok, err := config.LoadToken(envPath)
 	if err != nil {
@@ -411,7 +411,7 @@ func migrateToken(cfgPath, envPath string, out io.Writer) int {
 		return exitError
 	}
 	if err := os.Remove(envPath); err != nil {
-		fmt.Fprintln(out, "The token is in the Keychain, but the old file could not be removed:", err)
+		fmt.Fprintln(out, "The token is in "+platform.W.TokenStore+", but the old file could not be removed:", err)
 		return exitError
 	}
 	fmt.Fprintf(out, "✓ Moved the bot token into %s (item %q) and removed %s.\nRestart the worker to use it: clawdyx service restart\n", platform.W.TokenStore, vault.Service, envPath)

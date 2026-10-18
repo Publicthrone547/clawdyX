@@ -128,7 +128,7 @@ func (s *SetupService) CheckClaude(binary string) ClaudeCheck {
 	}
 	cc := ClaudeCheck{Binary: binary}
 	if binary == "" {
-		cc.Error = "Claude Code was not found. Install it (brew install --cask claude-code), run claude once in Terminal to log in, then check again."
+		cc.Error = "Claude Code was not found. Install it (" + platform.W.InstallClaude + "), run claude once in " + platform.W.Terminal + " to log in, then check again."
 		return cc
 	}
 	dir, _ := os.UserHomeDir()
@@ -148,7 +148,7 @@ func (s *SetupService) CheckClaude(binary string) ClaudeCheck {
 	}
 	cc.LoggedIn, cc.Method, cc.Subscription = a.LoggedIn, a.AuthMethod, a.SubscriptionType
 	if !a.LoggedIn {
-		cc.Error = "Claude Code is not logged in. Open Terminal, run claude and log in, then check again. clawdyX never logs in for you."
+		cc.Error = "Claude Code is not logged in. Open " + platform.W.Terminal + ", run claude and log in, then check again. clawdyX never logs in for you."
 	}
 	return cc
 }

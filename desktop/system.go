@@ -13,6 +13,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
+	"github.com/Publicthrone547/clawdyX/desktop/host"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 	"github.com/Publicthrone547/clawdyX/internal/platform"
@@ -161,17 +162,26 @@ func (s *SystemService) SetLaunchAtLogin(on bool) (bool, error) {
 	return s.app.Autostart.IsEnabled()
 }
 
-// links are the only places the UI can open.
-var links = map[string]string{
-	"screen-recording": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
-	"accessibility":    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-	"automation":       "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
-	"camera":           "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
-	"login-items":      "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
-	"botfather":        "https://t.me/BotFather",
-	"docs":             "https://github.com/Publicthrone547/clawdyX#readme",
-	"license":          "https://polyformproject.org/licenses/noncommercial/1.0.0",
-	"releases":         releasesURL,
+// links are the only places the UI can open: the project's pages and the
+// OS settings pages of this OS (host.SettingsLinks).
+var links = func() map[string]string {
+	m := map[string]string{
+		"botfather": "https://t.me/BotFather",
+		"docs":      "https://github.com/Publicthrone547/clawdyX#readme",
+		"license":   "https://polyformproject.org/licenses/noncommercial/1.0.0",
+		"releases":  releasesURL,
+	}
+	for k, v := range host.SettingsLinks {
+		m[k] = v
+	}
+	return m
+}()
+
+// HasLink reports whether this OS has a settings page for a key (the UI
+// shows an "Open … Settings" button only then).
+func (s *SystemService) HasLink(key string) bool {
+	_, ok := links[key]
+	return ok
 }
 
 // Open opens one of the known links.

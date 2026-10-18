@@ -89,6 +89,14 @@ export function ExportSettings(): $CancellablePromise<string> {
 }
 
 /**
+ * HasLink reports whether this OS has a settings page for a key (the UI
+ * shows an "Open … Settings" button only then).
+ */
+export function HasLink(key: string): $CancellablePromise<boolean> {
+    return $Call.ByID(3556359192, key);
+}
+
+/**
  * Info returns paths and app settings.
  */
 export function Info(): $CancellablePromise<$models.AppInfo> {

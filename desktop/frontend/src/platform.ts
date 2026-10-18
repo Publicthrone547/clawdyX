@@ -41,6 +41,19 @@ export const neutral: Words = {
   cameraRiskNote: "",
   updateHint: "Download the new version from the release page.",
   homeExample: "",
+  openCommand: "",
+  openUrlExample: "",
+  screenToolTrouble: "",
+  automationExamples: "",
+  screenLabel: "Screenshots",
+  screenDeniedHelp: "",
+  screenNote: "",
+  cameraDeniedStatus: "",
+  cameraDeniedFix: "",
+  cameraAskNote: "",
+  noCameraFix: "",
+  screenGrantNote: "",
+  inputUnavailableFix: "",
 };
 
 /** words is the vocabulary of the running OS. */

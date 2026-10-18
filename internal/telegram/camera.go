@@ -47,7 +47,7 @@ func (a *App) initCamera(p camera.Provider) {
 func (a *App) cameraOffReply(m *models.Message, err error) {
 	switch {
 	case !a.cfg.Desktop.Camera:
-		a.replyTo(m, "The camera is off. Turn it on in the clawdyX app on the Mac: Settings → Features → Camera, then restart the worker.")
+		a.replyTo(m, "The camera is off. Turn it on in the clawdyX app on "+a.words.TheComputer+": Settings → Features → Camera, then restart the worker.")
 	case errors.Is(err, camera.ErrOff):
 		a.replyTo(m, "Screen and camera features are switched off (/screen off). Switch them on in the clawdyX app (Monitors) or with: clawdyx ctl screens.enabled.set '{\"enabled\":true}'")
 	default:
@@ -81,9 +81,9 @@ func (a *App) cmdCameras(m *models.Message) {
 	case "granted":
 		sb.WriteString("Camera permission: granted\n")
 	case "denied":
-		sb.WriteString("Camera permission: <b>not granted</b> to clawdyX. System Settings → Privacy &amp; Security → Camera.\n")
+		sb.WriteString("<b>" + Esc(a.words.CameraDeniedStatus) + "</b>\n")
 	case "not asked yet":
-		sb.WriteString("Camera permission: not asked yet; macOS asks on the Mac at the first /camera.\n")
+		sb.WriteString(strings.TrimSpace("Camera permission: not asked yet. "+Esc(a.words.CameraAskNote)) + "\n")
 	}
 	fmt.Fprintf(&sb, "/camera [N] sends you a photo · /camera video SECONDS [N] a clip of up to %d s without sound · /screen off switches the camera off too", camera.MaxVideoSeconds)
 	a.replyTo(m, sb.String())
@@ -170,7 +170,7 @@ func (a *App) cameraCheck(ctx context.Context) control.DiagnosticCheck {
 	c := control.DiagnosticCheck{ID: "camera", Label: "Camera"}
 	switch {
 	case !camera.Supported:
-		c.OK, c.Detail = true, "not available on this platform (macOS only)"
+		c.OK, c.Detail = true, "not available on "+a.words.ThisComputer+" in this version"
 		return c
 	case !a.cfg.Desktop.Camera:
 		c.OK, c.Detail = true, "off (turn it on in Settings → Features)"
@@ -187,7 +187,7 @@ func (a *App) cameraCheck(ctx context.Context) control.DiagnosticCheck {
 		return c
 	}
 	if len(cs) == 0 {
-		c.Detail, c.Fix = "no camera found", "Connect a camera or open the lid of a MacBook."
+		c.Detail, c.Fix = "no camera found", a.words.NoCameraFix
 		return c
 	}
 	names := make([]string, 0, len(cs))
@@ -195,15 +195,15 @@ func (a *App) cameraCheck(ctx context.Context) control.DiagnosticCheck {
 		names = append(names, k.Name)
 	}
 	found := fmt.Sprintf("%d found (%s)", len(cs), strings.Join(names, ", "))
-	c.FixURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+	c.FixKey = "camera"
 	switch acc, _ := a.cams.Check(ctx); acc {
 	case "granted":
 		c.OK, c.Detail = true, "permission granted · "+found
 	case "denied":
-		c.Detail, c.Fix = "permission not granted · "+found, "Turn on clawdyX in System Settings → Privacy & Security → Camera, then restart the worker."
+		c.Detail, c.Fix = "permission not granted · "+found, a.words.CameraDeniedFix
 	case "not asked yet":
 		c.Warn, c.Detail = true, "permission not asked yet · "+found
-		c.Fix = "macOS asks on this Mac the first time you send /camera."
+		c.Fix = a.words.CameraAskNote
 	default:
 		c.Warn, c.Detail = true, "permission unknown until the first /camera · "+found
 	}

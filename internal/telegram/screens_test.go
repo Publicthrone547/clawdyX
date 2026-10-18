@@ -11,6 +11,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func photos(h *harness) []call {
@@ -67,7 +68,9 @@ func TestScreensListCaptureAndSwitch(t *testing.T) {
 	if !strings.Contains(p[0].Form["caption"], "Display 2 · Side") || p[0].Form["chat_id"] != fmt.Sprint(owner) {
 		t.Fatalf("photo %v", p[0].Form)
 	}
-	h.tg.waitFor(t, "about once a month")
+	if platform.W.ScreenNote != "" {
+		h.tg.waitFor(t, Esc(platform.W.ScreenNote)[:40])
+	}
 	h.tg.push(msg(owner, owner, "private", "/screen all"))
 	waitPhotos(t, h, 3)
 	h.tg.push(msg(owner, owner, "private", "/screen 9"))
@@ -77,7 +80,7 @@ func TestScreensListCaptureAndSwitch(t *testing.T) {
 	h.tg.waitFor(t, "switched off")
 	n := fakeCaptures.Load()
 	h.tg.push(msg(owner, owner, "private", "/screen on"))
-	h.tg.waitFor(t, "only be switched on from the Mac")
+	h.tg.waitFor(t, "only be switched on from")
 	h.tg.push(msg(owner, owner, "private", "/look 1 what is this"))
 	h.tg.waitFor(t, "screens.enabled.set")
 	if fakeCaptures.Load() != n || h.app.broker.Held() != 0 {

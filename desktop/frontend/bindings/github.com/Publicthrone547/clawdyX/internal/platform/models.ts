@@ -131,6 +131,21 @@ export interface Words {
     "installClaude": string;
 
     /**
+     * the shell command that opens a URL or file
+     */
+    "openCommand": string;
+
+    /**
+     * how Claude opens a URL in a shell; {browser} is desktop.browser_app
+     */
+    "openUrlExample": string;
+
+    /**
+     * what a screen tool may report on this OS
+     */
+    "screenToolTrouble": string;
+
+    /**
      * after the bot stopped cleanly
      */
     "startAgainHint": string;
@@ -199,4 +214,55 @@ export interface Words {
      * "/Users/you" | `C:\Users\you` | "/home/you"
      */
     "homeExample": string;
+
+    /**
+     * Bot and Diagnostics sentences that differ per OS.
+     * what the automation tier can run
+     */
+    "automationExamples": string;
+
+    /**
+     * the screenshot status label ("Screen Recording", "Screenshots")
+     */
+    "screenLabel": string;
+
+    /**
+     * after a refused capture
+     */
+    "screenDeniedHelp": string;
+
+    /**
+     * told once after the first screenshot ("" when none)
+     */
+    "screenNote": string;
+
+    /**
+     * /cameras when access is refused
+     */
+    "cameraDeniedStatus": string;
+
+    /**
+     * Diagnostics fix when access is refused
+     */
+    "cameraDeniedFix": string;
+
+    /**
+     * when the OS asks at the first capture ("" when it never asks)
+     */
+    "cameraAskNote": string;
+
+    /**
+     * Diagnostics fix when no camera is found
+     */
+    "noCameraFix": string;
+
+    /**
+     * after ScreenDeniedHelp in Diagnostics ("" when none)
+     */
+    "screenGrantNote": string;
+
+    /**
+     * why mouse and keyboard tools may not work
+     */
+    "inputUnavailableFix": string;
 }

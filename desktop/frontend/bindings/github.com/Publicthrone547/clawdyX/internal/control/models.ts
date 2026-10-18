@@ -139,9 +139,10 @@ export interface DiagnosticCheck {
     "fix"?: string;
 
     /**
-     * x-apple.systempreferences: URL the GUI may open
+     * FixKey names the OS settings page that fixes it (camera, screen-recording,
+     * accessibility, startup-apps); the app opens its own link for it.
      */
-    "fixUrl"?: string;
+    "fixKey"?: string;
 }
 
 /**

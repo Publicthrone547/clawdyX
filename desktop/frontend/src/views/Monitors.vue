@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import Empty from "../components/Empty.vue";
 import { Worker, System, type ScreensInfo, type CaptureInfo, type SessionInfo } from "../api";
 import { store, toast, fail } from "../store";
+import { words, isMac } from "../platform";
 import { bytes, dataURL } from "../util";
 
 const info = ref<ScreensInfo | null>(null);
@@ -107,7 +108,7 @@ const live = computed(() => (sentJob.value ? store.progress[sentJob.value] : und
         <div class="flex-1">
           <div class="flex items-center gap-2">
             <span class="font-semibold">Screen features</span>
-            <Badge :tone="enabled ? 'ok' : 'muted'" :label="!configured ? 'off in config' : enabled ? 'on' : 'switched off'" />
+            <Badge :tone="enabled ? 'ok' : 'muted'" :label="!configured ? 'off in Settings' : enabled ? 'on' : 'switched off'" />
             <Badge v-if="store.capturing" tone="accent" :label="'Capturing ' + store.capturing" />
           </div>
           <p class="mt-0.5 text-xs text-muted">
@@ -118,13 +119,15 @@ const live = computed(() => (sentJob.value ? store.progress[sentJob.value] : und
         <button v-else class="btn" @click="store.view = 'settings'">Settings…</button>
       </div>
 
-      <div v-if="enabled && info.access !== 'granted'" class="card mb-4 flex items-center gap-4 px-5 py-3" :style="info.access === 'denied' ? 'border-color: var(--danger)' : ''">
+      <div v-if="enabled && (info.access === 'denied' || (info.access !== 'granted' && words.screenPermission))" class="card mb-4 flex items-center gap-4 px-5 py-3" :style="info.access === 'denied' ? 'border-color: var(--danger)' : ''">
         <p class="flex-1">
-          <template v-if="info.access === 'denied'">macOS has not granted <b>Screen Recording</b> to the clawdyX worker. Enable it in System Settings → Privacy &amp; Security → Screen &amp; System Audio Recording, then restart the worker.</template>
-          <template v-else>Screen Recording permission is not known yet; it is checked on the first capture.</template>
+          <template v-if="info.access === 'denied'"><b>{{ words.screenLabel }}</b>: the last capture was refused. {{ words.screenDeniedHelp }} Then restart the worker.</template>
+          <template v-else>{{ words.screenPermission }} permission is not known yet; it is checked on the first capture.</template>
         </p>
-        <button class="btn" @click="System.RequestScreenAccess()">Ask macOS</button>
-        <button class="btn" @click="System.Open('screen-recording')">Open System Settings</button>
+        <template v-if="isMac">
+          <button class="btn" @click="System.RequestScreenAccess()">Ask {{ words.osName }}</button>
+          <button class="btn" @click="System.Open('screen-recording')">Open {{ words.settingsApp }}</button>
+        </template>
         <button class="btn btn-ghost" @click="load">Re-check</button>
       </div>
 
@@ -135,7 +138,7 @@ const live = computed(() => (sentJob.value ? store.progress[sentJob.value] : und
             <Badge v-if="d.main" tone="accent" label="main" />
             <Badge v-if="d.builtin" tone="muted" label="built-in" />
           </div>
-          <div class="mt-1 text-xs text-muted">{{ d.pixelW }}×{{ d.pixelH }} px · {{ d.pointW }}×{{ d.pointH }} pt · scale {{ d.scale }} · <span class="mono">{{ d.key.slice(0, 8) }}</span></div>
+          <div class="mt-1 text-xs text-muted">{{ d.pixelW }}×{{ d.pixelH }} px<template v-if="isMac"> · {{ d.pointW }}×{{ d.pointH }} pt</template> · scale {{ d.scale }} · <span class="mono">{{ d.key.slice(0, 8) }}</span></div>
           <button class="btn btn-sm mt-3" :disabled="!enabled || !!busy" @click="capture(String(d.index), d.name)">{{ busy === d.name ? "Capturing…" : "Capture this display" }}</button>
         </div>
       </div>
@@ -155,7 +158,7 @@ const live = computed(() => (sentJob.value ? store.progress[sentJob.value] : und
           </figcaption>
         </figure>
       </div>
-      <p class="mt-6 text-xs text-muted">macOS asks about once a month whether clawdyX may keep capturing without the system picker. The dialog appears on this Mac; until it is answered, captures (including from Telegram) fail. Audio is never recorded.</p>
+      <p class="mt-6 text-xs text-muted"><template v-if="words.screenNote">{{ words.screenNote }} </template>Audio is never recorded.</p>
     </template>
 
     <Modal v-if="preview" :title="`${preview.c.display.index} · ${preview.c.display.name}`" wide @close="preview = null">

@@ -4,6 +4,9 @@ import SecretInput from "../components/SecretInput.vue";
 import Badge from "../components/Badge.vue";
 import { Setup, System, errMsg, type D, type Sender } from "../api";
 import { store, refreshSetup, refreshService, toast } from "../store";
+import { words } from "../platform";
+// sep separates folders in the example path of this OS.
+const sep = computed(() => (words.value.homeExample.includes("\\") ? "\\" : "/"));
 
 const steps = ["Welcome", "Telegram bot", "Who may use it", "Claude Code and folder", "Finish"];
 const step = ref(0);
@@ -134,7 +137,7 @@ function next() {
         <div class="flex-1 overflow-auto px-7 py-6">
           <template v-if="step === 0">
             <h2 class="text-lg font-semibold">Set up clawdyX</h2>
-            <p class="mt-3">clawdyX lets you talk to the Claude Code installed on this Mac from Telegram. A background worker runs the bot; this app controls it.</p>
+            <p class="mt-3">clawdyX lets you talk to the Claude Code installed on {{ words.thisComputer }} from Telegram. A background worker runs the bot; this app controls it.</p>
             <ul class="mt-4 list-disc space-y-1.5 pl-5 text-muted">
               <li>It uses your existing Claude Code login. It never asks for an API key and never logs in for you.</li>
               <li>It never bypasses Claude Code's permission system. New sessions start read-only.</li>
@@ -154,7 +157,7 @@ function next() {
               <Badge v-if="botName" tone="ok" :label="'Connected as @' + botName" />
             </div>
             <p v-if="tokenErr" class="mt-2 text-danger" role="alert">{{ tokenErr }}</p>
-            <p class="mt-4 text-xs text-muted">The token is stored in the macOS Keychain when you finish. It is never shown again or written to a settings file.</p>
+            <p class="mt-4 text-xs text-muted">The token is stored in {{ words.tokenStore }} when you finish. It is never shown again or written to a settings file.</p>
           </template>
 
           <template v-else-if="step === 2">
@@ -192,7 +195,7 @@ function next() {
             </div>
             <label for="ws" class="label mt-5 block">Project folder Claude may work in</label>
             <div class="mt-1.5 flex gap-2">
-              <input id="ws" v-model="folderText" class="input mono" placeholder="/Users/you/projects/app" @change="checkFolder" />
+              <input id="ws" v-model="folderText" class="input mono" :placeholder="words.homeExample ? words.homeExample + sep + 'projects' + sep + 'app' : ''" @change="checkFolder" />
               <button class="btn" @click="chooseFolder">Choose…</button>
             </div>
             <p v-if="folder?.error" class="mt-1 text-danger">{{ folder.error }}</p>

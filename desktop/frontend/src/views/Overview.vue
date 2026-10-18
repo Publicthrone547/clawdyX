@@ -7,6 +7,7 @@ import WorkerDown from "../components/WorkerDown.vue";
 import Empty from "../components/Empty.vue";
 import { Worker, System, type JobInfo } from "../api";
 import { store, toast, fail, refreshStatus, refreshService } from "../store";
+import { words } from "../platform";
 import { ago, since, botTone, botLabel, jobTone } from "../util";
 
 const st = computed(() => store.status);
@@ -79,7 +80,7 @@ const claudeOK = computed(() => st.value?.claude.loggedIn === true);
 </script>
 
 <template>
-  <Page title="Overview" subtitle="Telegram bot and Claude Code on this Mac. Closing this window keeps the bot and the menu-bar item running.">
+  <Page title="Overview" :subtitle="`Telegram bot and Claude Code on ${words.thisComputer}. Closing this window keeps the bot and the ${words.trayName} running.`">
     <template #actions>
       <template v-if="store.connection.connected">
         <button v-if="!polling" class="btn btn-primary" :disabled="busy || st?.bot.state === 'starting'" @click="start">
@@ -108,7 +109,7 @@ const claudeOK = computed(() => st.value?.claude.loggedIn === true);
       <div class="card px-4 py-3" role="listitem">
         <div class="label">Worker</div>
         <div class="mt-1.5"><Badge :tone="store.connection.connected ? 'ok' : 'danger'" :label="store.connection.connected ? 'Running' : 'Not running'" /></div>
-        <div class="mt-1 text-xs text-muted">{{ st ? `pid ${st.pid} · up ${since(st.startedAt)}` : store.service?.loaded ? "loaded in launchd" : "—" }}</div>
+        <div class="mt-1 text-xs text-muted">{{ st ? `pid ${st.pid} · up ${since(st.startedAt)}` : store.service?.loaded ? words.serviceLoaded : "—" }}</div>
       </div>
       <div class="card px-4 py-3" role="listitem">
         <div class="label">Bot</div>

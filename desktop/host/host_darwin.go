@@ -118,3 +118,13 @@ func InstalledBrowsers() []string {
 	}
 	return out
 }
+
+// SettingsLinks are the System Settings pages the app can open, by the
+// keys of Diagnostics' FixKey and the UI.
+var SettingsLinks = map[string]string{
+	"screen-recording": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
+	"accessibility":    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+	"automation":       "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+	"camera":           "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
+	"login-items":      "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
+}

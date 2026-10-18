@@ -18,6 +18,7 @@ import (
 
 	"github.com/Publicthrone547/clawdyX/internal/agent"
 	"github.com/Publicthrone547/clawdyX/internal/config"
+	"github.com/Publicthrone547/clawdyX/internal/control"
 	"github.com/Publicthrone547/clawdyX/internal/jobs"
 	"github.com/Publicthrone547/clawdyX/internal/observability"
 	"github.com/Publicthrone547/clawdyX/internal/processes"
@@ -47,7 +48,7 @@ const userHelpText = `<b>clawdyX</b> — send any message to talk to Claude in t
 /aliases · /stop · /cancel j-ID — your own jobs
 <i>Sessions are shared with the bot's owner. Tiers, defaults, screens, the camera and the machine are owner-only.</i>`
 
-const helpText = `<b>Claude control center</b> — send any message to talk to Claude in the active session.
+const helpTextTmpl = `<b>Claude control center</b> — send any message to talk to Claude in the active session.
 
 <b>Sessions</b>
 /status — overview · /sessions [all] · /switch S2 · /rename S2 name
@@ -63,7 +64,7 @@ const helpText = `<b>Claude control center</b> — send any message to talk to C
 <b>Jobs</b>
 /stop [j-ID|S-ID|all] · /cancel j-ID · /jobs [n] · /logs j-ID [lines]
 <b>Machine</b>
-/processes · /usage · /doctor · /open youtube.com — open a website in the Mac's browser
+/processes · /usage · /doctor · /open youtube.com — open a website on {{THIS}}
 /screens — list displays · /screen [N|all] — photo of display N · /look [N|all] [question] — ask Claude about display N or all of them · /screen off
 /cameras — list cameras · /camera [N] — photo · /camera video SECONDS [N] — clip of up to 60 s, no sound (/screen off switches the camera off too)
 <b>Bot</b>
@@ -149,7 +150,7 @@ func (a *App) command(ctx context.Context, m *models.Message, text, role string)
 		a.cmdStart(m, isOwner)
 	case "help":
 		if isOwner {
-			a.replyTo(m, helpText)
+			a.replyTo(m, strings.ReplaceAll(helpTextTmpl, "{{THIS}}", a.words.ThisComputer))
 		} else {
 			a.replyTo(m, userHelpText)
 		}
@@ -1129,10 +1130,17 @@ func (a *App) cmdCwd(m *models.Message, args []string) {
 	a.replyTo(m, sb.String())
 }
 
-var modeHelp = map[string]string{
-	config.ModeObserve:    "read files in the workspace and run Claude Code's built-in read-only commands; edits, other commands and web access are denied",
-	config.ModeAssisted:   "also edit files inside the workspace and run the workspace command allowlist; deny rules (rm, sudo, git push, network tools, secret paths) still apply",
-	config.ModeAutomation: "run shell commands on this Mac (open apps and files, scripts, osascript…) without asking whenever Claude Code's safety classifier approves them; rm, sudo, git push, curl/wget, brew, web tools and secret files stay blocked",
+// modeHelp says what a tier allows, in the words of this OS.
+func (a *App) modeHelp(mode string) string {
+	switch mode {
+	case config.ModeObserve:
+		return "read files in the workspace and run Claude Code's built-in read-only commands; edits, other commands and web access are denied"
+	case config.ModeAssisted:
+		return "also edit files inside the workspace and run the workspace command allowlist; deny rules (rm, sudo, git push, network tools, secret paths) still apply"
+	case config.ModeAutomation:
+		return "run shell commands on " + a.words.ThisComputer + " (" + a.words.AutomationExamples + ") without asking whenever Claude Code's safety classifier approves them; " + a.words.DeniedSummary + " and secret files stay blocked"
+	}
+	return ""
 }
 
 func (a *App) cmdMode(m *models.Message, args []string) {
@@ -1140,7 +1148,7 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		s, _ := a.sess.Active()
 		if s == nil {
 			ws := a.sess.DefaultWorkspace()
-			a.replyTo(m, fmt.Sprintf("No active session. New sessions in <code>%s</code> start in <b>%s</b> — %s.", Esc(ws.Name), ws.DefaultMode, modeHelp[ws.DefaultMode]))
+			a.replyTo(m, fmt.Sprintf("No active session. New sessions in <code>%s</code> start in <b>%s</b> — %s.", Esc(ws.Name), ws.DefaultMode, a.modeHelp(ws.DefaultMode)))
 			return
 		}
 		ws, _ := a.cfg.Workspace(s.WorkspaceName)
@@ -1148,7 +1156,7 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		if ws != nil && len(ws.AllowedCommands) > 0 {
 			allow = strings.Join(ws.AllowedCommands, ", ")
 		}
-		a.replyTo(m, fmt.Sprintf("Tier for %s: <b>%s</b> — %s.\nAssisted command allowlist: <code>%s</code>\nChange: /mode observe | /mode assisted. Bypass mode is never used.", s.Label(), s.Mode, modeHelp[s.Mode], Esc(allow)))
+		a.replyTo(m, fmt.Sprintf("Tier for %s: <b>%s</b> — %s.\nAssisted command allowlist: <code>%s</code>\nChange: /mode observe | /mode assisted. Bypass mode is never used.", s.Label(), s.Mode, a.modeHelp(s.Mode), Esc(allow)))
 		return
 	}
 	mode := strings.ToLower(args[0])
@@ -1161,10 +1169,10 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		}
 		_ = a.st.SetSessionField(s.ID, "mode", mode)
 		a.st.Audit("mode", "set", s.Label(), mode, 0)
-		a.replyTo(m, fmt.Sprintf("✅ %s tier set to <b>%s</b>: %s. Applies to the next message.", s.Label(), mode, modeHelp[mode]))
+		a.replyTo(m, fmt.Sprintf("✅ %s tier set to <b>%s</b>: %s. Applies to the next message.", s.Label(), mode, a.modeHelp(mode)))
 	case config.ModeAutomation:
 		if !a.cfg.Modes.AutomationEnabled {
-			a.replyTo(m, "The automation tier is not enabled. Set \"modes\": {\"automation_enabled\": true} in ~/.config/clawdyx/config.json and restart the bot.")
+			a.replyTo(m, "The automation tier is not enabled. Turn it on in the clawdyX app on "+a.words.ThisComputer+": Settings → Features → Automation tier available, then restart the worker.")
 			return
 		}
 		s, _, err := a.sess.EnsureActive()
@@ -1181,7 +1189,7 @@ func (a *App) cmdMode(m *models.Message, args []string) {
 		if a.cfg.Desktop.ScreenControl {
 			extra = " It will also see your screen and use the mouse and keyboard."
 		}
-		a.askConfirm(tgt(m), fmt.Sprintf("Switch %s to automation? Claude will %s.%s Switch back any time with /mode observe.", s.Label(), modeHelp[config.ModeAutomation], extra), tok, "Enable automation", "Keep current tier")
+		a.askConfirm(tgt(m), fmt.Sprintf("Switch %s to automation? Claude will %s.%s Switch back any time with /mode observe.", s.Label(), a.modeHelp(config.ModeAutomation), extra), tok, "Enable automation", "Keep current tier")
 	default:
 		a.replyTo(m, "Usage: /mode [observe|assisted|automation]")
 	}
@@ -1345,7 +1353,7 @@ func (a *App) cmdDoctor(m *models.Message) {
 		if authErr == nil {
 			fmt.Fprintf(&sb, "%s Auth: loggedIn=%v · method %s · provider %s · subscription %s (%s)\n", ok(auth.LoggedIn), auth.LoggedIn, Esc(auth.AuthMethod), Esc(auth.APIProvider), Esc(auth.SubscriptionType), dur(authDur))
 			if !auth.LoggedIn {
-				sb.WriteString("   → In Terminal run: claude auth login (the bot never logs in or uses API keys)\n")
+				sb.WriteString("   → In " + Esc(a.words.Terminal) + " run: claude auth login (the bot never logs in or uses API keys)\n")
 			}
 		} else {
 			fmt.Fprintf(&sb, "❌ Auth check failed: %s\n", Esc(observability.Redact(authErr.Error())))
@@ -1380,12 +1388,11 @@ func (a *App) cmdDoctor(m *models.Message) {
 		}
 		fmt.Fprintf(&sb, "Settings sources for jobs: %s · strict MCP: %v · bypass/auto disabled via --settings\n", Esc(a.cfg.Claude.SettingSources), a.cfg.Claude.StrictMCPConfig)
 		if a.cfg.Desktop.ScreenControl {
-			acc, _ := a.broker.Check(ctx)
-			granted := acc != "denied"
-			fmt.Fprintf(&sb, "%s Screen Recording permission: %s (from the last capture) · screen features %s\n", ok(granted), acc, map[bool]string{true: "on", false: "switched off"}[a.ScreenOn()])
-			fmt.Fprintf(&sb, "%s Accessibility permission (mouse and keyboard)\n", ok(a.desktop.Trusted(ctx)))
-			if !granted || !a.desktop.Trusted(ctx) {
-				sb.WriteString("   → Grant both to the app that runs clawdyx (Terminal/iTerm when run by hand, the clawdyx binary under launchd) in System Settings → Privacy & Security, then restart the bot.\n")
+			for _, c := range []control.DiagnosticCheck{a.screenCheck(ctx), a.inputCheck(a.desktop.Trusted(ctx))} {
+				fmt.Fprintf(&sb, "%s %s: %s\n", ok(c.OK || c.Warn), Esc(c.Label), Esc(c.Detail))
+				if !c.OK && c.Fix != "" {
+					sb.WriteString("   → " + Esc(c.Fix) + "\n")
+				}
 			}
 		}
 		if a.cfg.Desktop.Camera {

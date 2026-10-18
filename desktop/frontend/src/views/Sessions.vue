@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import Empty from "../components/Empty.vue";
 import { Worker, errMsg, type SessionInfo, type HistoryInfo, type ModelsInfo, type SettingsInfo } from "../api";
 import { store, toast, fail, refreshStatus } from "../store";
+import { words } from "../platform";
 import { ago, bytes } from "../util";
 
 const list = ref<SessionInfo[]>([]);
@@ -119,11 +120,11 @@ function setMode(m: string) {
   if (m === "automation") automationAsk.value = true;
   else act(Worker.SetMode(active.value!.label, m));
 }
-const modeHelp: Record<string, string> = {
+const modeHelp = computed<Record<string, string>>(() => ({
   observe: "Reads files in the workspace and runs read-only commands. No edits, no web.",
   assisted: "Also edits files in the workspace and runs its allowed commands.",
-  automation: "Runs commands Claude Code's safety classifier approves, anywhere on this Mac. Deny rules and secret paths stay blocked.",
-};
+  automation: `Runs commands Claude Code's safety classifier approves, anywhere on ${words.value.thisComputer}. Deny rules and secret paths stay blocked.`,
+}));
 </script>
 
 <template>
@@ -236,7 +237,7 @@ const modeHelp: Record<string, string> = {
           <label class="flex items-start gap-2" :class="history?.deletable ? '' : 'opacity-60'">
             <input v-model="deleteHistory" type="checkbox" :disabled="!history?.deletable" class="mt-0.5" />
             <span>
-              Also delete its Claude Code history on this Mac
+              Also delete its Claude Code history on {{ words.thisComputer }}
               <span v-if="history?.deletable" class="block text-xs text-muted">{{ history.paths?.length ?? 0 }} item(s), {{ bytes(history.bytes) }}: <span class="mono break-all">{{ (history.paths ?? []).join(", ") }}</span></span>
               <span v-else class="block text-xs text-muted">{{ history?.reason ?? "checking…" }}</span>
             </span>

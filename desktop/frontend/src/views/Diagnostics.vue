@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import Empty from "../components/Empty.vue";
 import { Worker, System, type DiagnosticCheck, type LogLine } from "../api";
 import { store, toast, fail } from "../store";
+import { words } from "../platform";
 
 const checks = ref<DiagnosticCheck[]>([]);
 const running = ref(false);
@@ -18,6 +19,7 @@ async function run() {
   running.value = true;
   try {
     checks.value = (await Worker.Diagnostics()) ?? [];
+    await findLinks();
   } catch (e) {
     fail(e);
   } finally {
@@ -35,12 +37,12 @@ const shown = computed(() => {
   const l = s ? lines.value.filter((x) => (x.msg + " " + JSON.stringify(x.attrs ?? {})).toLowerCase().includes(s)) : lines.value;
   return l.slice(-500).reverse();
 });
-function fixKey(url?: string): string {
-  if (!url) return "";
-  if (url.includes("Privacy_ScreenCapture")) return "screen-recording";
-  if (url.includes("Privacy_Accessibility")) return "accessibility";
-  if (url.includes("Privacy_Camera")) return "camera";
-  return "";
+// linkable are the fix keys this OS has a settings page for.
+const linkable = ref(new Set<string>());
+async function findLinks() {
+  const keys = [...new Set(checks.value.map((c) => c.fixKey ?? "").filter(Boolean))];
+  const ok = await Promise.all(keys.map((k) => System.HasLink(k).catch(() => false)));
+  linkable.value = new Set(keys.filter((_, i) => ok[i]));
 }
 async function copyLogs() {
   try {
@@ -75,7 +77,7 @@ async function saveBundle() {
     </template>
     <div v-if="!store.connection.connected" class="card px-5 py-4">
       <p>The worker is not reachable, so its checks cannot run. Service state: <b>{{ store.service?.pid ? "running" : store.service?.installed ? "installed but not running" : "not installed" }}</b>{{ store.service?.binary ? ` (${store.service.binary})` : "" }}.</p>
-      <p class="mt-2 text-muted">Start it from Overview. If it stops right away, the log file in Settings → Logs explains why (often an invalid config.json or a missing token).</p>
+      <p class="mt-2 text-muted">Start it from Overview. If it stops right away, the log file in Settings → Logs explains why (often invalid settings or a missing token). Settings shows what is wrong and can fix it while the worker is down.</p>
     </div>
     <template v-else>
       <div class="card overflow-hidden">
@@ -87,7 +89,7 @@ async function saveBundle() {
               <div class="text-muted selectable">{{ c.detail }}</div>
               <div v-if="c.fix" class="mt-0.5 text-xs">{{ c.fix }}</div>
             </div>
-            <button v-if="fixKey(c.fixUrl) && !c.ok" class="btn btn-sm" @click="System.Open(fixKey(c.fixUrl))">Open System Settings</button>
+            <button v-if="c.fixKey && linkable.has(c.fixKey) && !c.ok" class="btn btn-sm" @click="System.Open(c.fixKey).catch(fail)">Open {{ words.settingsApp }}</button>
           </li>
         </ul>
         <Empty v-else :text="running ? 'Running checks…' : 'No results yet.'" class="m-4" />

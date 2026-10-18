@@ -21,7 +21,7 @@ func TestOpenOnlyKnownLinks(t *testing.T) {
 		t.Fatal("arbitrary key accepted")
 	}
 	for k, u := range links {
-		if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, "x-apple.systempreferences:") {
+		if !strings.HasPrefix(u, "https://") && !strings.HasPrefix(u, settingsScheme) {
 			t.Errorf("%s: unexpected scheme %s", k, u)
 		}
 	}

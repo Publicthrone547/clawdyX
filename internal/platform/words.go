@@ -19,11 +19,14 @@ type Words struct {
 	TokenStoreShort string `json:"tokenStoreShort"` // "Keychain", …
 	NoKeyringNote   string `json:"noKeyringNote"`   // why the token went to a private file
 
-	ServiceKind   string `json:"serviceKind"`   // how the background worker runs
-	ServiceLoaded string `json:"serviceLoaded"` // status text when it is registered
-	LaunchAtLogin string `json:"launchAtLogin"` // label of the app's login switch
-	ShortcutMod   string `json:"shortcutMod"`   // "⌘" | "Ctrl"
-	InstallClaude string `json:"installClaude"` // the command that installs Claude Code
+	ServiceKind       string `json:"serviceKind"`       // how the background worker runs
+	ServiceLoaded     string `json:"serviceLoaded"`     // status text when it is registered
+	LaunchAtLogin     string `json:"launchAtLogin"`     // label of the app's login switch
+	ShortcutMod       string `json:"shortcutMod"`       // "⌘" | "Ctrl"
+	InstallClaude     string `json:"installClaude"`     // the command that installs Claude Code
+	OpenCommand       string `json:"openCommand"`       // the shell command that opens a URL or file
+	OpenURLExample    string `json:"openUrlExample"`    // how Claude opens a URL in a shell; {browser} is desktop.browser_app
+	ScreenToolTrouble string `json:"screenToolTrouble"` // what a screen tool may report on this OS
 
 	StartAgainHint  string `json:"startAgainHint"`  // after the bot stopped cleanly
 	StopServiceHint string `json:"stopServiceHint"` // how to stop the background service
@@ -42,6 +45,18 @@ type Words struct {
 	UpdateHint       string `json:"updateHint"`       // how to install a newer release
 
 	HomeExample string `json:"homeExample"` // "/Users/you" | `C:\Users\you` | "/home/you"
+
+	// Bot and Diagnostics sentences that differ per OS.
+	AutomationExamples  string `json:"automationExamples"`  // what the automation tier can run
+	ScreenLabel         string `json:"screenLabel"`         // the screenshot status label ("Screen Recording", "Screenshots")
+	ScreenDeniedHelp    string `json:"screenDeniedHelp"`    // after a refused capture
+	ScreenNote          string `json:"screenNote"`          // told once after the first screenshot ("" when none)
+	CameraDeniedStatus  string `json:"cameraDeniedStatus"`  // /cameras when access is refused
+	CameraDeniedFix     string `json:"cameraDeniedFix"`     // Diagnostics fix when access is refused
+	CameraAskNote       string `json:"cameraAskNote"`       // when the OS asks at the first capture ("" when it never asks)
+	NoCameraFix         string `json:"noCameraFix"`         // Diagnostics fix when no camera is found
+	ScreenGrantNote     string `json:"screenGrantNote"`     // after ScreenDeniedHelp in Diagnostics ("" when none)
+	InputUnavailableFix string `json:"inputUnavailableFix"` // why mouse and keyboard tools may not work
 }
 
 // Darwin is the macOS vocabulary.
@@ -53,9 +68,12 @@ var Darwin = Words{
 	TokenStore: "the macOS Keychain", TokenStoreShort: "Keychain",
 	NoKeyringNote: "The macOS Keychain is not available; the token is kept in a private file (mode 0600) instead.",
 	ServiceKind:   "LaunchAgent", ServiceLoaded: "loaded in launchd",
-	LaunchAtLogin: "Open at login (menu-bar item)",
-	ShortcutMod:   "⌘",
-	InstallClaude: "brew install --cask claude-code",
+	LaunchAtLogin:     "Open at login (menu-bar item)",
+	ShortcutMod:       "⌘",
+	InstallClaude:     "brew install --cask claude-code",
+	OpenCommand:       "open",
+	OpenURLExample:    `open -a "{browser}" "URL"`,
+	ScreenToolTrouble: "a missing macOS permission",
 
 	StartAgainHint:  "launchd will not restart a clean exit; start it again with: launchctl kickstart gui/$(id -u)/local.clawdyx",
 	StopServiceHint: "Stop the service from macOS: launchctl bootout gui/$(id -u)/local.clawdyx",
@@ -72,6 +90,17 @@ var Darwin = Words{
 	UpdateHint:     "Download the .dmg from the release page, quit clawdyX, replace it in Applications, then restart the worker.",
 
 	HomeExample: "/Users/you",
+
+	AutomationExamples:  "open apps and files, scripts, osascript…",
+	ScreenLabel:         "Screen Recording",
+	ScreenDeniedHelp:    "System Settings → Privacy & Security → Screen & System Audio Recording.",
+	ScreenNote:          "macOS asks about once a month whether clawdyX may keep capturing the screen. The dialog appears on the Mac itself; until someone answers it there, screenshots from Telegram fail.",
+	CameraDeniedStatus:  "Camera permission: not granted to clawdyX. System Settings → Privacy & Security → Camera.",
+	CameraDeniedFix:     "Turn on clawdyX in System Settings → Privacy & Security → Camera, then restart the worker.",
+	CameraAskNote:       "macOS asks on the Mac the first time you send /camera.",
+	NoCameraFix:         "Connect a camera or open the lid of a MacBook.",
+	ScreenGrantNote:     "Grant it to the clawdyX worker binary, then restart the worker. macOS ties the grant to the binary, so grant it again after each rebuild unless the binary is signed with a stable identity.",
+	InputUnavailableFix: "Grant Accessibility to the clawdyX worker, then restart it.",
 }
 
 // Windows is the Windows vocabulary.
@@ -83,9 +112,12 @@ var Windows = Words{
 	TokenStore: "the Windows Credential Manager", TokenStoreShort: "Credential Manager",
 	NoKeyringNote: "The Windows Credential Manager is not available; the token is kept in a private file instead.",
 	ServiceKind:   "login task", ServiceLoaded: "login task registered",
-	LaunchAtLogin: "Start with Windows",
-	ShortcutMod:   "Ctrl",
-	InstallClaude: "winget install Anthropic.ClaudeCode",
+	LaunchAtLogin:     "Start with Windows",
+	ShortcutMod:       "Ctrl",
+	InstallClaude:     "winget install Anthropic.ClaudeCode",
+	OpenCommand:       "start",
+	OpenURLExample:    `start "" "URL"`,
+	ScreenToolTrouble: "that input was blocked (a window running as administrator, or the lock screen)",
 
 	StartAgainHint:  "Start it again on the PC with: clawdyx service start (or from the clawdyX app).",
 	StopServiceHint: "Stop the service on the PC: clawdyx service stop",
@@ -102,6 +134,14 @@ var Windows = Words{
 	UpdateHint:       "Download the installer from the release page and run it; it replaces the app and restarts the worker.",
 
 	HomeExample: `C:\Users\you`,
+
+	AutomationExamples:  "open apps and files, scripts",
+	ScreenLabel:         "Screenshots",
+	ScreenDeniedHelp:    "The capture was refused; try again while the PC is unlocked.",
+	CameraDeniedStatus:  "Camera access for desktop apps is off: Windows Settings → Privacy & security → Camera.",
+	CameraDeniedFix:     "Turn on camera access for desktop apps in Windows Settings → Privacy & security → Camera, then try again.",
+	NoCameraFix:         "Connect a camera.",
+	InputUnavailableFix: "Input cannot reach windows that run as administrator, the lock screen or the sign-in screen.",
 }
 
 // Linux is the Linux vocabulary.
@@ -113,9 +153,12 @@ var Linux = Words{
 	TokenStore: "the system keyring", TokenStoreShort: "keyring",
 	NoKeyringNote: "No system keyring was found (normal on a server); the token is kept in a private file (mode 0600) instead.",
 	ServiceKind:   "systemd user service", ServiceLoaded: "systemd unit loaded",
-	LaunchAtLogin: "Start on login (desktop autostart)",
-	ShortcutMod:   "Ctrl",
-	InstallClaude: "curl -fsSL https://claude.ai/install.sh | bash",
+	LaunchAtLogin:     "Start on login (desktop autostart)",
+	ShortcutMod:       "Ctrl",
+	InstallClaude:     "curl -fsSL https://claude.ai/install.sh | bash",
+	OpenCommand:       "xdg-open",
+	OpenURLExample:    `xdg-open "URL"`,
+	ScreenToolTrouble: "that it is not available in this session (Wayland, or no graphical session)",
 
 	StartAgainHint:  "Start it again on the computer with: systemctl --user start clawdyx (or clawdyx service start)",
 	StopServiceHint: "Stop the service on the computer: clawdyx service stop",
@@ -132,6 +175,14 @@ var Linux = Words{
 	UpdateHint:       "Download the package for your distribution from the release page.",
 
 	HomeExample: "/home/you",
+
+	AutomationExamples:  "open apps and files, scripts",
+	ScreenLabel:         "Screenshots",
+	ScreenDeniedHelp:    "The desktop refused the capture; on Wayland, answer the screenshot dialog on the computer and try again.",
+	CameraDeniedStatus:  "No access to the camera device: add your user to the video group, then log in again.",
+	CameraDeniedFix:     "Add your user to the video group (sudo usermod -aG video $USER), log in again, then restart the worker.",
+	NoCameraFix:         "Connect a camera.",
+	InputUnavailableFix: "Mouse and keyboard tools need an X11 session; on Wayland they are not available yet.",
 }
 
 // All lists the vocabularies of every supported OS (for tests and guards).

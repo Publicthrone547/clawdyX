@@ -333,7 +333,9 @@ type DiagnosticCheck struct {
 	Warn   bool   `json:"warn,omitempty"`
 	Detail string `json:"detail"`
 	Fix    string `json:"fix,omitempty"`
-	FixURL string `json:"fixUrl,omitempty"` // x-apple.systempreferences: URL the GUI may open
+	// FixKey names the OS settings page that fixes it (camera, screen-recording,
+	// accessibility, startup-apps); the app opens its own link for it.
+	FixKey string `json:"fixKey,omitempty"`
 }
 
 // DisplayInfo is one connected display.

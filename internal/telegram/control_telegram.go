@@ -89,7 +89,7 @@ func (a *App) registerTelegramControl(srv *control.Server) {
 				c.Telegram.OwnerUserID, c.Telegram.AllowedUsers = n[0].ID, n
 				return nil
 			}); err != nil {
-				return nil, control.Errorf("could not save config.json: %v", err)
+				return nil, control.Errorf("could not save the settings: %v", err)
 			}
 		}
 		if err := a.SetAllowlist(n); err != nil {

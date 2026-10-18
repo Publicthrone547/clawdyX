@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import Empty from "../components/Empty.vue";
 import { Worker, type JobInfo, type JobEvent, type ProcessesInfo } from "../api";
 import { store, toast, fail } from "../store";
+import { words } from "../platform";
 import { ago, dur, jobTone, bytes } from "../util";
 
 const jobs = ref<JobInfo[]>([]);
@@ -55,7 +56,7 @@ const icons: Record<string, string> = { tool_use: "🔧", denial: "🚫", api_re
 </script>
 
 <template>
-  <Page title="Jobs & processes" subtitle="Prompts the bot ran, the Claude processes it owns, and other Claude Code sessions on this Mac">
+  <Page title="Jobs & processes" :subtitle="`Prompts the bot ran, the Claude processes it owns, and other Claude Code sessions on ${words.thisComputer}`">
     <template #actions>
       <button class="btn" :disabled="loadingProcs" @click="loadJobs(); loadProcs()">Refresh</button>
     </template>
@@ -109,7 +110,7 @@ const icons: Record<string, string> = { tool_use: "🔧", denial: "🚫", api_re
         <Empty v-else text="No jobs yet." class="m-4" />
       </div>
 
-      <h2 class="mt-6 mb-2 font-semibold">Claude Code sessions on this Mac</h2>
+      <h2 class="mt-6 mb-2 font-semibold">Claude Code sessions on {{ words.thisComputer }}</h2>
       <div class="card overflow-hidden">
         <table v-if="procs?.agents?.length" class="tbl">
           <thead><tr><th>Kind</th><th>Name</th><th>Status</th><th>PID</th><th>Since</th><th>Folder</th><th>Owner</th></tr></thead>

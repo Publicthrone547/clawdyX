@@ -603,7 +603,7 @@ func (a *App) setMode(p control.SetModeParams) (any, error) {
 	case config.ModeObserve, config.ModeAssisted:
 	case config.ModeAutomation:
 		if !a.cfg.Modes.AutomationEnabled {
-			return nil, control.Errorf("the automation tier is not enabled in config.json (modes.automation_enabled)")
+			return nil, control.Errorf("the automation tier is not enabled (Settings → Features → Automation tier available)")
 		}
 	default:
 		return nil, control.InvalidParams("mode must be observe, assisted or automation")
@@ -615,7 +615,7 @@ func (a *App) setMode(p control.SetModeParams) (any, error) {
 	_ = a.st.SetSessionField(s.ID, "mode", mode)
 	a.st.Audit("mode", "set_gui", s.Label(), mode, 0)
 	a.sessionsChanged("mode")
-	return control.SettingResult{Message: fmt.Sprintf("%s tier set to %s: %s.", s.Label(), mode, modeHelp[mode])}, nil
+	return control.SettingResult{Message: fmt.Sprintf("%s tier set to %s: %s.", s.Label(), mode, a.modeHelp(mode))}, nil
 }
 
 var levelRank = map[string]int{"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
@@ -729,7 +729,7 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	if verErr == nil {
 		add(control.DiagnosticCheck{ID: "claude", Label: "Claude Code CLI", OK: true, Detail: "version " + ver + " at " + a.cfg.Claude.Binary})
 	} else {
-		add(control.DiagnosticCheck{ID: "claude", Label: "Claude Code CLI", Detail: observability.Redact(verErr.Error()), Fix: "Install Claude Code (brew install --cask claude-code) or fix claude.binary in config.json."})
+		add(control.DiagnosticCheck{ID: "claude", Label: "Claude Code CLI", Detail: observability.Redact(verErr.Error()), Fix: "Install Claude Code (" + a.words.InstallClaude + ") or set its location in Settings → Claude Code."})
 	}
 	switch {
 	case auErr != nil:
@@ -737,7 +737,7 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	case auth.LoggedIn:
 		add(control.DiagnosticCheck{ID: "auth", Label: "Claude login", OK: true, Detail: auth.AuthMethod + " · " + auth.SubscriptionType})
 	default:
-		add(control.DiagnosticCheck{ID: "auth", Label: "Claude login", Detail: "not logged in", Fix: "Open Terminal, run: claude — and log in. clawdyX never logs in for you."})
+		add(control.DiagnosticCheck{ID: "auth", Label: "Claude login", Detail: "not logged in", Fix: "Open " + a.words.Terminal + ", run: claude — and log in. clawdyX never logs in for you."})
 	}
 	for _, c := range a.platformChecks(ctx) {
 		add(c)
@@ -750,24 +750,10 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	add(control.DiagnosticCheck{ID: "db", Label: "State database", OK: dbErr == nil, Detail: map[bool]string{true: "integrity ok", false: "integrity check failed"}[dbErr == nil],
 		Fix: map[bool]string{true: "", false: "Stop the worker and restore a backup (see the runbook)."}[dbErr == nil]})
 	if a.cfg.Desktop.ScreenControl {
-		c := control.DiagnosticCheck{ID: "screen", Label: "Screen Recording permission", FixURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"}
-		switch acc, at := a.broker.Check(ctx); acc {
-		case "granted":
-			c.OK, c.Detail = true, "granted (last capture "+ago(at)+")"
-		case "denied":
-			c.Detail, c.Fix = "not granted (last attempt "+ago(at)+")", "Grant Screen Recording to the clawdyX worker binary, then restart the worker. macOS ties the grant to the binary, so grant it again after each rebuild unless the binary is signed with a stable identity."
-		default:
-			c.Warn, c.Detail = true, "unknown until the first capture (checking would need a capture)"
-		}
-		if !a.ScreenOn() {
-			c.Detail += " · screen features switched off"
-		}
-		add(c)
-		add(control.DiagnosticCheck{ID: "accessibility", Label: "Accessibility permission (mouse and keyboard tools)", OK: trusted,
-			Detail: map[bool]string{true: "granted", false: "not granted"}[trusted], FixURL: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
-			Fix: map[bool]string{true: "", false: "Grant Accessibility to the clawdyX worker, then restart it."}[trusted]})
+		add(a.screenCheck(ctx))
+		add(a.inputCheck(trusted))
 	} else {
-		add(control.DiagnosticCheck{ID: "screen", Label: "Screen features", OK: true, Detail: "off in config.json (desktop.screen_control)"})
+		add(control.DiagnosticCheck{ID: "screen", Label: "Screen features", OK: true, Detail: "off (turn them on in Settings → Features)"})
 	}
 	add(a.cameraCheck(ctx))
 	if free, err := freeBytes(a.cfg.LogDir); err == nil {
@@ -789,6 +775,45 @@ func (a *App) tokenStoreCheck() control.DiagnosticCheck {
 	default:
 		c.Warn, c.Detail = true, "in the private token file"
 		c.Fix = "Move it into " + a.words.TokenStore + ": clawdyx setup -migrate-token, then restart the worker."
+	}
+	return c
+}
+
+// screenCheck reports whether captures work, from the last capture (a check
+// would need a capture). The label is the OS's: "Screen Recording
+// permission" on macOS, "Screenshots" elsewhere.
+func (a *App) screenCheck(ctx context.Context) control.DiagnosticCheck {
+	c := control.DiagnosticCheck{ID: "screen", Label: a.words.ScreenLabel}
+	if a.words.ScreenPermission != "" {
+		c.Label += " permission"
+		c.FixKey = "screen-recording"
+	}
+	switch acc, at := a.broker.Check(ctx); acc {
+	case "granted":
+		c.OK, c.Detail = true, "working (last capture "+ago(at)+")"
+	case "denied":
+		c.Detail, c.Fix = "refused (last attempt "+ago(at)+")", strings.TrimSpace(a.words.ScreenDeniedHelp+" "+a.words.ScreenGrantNote)
+	default:
+		c.Warn, c.Detail = true, "unknown until the first capture (checking would need a capture)"
+	}
+	if !a.ScreenOn() {
+		c.Detail += " · screen features switched off"
+	}
+	return c
+}
+
+// inputCheck reports whether the mouse and keyboard tools can work.
+func (a *App) inputCheck(trusted bool) control.DiagnosticCheck {
+	c := control.DiagnosticCheck{ID: "accessibility", Label: "Mouse and keyboard tools", OK: trusted,
+		Detail: map[bool]string{true: "available", false: "not available"}[trusted]}
+	if a.words.InputPermission != "" {
+		c.Label = a.words.InputPermission + " permission (mouse and keyboard tools)"
+		c.FixKey = "accessibility"
+		if !trusted {
+			c.Fix = "Grant " + a.words.InputPermission + " to the clawdyX worker, then restart it."
+		}
+	} else if !trusted {
+		c.Fix = a.words.InputUnavailableFix
 	}
 	return c
 }

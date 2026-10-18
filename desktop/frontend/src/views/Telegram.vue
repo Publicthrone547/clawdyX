@@ -6,6 +6,7 @@ import Modal from "../components/Modal.vue";
 import SecretInput from "../components/SecretInput.vue";
 import { Worker, System, errMsg, type AllowedUserInfo, type TokenStatus, type DetectResult } from "../api";
 import { store, toast, fail } from "../store";
+import { words } from "../platform";
 import { ago, idProblem } from "../util";
 
 const st = computed(() => store.status);
@@ -124,14 +125,14 @@ async function saveToken() {
           <h2 class="font-semibold">Bot token</h2>
           <dl class="mt-3 grid grid-cols-[8rem_1fr] gap-y-1.5">
             <dt class="text-muted">Bot</dt><dd>{{ tokenStatus?.botUsername ? "@" + tokenStatus.botUsername : "—" }}</dd>
-            <dt class="text-muted">Stored in</dt><dd>{{ { keychain: "macOS Keychain", file: "private file (.env)", env: "environment variable" }[tokenStatus?.source ?? ""] ?? "—" }}</dd>
+            <dt class="text-muted">Stored in</dt><dd>{{ { keychain: words.tokenStore, file: "private file (.env)", env: "environment variable" }[tokenStatus?.source ?? ""] ?? "—" }}</dd>
             <dt class="text-muted">Token</dt><dd class="mono">{{ tokenStatus?.hint || "—" }}</dd>
           </dl>
           <div class="mt-3 flex gap-2">
             <button class="btn" @click="replacing = true">Replace token…</button>
             <button class="btn btn-ghost" @click="System.Open('botfather')">Open @BotFather</button>
           </div>
-          <p v-if="tokenStatus?.source === 'file'" class="mt-3 text-xs text-warn">The token is in a file. Replacing it here moves it into the Keychain.</p>
+          <p v-if="tokenStatus?.source === 'file'" class="mt-3 text-xs text-warn">The token is in a file. Replacing it here moves it into {{ words.tokenStore }}.</p>
         </div>
         <div class="card px-5 py-4">
           <h2 class="font-semibold">Connection</h2>
@@ -196,7 +197,7 @@ async function saveToken() {
     </template>
 
     <Modal v-if="widenAsk" title="Allow another person?" @close="widenAsk = false">
-      <p>New users will be able to send prompts to Claude Code on this Mac, within the tier of the session they use, and to see the bot's shared sessions. Only add people you trust with this computer.</p>
+      <p>New users will be able to send prompts to Claude Code on {{ words.thisComputer }}, within the tier of the session they use, and to see the bot's shared sessions. Only add people you trust with this computer.</p>
       <template #actions>
         <button class="btn" @click="widenAsk = false">Cancel</button>
         <button class="btn btn-primary" @click="doSave">Allow and save</button>
