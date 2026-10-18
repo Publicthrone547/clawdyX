@@ -26,6 +26,7 @@ import (
 	"github.com/Publicthrone547/clawdyX/internal/screen"
 	"github.com/Publicthrone547/clawdyX/internal/store"
 	"github.com/Publicthrone547/clawdyX/internal/telegram"
+	"github.com/Publicthrone547/clawdyX/internal/vault"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
@@ -58,6 +59,7 @@ Usage:
   clawdyx ctl METHOD [JSON]         call the running worker (e.g. ctl status.get, ctl bot.stop '{"cancelJobs":true}');
                                     ctl events streams events; ctl help lists methods
   clawdyx paths [NAME]              where the settings, state and logs are (NAME: config env state logs socket)
+  clawdyx token delete              remove this configuration's bot token (token store and file)
   clawdyx version
 
 Flags (all commands): -config PATH (default %s), -env PATH (default %s)
@@ -144,6 +146,8 @@ func main() {
 		if err := srv.Serve(context.Background(), os.Stdin, os.Stdout); err != nil {
 			os.Exit(exitError)
 		}
+	case "token":
+		os.Exit(tokenCmd(vault.Keychain{}, *cfgPath, *envPath, fs.Args(), os.Stdout))
 	case "paths":
 		os.Exit(printPaths(os.Stdout, *cfgPath, *envPath, fs.Args()))
 	case "version", "-v", "--version":
