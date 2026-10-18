@@ -31,3 +31,11 @@ export function applyTheme() {
   else document.documentElement.setAttribute("data-theme", t);
 }
 export const pref = { get, set };
+
+// System notifications while the window is hidden (off by default).
+export function notifications(): boolean {
+  return get("notifications", "false") === "true";
+}
+export function setNotificationsPref(on: boolean) {
+  set("notifications", on ? "true" : "false");
+}

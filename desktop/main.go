@@ -11,6 +11,7 @@ import (
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 	"github.com/wailsapp/wails/v3/pkg/events"
+	"github.com/wailsapp/wails/v3/pkg/services/notifications"
 
 	"github.com/Publicthrone547/clawdyX/desktop/host"
 )
@@ -42,6 +43,7 @@ func main() {
 	}
 	worker := &WorkerService{}
 	system := &SystemService{w: worker}
+	notes := notifications.New()
 	app := application.New(application.Options{
 		Name:        "clawdyX",
 		Description: "Control panel for the clawdyX Telegram bot and the local Claude Code CLI",
@@ -49,6 +51,7 @@ func main() {
 			application.NewService(worker),
 			application.NewService(system),
 			application.NewService(&SetupService{}),
+			application.NewService(notes),
 		},
 		Assets: application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac: application.MacOptions{
@@ -87,6 +90,9 @@ func main() {
 		e.Cancel()
 		app.Event.Emit("app:hidden", true)
 	})
+	appNotifier.send = notes.SendNotification
+	appNotifier.authorize = notes.RequestNotificationAuthorization
+	appNotifier.visible = func() bool { return window.IsVisible() }
 	app.Event.OnApplicationEvent(events.Mac.ApplicationShouldHandleReopen, func(*application.ApplicationEvent) { showWindow() })
 
 	tray := app.SystemTray.New()

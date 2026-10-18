@@ -196,6 +196,14 @@ Section "Uninstall"
     DeleteRegValue HKCU "${RUNKEY}" "${APPVALUE}"
   ${EndIf}
 
+  ; The notification registration the app makes at its first start
+  ; (another copy of the app makes it again when it starts).
+  ReadRegStr $0 HKCU "Software\Classes\AppUserModelId\${APP}" "CustomActivator"
+  ${If} $0 != ""
+    DeleteRegKey HKCU "Software\Classes\CLSID\$0"
+  ${EndIf}
+  DeleteRegKey HKCU "Software\Classes\AppUserModelId\${APP}"
+
   Delete "$SMPROGRAMS\${APP}.lnk"
   Delete "$INSTDIR\clawdyX.exe"
   Delete "$INSTDIR\LICENSE"

@@ -1,6 +1,7 @@
 import { reactive } from "vue";
 import { Events } from "@wailsio/runtime";
 import { Worker, System, Setup, errMsg, type Status, type D } from "./api";
+import { notifications } from "./prefs";
 
 export type View = "overview" | "telegram" | "sessions" | "jobs" | "monitors" | "settings" | "diagnostics" | "help";
 
@@ -98,6 +99,7 @@ function soon() {
 }
 
 export function initStore() {
+  System.SetNotifications(notifications()).catch(() => {});
   System.Platform()
     .then((p) => (store.platform = p))
     .catch(() => {});

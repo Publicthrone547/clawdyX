@@ -96,6 +96,7 @@ func (w *WorkerService) loop(ctx context.Context) {
 		w.mu.Unlock()
 		w.setConn(Connection{Connected: true, Configured: true})
 		for ev := range c.Events() {
+			appNotifier.event(ev)
 			if w.app != nil {
 				w.app.Event.Emit("worker:event", WorkerEvent{Type: ev.Type, Seq: ev.Seq, TS: ev.TS, Data: ev.Data})
 			}
@@ -104,6 +105,9 @@ func (w *WorkerService) loop(ctx context.Context) {
 		w.c = nil
 		w.mu.Unlock()
 		w.setConn(Connection{Configured: true})
+		if ctx.Err() == nil {
+			appNotifier.lost()
+		}
 		sleep(ctx, 500*time.Millisecond)
 	}
 }

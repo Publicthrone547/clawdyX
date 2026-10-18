@@ -231,6 +231,14 @@ export function SetLaunchAtLogin(on: boolean): $CancellablePromise<boolean> {
 }
 
 /**
+ * SetNotifications turns system notifications on or off (the UI calls it
+ * at start and when the preference changes).
+ */
+export function SetNotifications(on: boolean): $CancellablePromise<void> {
+    return $Call.ByID(2404218148, on);
+}
+
+/**
  * SetSettingsOffline changes the settings file while the worker is down.
  * Removing or renaming a workspace needs the worker (it knows the sessions).
  */
