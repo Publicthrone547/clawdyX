@@ -27,7 +27,7 @@ How to read this document: Sections 1–3 are the findings and the capability ma
 10. Computer-control scope and the capability registry
 11. Process and session monitoring
 12. Go dependencies and decisions
-13. Configuration contract, state paths, logging, LaunchAgent
+13. Configuration contract, state paths, logging, the background service per OS
 14. Security: threat model, authorization gate, confirmations, redaction, data classification, risk register
 15. Performance targets and benchmarks
 16. Testing strategy and acceptance criteria
@@ -35,6 +35,7 @@ How to read this document: Sections 1–3 are the findings and the capability ma
 18. Operational runbook
 19. Prioritized roadmap
 20. Open questions
+21. Platform layer (macOS, Windows, Linux)
 - Appendix A: Evidence log (redacted)
 - Appendix B: Observed JSON shapes (CLI 2.1.292)
 - Appendix C: References checked (with dates)
@@ -677,17 +678,20 @@ No web framework, no YAML/TOML (config is JSON via `encoding/json`), no CGO (`CG
 
 ---
 
-## 13. Configuration contract, state paths, logging, LaunchAgent
+## 13. Configuration contract, state paths, logging, the background service per OS
 
-### 13.1 Files and directories (macOS conventions)
+### 13.1 Files and directories per OS
 
-| Purpose | Path | Mode |
-| --- | --- | --- |
-| Secrets | `~/.config/clawdyx/.env` (only `TELEGRAM_BOT_TOKEN=…`), or the variable in the process environment | 0600; the bot refuses to start if the file is group/world readable |
-| Config | `~/.config/clawdyx/config.json` (`CLAWDYX_CONFIG` overrides) | 0600 |
-| State | `~/Library/Application Support/clawdyx/` → `state.db` (+ WAL), `bot.lock`, `approve.sock` (Phase 3), `tmp/`, `backups/` | dir 0700 |
-| Logs | `~/Library/Logs/clawdyx/bot.log` (JSON lines, rotated at 20 MB × 5) + launchd `stdout.log`/`stderr.log` | 0600 |
-| LaunchAgent | `~/Library/LaunchAgents/local.clawdyx.plist` (label `local.clawdyx`) | 0644 |
+`internal/config` (`platform_darwin.go`, `platform_windows.go`, `platform_linux.go`) holds the folders; `CLAWDYX_CONFIG` overrides the settings file everywhere, and the token file, state and logs follow it (a test instance never touches the real one).
+
+| Purpose | macOS | Windows | Linux | Mode |
+| --- | --- | --- | --- | --- |
+| Token | login Keychain (go-keyring through `/usr/bin/security`) | Credential Manager, generic credential `clawdyx:<account>` | Secret Service over D-Bus | the item is per settings file: account `telegram-bot-token@<sha256(abs config path)[:6]>` |
+| Token file (fallback, `-token-file`) | `~/.config/clawdyx/.env` | `%APPDATA%\clawdyx\.env` | `$XDG_CONFIG_HOME/clawdyx/.env` | 0600; refused when group/world readable |
+| Config | `~/.config/clawdyx/config.json` | `%APPDATA%\clawdyx\config.json` (0.4.x: `%USERPROFILE%\.config\clawdyx`, moved on `service start`) | `$XDG_CONFIG_HOME/clawdyx/config.json` | 0600 in a 0700 folder (Windows: the profile ACL) |
+| State | `~/Library/Application Support/clawdyx/` | `%LOCALAPPDATA%\clawdyx\` | `$XDG_STATE_HOME/clawdyx/` | dir 0700: `state.db` (+ WAL), `bot.lock`, `control.sock`, `tmp/`, `backups/`; Windows adds `worker.pid`, `supervisor.pid`, `supervisor.stop` |
+| Logs | `~/Library/Logs/clawdyx/` (+ launchd `stdout.log`/`stderr.log`) | `%LOCALAPPDATA%\clawdyx\logs\` (+ `supervisor.log`, `stderr.log`) | `$XDG_STATE_HOME/clawdyx/logs/` (+ the user journal) | 0600, `bot.log` JSON lines rotated at 20 MB × 5 |
+| Service | `~/Library/LaunchAgents/local.clawdyx.plist` | `HKCU\…\CurrentVersion\Run`, value `local.clawdyx` | `~/.config/systemd/user/clawdyx.service` (fallback `~/.config/autostart/clawdyx.desktop`) | `CLAWDYX_SERVICE_LABEL` names a separate instance |
 
 ### 13.2 `.env.example` (committed; real `.env` is git-ignored)
 
@@ -747,7 +751,7 @@ Validation (fail closed, exit code 2 with a precise message): `owner_user_id` mu
 
 ### 13.4 Child process environment (allowlist)
 
-`HOME`, `USER`, `LOGNAME`, `SHELL=/bin/zsh`, `PATH=<claude.child_path>`, `TMPDIR` (from the bot's env or `/tmp`), `LANG=en_US.UTF-8`, `TERM=dumb`, `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=<n>`, `DISABLE_AUTOUPDATER=1`. Explicitly **never** forwarded: `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDECODE`, `CLAUDE_CODE_*` (nested-session markers), `SSH_AUTH_SOCK`, and anything else. If `ANTHROPIC_API_KEY` is present in the bot's own environment, the bot logs a warning at startup ("ignored; the bot uses the local claude.ai login only").
+`PATH=<claude.child_path>`, `LANG=en_US.UTF-8`, `TERM=dumb`, `CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS=<n>`, `DISABLE_AUTOUPDATER=1`, plus per OS (`internal/agent/proc_*.go`): macOS `HOME`, `USER`, `LOGNAME`, `TMPDIR`, `SHELL=/bin/zsh`; Linux the same with `XDG_RUNTIME_DIR`, `LANG`, `LC_ALL` and `SHELL=/bin/bash`; Windows the profile and system folders Node and Git Bash need (`USERPROFILE`, `APPDATA`, `LOCALAPPDATA`, `TEMP`, `SystemRoot`, `ComSpec`, `PATHEXT`, `ProgramFiles`, …) and `CLAUDE_CODE_GIT_BASH_PATH` from `claude.git_bash_path` or detection. Explicitly **never** forwarded: `TELEGRAM_BOT_TOKEN`, `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`, `CLAUDECODE`, `CLAUDE_CODE_*` (nested-session markers), `SSH_AUTH_SOCK`, and anything else. If `ANTHROPIC_API_KEY` is present in the bot's own environment, the bot logs a warning at startup ("ignored; the bot uses the local claude.ai login only").
 
 Settings passed per job: `--setting-sources user` (owner's global settings, hooks, plugins; project/local settings of the workspace are **not** loaded so repository-provided hooks or `.mcp.json` servers cannot run — documented `-p` risk), `--strict-mcp-config` (no MCP servers at all, unless Phase 3 adds the approval server), and `--settings '{"permissions":{"disableBypassPermissionsMode":"disable","disableAutoMode":"disable"}}'` (the second key only while automation is disabled).
 
@@ -783,6 +787,33 @@ Settings passed per job: `--setting-sources user` (owner's global settings, hook
 ```
 
 Implications: runs only in the Aqua (logged-in GUI) session, so keychain-backed claude.ai auth is available; starts at login; restarts on crash (not on clean exit, so `/shutdown` really stops it until the next login or `launchctl kickstart`); the token is **not** placed in the plist (read from the 0600 `.env`). `ProcessType Interactive` avoids background-QoS throttling of the child `claude` processes. TCC: keep workspaces outside `~/Desktop`, `~/Documents`, `~/Downloads` (protected folders need Files-and-Folders grants for a launchd-launched binary).
+
+### 13.7 Windows: login entry and supervisor
+
+`clawdyx service start` writes `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` → `local.clawdyx` = `"<app>\helpers\clawdyxw.exe" -config "<config>"` (every path quoted, `cmd/clawdyx/runkey.go`) and starts the chain now. `clawdyxw.exe` is a GUI-subsystem launcher (no console window) that starts `clawdyx.exe service supervise` detached; the supervisor (`cmd/clawdyx/supervise*.go`) runs `clawdyx run` with `CLAWDYX_SUPERVISED=1`, records `supervisor.pid` and `worker.pid`, and restarts the worker after an exit: 10 s, doubling to 5 min, reset after 10 min of uptime; it waits for a fixed settings file instead of looping on an invalid one. `service stop` writes `supervisor.stop`, asks the worker to exit over the control socket (`worker.stop`), waits up to 40 s, then ends only the recorded pids' process trees, and deletes the Run value. No step needs administrator rights.
+
+### 13.8 Linux: systemd user unit
+
+```ini
+[Unit]
+Description=clawdyX Telegram bot for the local Claude Code CLI
+After=network-online.target graphical-session.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+ExecStart="<exe>" run -config "<config>"
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+KillMode=mixed
+Environment="PATH=<child path>"
+
+[Install]
+WantedBy=default.target
+```
+
+`service start` writes it to `~/.config/systemd/user/clawdyx.service` and runs `systemctl --user enable --now clawdyx.service`; `status` reads `systemctl --user show` and `loginctl show-user -p Linger`. Without a systemd user manager an XDG autostart entry starts `clawdyx service supervise` with the desktop session (the same supervisor as on Windows). A server keeps the user manager running from boot with `loginctl enable-linger`.
 
 ---
 
@@ -1052,6 +1083,50 @@ CLI path/version/commit (from `claude doctor`), auth (`loggedIn`, `authMethod`, 
 
 ---
 
+## 21. Platform layer
+
+clawdyX 1.0.0 runs the same features on macOS, Windows and Linux. Everything that differs lives behind build tags (`_darwin.go`, `_windows.go`, `_linux.go`, `_unix.go` for `!windows`) and small interfaces; shared code never asks which OS it runs on.
+
+### 21.1 Rules
+
+- **No `runtime.GOOS` outside `internal/platform`.** The package exposes `IsDarwin`, `IsWindows`, `IsLinux`, `ExeSuffix` and `Current()`/`Detect()` (`Info`: OS, arch, version, pretty name, Linux session kind X11/Wayland/headless, desktop, distribution). `TestNoGOOSOutsidePlatform` parses the source and fails otherwise.
+- **No OS words outside the platform tables.** User-facing text takes its OS words (this Mac / this PC / this computer, the token store, the settings app, the service kind, permissions, install commands, hints) from `platform.W`, a `Words` table per OS defined in one shared file (`words.go`), so tests render every OS on any host.
+- **Fail-closed stays fail-closed** on every OS: an invalid setting stops the worker; an unknown token-store error stops it; only a missing token store (`vault.ErrUnavailable`, a Linux server) falls back to the private file, and says so.
+
+### 21.2 Interfaces and implementations
+
+| Area | Shared interface | macOS | Windows | Linux |
+| --- | --- | --- | --- | --- |
+| Folders | `config.DefaultPath`, `Folders` | `~/Library/…` | `%APPDATA%`, `%LOCALAPPDATA%` (+ 0.4.x migration) | XDG |
+| Token store | `vault.Store` | Keychain | Credential Manager | Secret Service (probed on the session bus) or file |
+| Background service | `clawdyx service …` | LaunchAgent | Run value + `clawdyxw.exe` + supervisor | systemd user unit (+ autostart fallback with the supervisor) |
+| Processes | `agent.ProcessComm`, `StartTime`, `KillGroup` | sysctl, process groups | Toolhelp/`GetProcessTimes`, `taskkill /T /F` on recorded pids | `/proc/<pid>/stat`, process groups |
+| System sample | `processes.Sample` | sysctl, `ps` | Win32 (no load average: `HasLoad=false`) | `/proc/loadavg`, `/proc/meminfo` |
+| Screens | `screen.Desktop`, `screen.Provider` (`NewDesktop(exe)`) | `screencapture` helper, CGEvent | GDI BitBlt, `EnumDisplayMonitors`, per-monitor DPI v2, `SendInput` | X11: RandR + XTEST (`jezek/xgb`); Wayland: portal or `grim`, no input (`ErrNoWaylandInput`); headless: `Unsupported` |
+| Camera | `camera.Provider` (`NewProvider(exe, tmpDir)`) | AVFoundation helper | Media Foundation helper `clawdyx-camera.exe` (same JSON protocol) | V4L2 in Go (YUYV → JPEG, MJPEG when it decodes), `ffmpeg` for clips |
+| Open a URL | `/open` | `open -a <browser>` | the default browser | `xdg-open` |
+| Desktop host | `desktop/host` | bundle paths, menu-bar icon, `x-apple…` links | `helpers\`, tray icon, `ms-settings:` links | `/usr/bin`, StatusNotifier tray (detected), no settings links |
+
+Diagnostics checks carry a `FixKey` (`screen-recording`, `accessibility`, `automation`, `camera`, `login-items`, `startup-apps`) that the app maps to its own OS's settings page (`host.SettingsLinks`); an OS without the page shows no button.
+
+### 21.3 Policy per OS
+
+`internal/policy` builds the deny list and the secret paths from shared tables plus a per-OS addition (`CommonDenied`, `osDenied`, `osDisallowedTools`, `commonSecrets`, `osSecrets`); `golden/*.txt` holds the expected result per OS and tier. The built-in lists apply to every workspace in every tier; a workspace adds rules, it cannot remove these. Windows removes Claude Code's `PowerShell` tool (Section 3.1) and denies `powershell`, `pwsh`, `cmd`, `reg`, `schtasks`, `winget` and the download and script hosts; Linux denies `su`, `doas`, `pkexec`, the package managers and `systemctl`; macOS denies `brew`, `launchctl`, `defaults write`, `security`.
+
+### 21.4 Guard tests
+
+| Guard | What it checks |
+| --- | --- |
+| `TestNoGOOSOutsidePlatform` | the rule in 21.1 |
+| source scan (`internal/platform/sourcescan_test.go`) | Go string literals outside OS files name no OS product |
+| rendered replies (`internal/telegram/wording_test.go`) | `/help`, `/doctor`, errors and BotFather texts rendered with each OS's words contain no word of `forbidden.json` for that OS |
+| Vitest (`desktop/frontend/src/__tests__/forbidden.test.ts`) | every view mounted for darwin, windows and linux |
+| Help (`desktop/help_test.go`) | every topic for every OS and Linux session: forbidden words, links (`help:`, `open:` only), render time |
+| docs (`make check-docs`) | each `### macOS` / `### Windows` / `### Linux` section of README, RUNBOOK and PRIVACY |
+| `make check-wording` | no text tells people to edit `config.json` |
+
+`internal/platform/forbidden.json` is the one list; `go test ./internal/platform -update-fixtures` copies it and the word tables to the frontend fixtures, and a test fails when they differ.
+
 ## Appendix A: Evidence log (redacted, 2026-10-16)
 
 ### A.1 What the analysis executed on this machine
@@ -1137,6 +1212,20 @@ Array of `{pid, cwd, kind ("interactive"|"background"), startedAt (ms epoch), se
 - **Probe**: a `--max-turns 1 --no-session-persistence` call used only to validate a model.
 
 ---
+
+## Implementation status (v1.0.0)
+
+1.0.0 implements the cross-platform plan: the bot, the worker and the desktop app on macOS, Windows and Linux (Section 21), every setting in the app (`internal/settings`; offline editing while the worker is down; reset per section, export and import), the Help screen, per-OS installers and packages, and CI on all three systems. macOS behaviour is unchanged. Deviations from the plan, with reasons:
+
+- **Windows settings move only on `service start|install|restart`** (and the app's Start), after the old worker is stopped, not on every subcommand: moving the file under a running 0.4.x worker would pull it away. Until then `DefaultPath` reads the old file where it is; `clawdyx check` stays read-only.
+- **The word tables of all three OSes live in one shared file** (`internal/platform/words.go`) instead of build-tagged files, so every guard test renders every OS on any host. `platform.W` is still the running OS's table.
+- **Linux camera prefers YUYV over MJPEG:** UVC cameras may send MJPEG frames without Huffman tables, which most decoders refuse. MJPEG is used only when the camera offers no YUYV and the frame decodes.
+- **The Windows installer's license page shows `LICENSE` as plain text** (NSIS accepts it), so no RTF is generated.
+- **Help is rendered by the app's Go side** (embedded Markdown templates, goldmark with raw HTML dropped) for this OS, session and paths; links are `help:<topic>` or `open:<known key>` only.
+- **New verb `clawdyx token delete`** (used by the Windows uninstaller and the uninstall docs) removes only the token of the given settings file.
+- **Notifications** (Wails' notifications service) are off by default and sent by the Go side while the window is hidden; they never carry prompt or reply text.
+
+Verified on hardware (Windows 11 PC, 2026-10-18): the test suite, the permission rules of Section 3.1, the supervisor (backoff, stop file, launcher) on an isolated instance, the 0.4.x migration in a fake profile, screenshots of a 3440×1440 monitor and a pointer move, the camera helper's `list` and `preflight`. Built but not run on hardware: Linux (all of it; built, vetted and unit-tested in CI), Windows camera photos and clips (no camera on the test PC), arm64 builds, the installer outside CI (CI installs and removes it on a clean runner), the restart after a killed worker and the console flash at login (they need a separate test bot token and a logoff).
 
 ## Implementation status (2026-10-16)
 
