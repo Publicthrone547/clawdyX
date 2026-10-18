@@ -53,58 +53,15 @@ func (s *SystemService) ServiceStartup(context.Context, application.ServiceOptio
 	return nil
 }
 
-func plistPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, "Library", "LaunchAgents", serviceLabel+".plist")
-}
-
-func launchctl(args ...string) (string, error) {
-	out, err := exec.Command("/bin/launchctl", args...).CombinedOutput()
-	return string(out), err
-}
-
-func plistProgram() string {
-	b, err := os.ReadFile(plistPath())
-	if err != nil {
-		return ""
-	}
-	s := string(b)
-	i := strings.Index(s, "<key>ProgramArguments</key><array>")
-	if i < 0 {
-		return ""
-	}
-	rest := s[i:]
-	a := strings.Index(rest, "<string>")
-	if a < 0 {
-		return ""
-	}
-	z := strings.Index(rest[a:], "</string>")
-	if z < 0 {
-		return ""
-	}
-	return rest[a+8 : a+z]
-}
-
-// Service reports the LaunchAgent state.
+// Service reports the background worker's state (macOS: the LaunchAgent).
 func (s *SystemService) Service() ServiceInfo {
-	si := ServiceInfo{InBundle: bundleDir() != ""}
-	if _, err := os.Stat(plistPath()); err == nil {
-		si.Installed = true
-	}
-	prog := plistProgram()
+	si := ServiceInfo{InBundle: appWorker() != ""}
+	prog := ""
+	si.Installed, si.Loaded, si.PID, prog = serviceStatus()
 	si.Binary = homeRel(prog)
-	if b := bundleDir(); b != "" {
-		aw := filepath.Join(b, "Helpers", "clawdyx")
+	if aw := appWorker(); aw != "" {
 		si.AppWorker = homeRel(aw)
 		si.UsesAppWorker = prog != "" && prog == aw
-	}
-	if out, err := launchctl("print", "gui/"+strconv.Itoa(os.Getuid())+"/"+serviceLabel); err == nil {
-		si.Loaded = true
-		for _, l := range strings.Split(out, "\n") {
-			if l = strings.TrimSpace(l); strings.HasPrefix(l, "pid = ") {
-				si.PID, _ = strconv.Atoi(strings.TrimPrefix(l, "pid = "))
-			}
-		}
 	}
 	return si
 }
@@ -116,7 +73,9 @@ func runWorker(timeout time.Duration, args ...string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, bin, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	hideWindow(cmd)
+	out, err := cmd.CombinedOutput()
 	msg := strings.TrimSpace(observability.Redact(string(out)))
 	if err != nil {
 		if msg == "" {
@@ -158,7 +117,7 @@ func (s *SystemService) UninstallService(purge bool) (string, error) {
 
 // Info returns paths and app settings.
 func (s *SystemService) Info() AppInfo {
-	ai := AppInfo{Version: version, ConfigPath: homeRel(config.DefaultPath()), InBundle: bundleDir() != ""}
+	ai := AppInfo{Version: version, ConfigPath: homeRel(config.DefaultPath()), InBundle: appWorker() != ""}
 	if cfg, err := loadConfig(); err == nil {
 		ai.LogDir, ai.StateDir = homeRel(cfg.LogDir), homeRel(cfg.StateDir)
 	}
@@ -203,21 +162,13 @@ func (s *SystemService) Open(key string) error {
 	return openURL(u)
 }
 
-func openURL(u string) error { return exec.Command("/usr/bin/open", u).Run() }
-
-// RevealLogs opens the log folder in Finder.
-func (s *SystemService) RevealLogs() error {
-	cfg, err := loadConfig()
-	if err != nil {
-		return err
-	}
-	return exec.Command("/usr/bin/open", cfg.LogDir).Run()
-}
-
 // RequestScreenAccess asks macOS for Screen Recording on behalf of the
 // worker's capture helper (the prompt appears once; afterwards the user
 // enables it in System Settings).
 func (s *SystemService) RequestScreenAccess() error {
+	if !screenSupported {
+		return errScreenUnsupported
+	}
 	if b := bundleDir(); b != "" {
 		h := filepath.Join(b, "Helpers", "clawdyx-screenshot")
 		if isExec(h) {

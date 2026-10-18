@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "__VERSION__"
+	},
+	"info": {
+		"0000": {
+			"ProductVersion": "__VERSION__",
+			"CompanyName": "clawdyX",
+			"FileDescription": "clawdyX control panel",
+			"LegalCopyright": "PolyForm Noncommercial License 1.0.0",
+			"ProductName": "clawdyX",
+			"Comments": "Control panel for the clawdyX Telegram bot and the local Claude Code CLI"
+		}
+	}
+}

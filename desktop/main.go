@@ -66,7 +66,7 @@ func main() {
 	})
 
 	tray := app.SystemTray.New()
-	tray.SetTemplateIcon(trayIcon)
+	setTrayIcon(tray)
 	tray.SetTooltip("clawdyX")
 	menu := application.NewMenu()
 	stateItem := menu.Add("Worker: checking…").SetEnabled(false)

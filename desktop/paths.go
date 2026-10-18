@@ -25,7 +25,7 @@ func loadConfigFile(path string) (*config.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if st.Mode().Perm()&0o077 != 0 {
+	if !config.Private(st) {
 		return nil, fmt.Errorf("%s must not be readable by other users (chmod 600)", path)
 	}
 	b, err := os.ReadFile(path)
@@ -51,14 +51,11 @@ func bundleDir() string {
 	return ""
 }
 
-// workerBinary finds the clawdyx worker: inside the bundle
-// (Contents/Helpers/clawdyx), else CLAWDYX_WORKER, PATH, or ~/go/bin.
+// workerBinary finds the clawdyx worker: the one shipped with the app (see
+// appWorker), else CLAWDYX_WORKER, PATH, or ~/go/bin.
 func workerBinary() (string, error) {
-	if b := bundleDir(); b != "" {
-		p := filepath.Join(b, "Helpers", "clawdyx")
-		if isExec(p) {
-			return p, nil
-		}
+	if p := appWorker(); p != "" && isExec(p) {
+		return p, nil
 	}
 	if p := os.Getenv("CLAWDYX_WORKER"); p != "" && isExec(p) {
 		return p, nil
@@ -67,7 +64,7 @@ func workerBinary() (string, error) {
 		return filepath.Abs(p)
 	}
 	home, _ := os.UserHomeDir()
-	for _, p := range []string{filepath.Join(home, "go", "bin", "clawdyx"), "/usr/local/bin/clawdyx"} {
+	for _, p := range []string{filepath.Join(home, "go", "bin", "clawdyx"+exeSuffix), "/usr/local/bin/clawdyx"} {
 		if isExec(p) {
 			return p, nil
 		}
@@ -77,7 +74,7 @@ func workerBinary() (string, error) {
 
 func isExec(p string) bool {
 	st, err := os.Stat(p)
-	return err == nil && st.Mode().IsRegular() && st.Mode().Perm()&0o111 != 0
+	return err == nil && config.Executable(st)
 }
 
 // homeRel shortens paths under $HOME to ~/… for display.
