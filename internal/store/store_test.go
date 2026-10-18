@@ -156,7 +156,7 @@ func TestMigrateV1ToV2KeepsDataAndBacksUp(t *testing.T) {
 	if err != nil || x.Name != "old" || !x.ForgottenAt.IsZero() {
 		t.Fatalf("session after migration: %v %+v", err, x)
 	}
-	bk, _ := filepath.Glob(filepath.Join(dir, "backups", "state-pre-v3-*.db"))
+	bk, _ := filepath.Glob(filepath.Join(dir, "backups", "state-pre-v4-*.db"))
 	if len(bk) != 1 {
 		t.Fatalf("expected one pre-migration backup, got %v", bk)
 	}
@@ -172,5 +172,43 @@ func TestMigrateV1ToV2KeepsDataAndBacksUp(t *testing.T) {
 	s.AuditCapture(Capture{DisplayKey: "d1", Width: 10, Height: 10, Bytes: 5, Destination: "preview"})
 	if s.CaptureCount(time.Now().Add(-time.Minute)) != 1 {
 		t.Fatal("capture audit missing")
+	}
+}
+
+func TestMigrateV3ToV4AddsCameraAuditColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "state.db")
+	db, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range migrations[:3] {
+		if _, err := db.Exec(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Exec(`PRAGMA user_version = 3`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO captures(ts,display_key,width,height,bytes,destination) VALUES(1,'d1',10,10,5,'telegram')`); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+	os.Chmod(path, 0o600)
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	s.AuditCapture(Capture{Kind: "camera-video", DisplayKey: "cam-1", Width: 1280, Height: 720, Bytes: 900, DurationMS: 10000, Destination: "telegram", Requester: "telegram-owner"})
+	got, err := s.RecentCaptures(5)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("captures: %v %+v", err, got)
+	}
+	if got[0].Kind != "camera-video" || got[0].DurationMS != 10000 || got[0].DisplayKey != "cam-1" {
+		t.Fatalf("camera row %+v", got[0])
+	}
+	if got[1].Kind != "screen" || got[1].DurationMS != 0 {
+		t.Fatalf("old row after migration %+v", got[1])
 	}
 }

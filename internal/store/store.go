@@ -29,7 +29,7 @@ type Store struct {
 	path string
 }
 
-const schemaVersion = 3
+const schemaVersion = 4
 
 var migrations = []string{
 	// v1
@@ -112,6 +112,9 @@ var migrations = []string{
 	);`,
 	// v3: the Telegram chat each job reports to (several allowed users).
 	`ALTER TABLE jobs ADD COLUMN tg_chat_id INTEGER NOT NULL DEFAULT 0;`,
+	// v4: camera captures share the capture audit (kind, clip length).
+	`ALTER TABLE captures ADD COLUMN kind TEXT NOT NULL DEFAULT 'screen';
+	ALTER TABLE captures ADD COLUMN duration_ms INTEGER NOT NULL DEFAULT 0;`,
 }
 
 // Open opens (creating) the database at path with private permissions.
@@ -777,11 +780,13 @@ func (s *Store) ClearCapabilities() error {
 
 // ---- captures audit ----
 
-// Capture is one audit row of a screen capture (never pixels).
+// Capture is one audit row of a screen or camera capture (never pixels).
 type Capture struct {
-	DisplayKey    string
+	Kind          string // screen (default) | camera-photo | camera-video
+	DisplayKey    string // the display's key, or the camera's
 	Width, Height int
 	Bytes         int
+	DurationMS    int64  // camera videos
 	Destination   string // preview | telegram | claude | mcp
 	Requester     string
 	JobID         int64
@@ -789,8 +794,29 @@ type Capture struct {
 
 // AuditCapture records a capture.
 func (s *Store) AuditCapture(c Capture) {
-	_, _ = s.db.Exec(`INSERT INTO captures(ts,display_key,width,height,bytes,destination,requester,job_id) VALUES(?,?,?,?,?,?,?,NULLIF(?,0))`,
-		now(), c.DisplayKey, c.Width, c.Height, c.Bytes, c.Destination, c.Requester, c.JobID)
+	if c.Kind == "" {
+		c.Kind = "screen"
+	}
+	_, _ = s.db.Exec(`INSERT INTO captures(ts,kind,display_key,width,height,bytes,duration_ms,destination,requester,job_id) VALUES(?,?,?,?,?,?,?,?,?,NULLIF(?,0))`,
+		now(), c.Kind, c.DisplayKey, c.Width, c.Height, c.Bytes, c.DurationMS, c.Destination, c.Requester, c.JobID)
+}
+
+// RecentCaptures returns the newest capture audit rows, newest first.
+func (s *Store) RecentCaptures(n int) ([]Capture, error) {
+	rows, err := s.db.Query(`SELECT kind,display_key,width,height,bytes,duration_ms,destination,requester,COALESCE(job_id,0) FROM captures ORDER BY id DESC LIMIT ?`, n)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Capture
+	for rows.Next() {
+		var c Capture
+		if err := rows.Scan(&c.Kind, &c.DisplayKey, &c.Width, &c.Height, &c.Bytes, &c.DurationMS, &c.Destination, &c.Requester, &c.JobID); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // CaptureCount returns how many captures were recorded since t.
