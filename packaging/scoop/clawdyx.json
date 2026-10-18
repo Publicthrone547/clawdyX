@@ -1,0 +1,31 @@
+{
+    "version": "1.0.0",
+    "description": "Control the Claude Code on your PC from Telegram: a private bot and a desktop control panel.",
+    "homepage": "https://github.com/Publicthrone547/clawdyX",
+    "license": {
+        "identifier": "PolyForm-Noncommercial-1.0.0",
+        "url": "https://github.com/Publicthrone547/clawdyX/blob/main/LICENSE"
+    },
+    "notes": "Open clawdyX from the Start menu; its setup wizard starts the background worker.",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/Publicthrone547/clawdyX/releases/download/v1.0.0/clawdyX-1.0.0-windows-amd64.zip",
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000"
+        }
+    },
+    "extract_dir": "clawdyX",
+    "bin": [["helpers\\clawdyx.exe", "clawdyx"]],
+    "shortcuts": [["clawdyX.exe", "clawdyX"]],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/Publicthrone547/clawdyX/releases/download/v$version/clawdyX-$version-windows-amd64.zip"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS",
+            "regex": "$sha256\\s+$basename"
+        }
+    }
+}

@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: Publicthrone547.clawdyX
+PackageVersion: 1.0.0
+PackageLocale: en-US
+Publisher: Publicthrone547
+PublisherUrl: https://github.com/Publicthrone547
+PackageName: clawdyX
+PackageUrl: https://github.com/Publicthrone547/clawdyX
+License: PolyForm Noncommercial License 1.0.0
+LicenseUrl: https://github.com/Publicthrone547/clawdyX/blob/main/LICENSE
+ShortDescription: Control the Claude Code on your PC from Telegram.
+Description: |-
+  A private Telegram bot and a desktop control panel for the Claude Code CLI you already use.
+  The bot runs in a small background worker for your account; nothing leaves the PC except
+  the Telegram Bot API and Claude Code's own requests.
+Moniker: clawdyx
+Tags:
+  - claude
+  - claude-code
+  - telegram
+  - bot
+ReleaseNotesUrl: https://github.com/Publicthrone547/clawdyX/releases/tag/v1.0.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
