@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 const releasesURL = "https://github.com/Publicthrone547/clawdyX/releases"
@@ -22,6 +25,13 @@ type UpdateInfo struct {
 	Latest  string `json:"latest"`
 	Newer   bool   `json:"newer"` // Latest is newer than Current
 	URL     string `json:"url"`   // release page of Latest
+	// The download for this OS and architecture (empty when the release has
+	// none): its file name, URL, size and kind (dmg, setup, zip, deb, rpm,
+	// appimage, tar).
+	AssetName  string `json:"assetName"`
+	AssetURL   string `json:"assetUrl"`
+	AssetBytes int64  `json:"assetBytes"`
+	Kind       string `json:"kind"`
 }
 
 // CheckForUpdate asks GitHub for the latest published release. It runs only
@@ -44,8 +54,9 @@ func (s *SystemService) CheckForUpdate() (UpdateInfo, error) {
 		return UpdateInfo{}, fmt.Errorf("GitHub answered %s", resp.Status)
 	}
 	var r struct {
-		TagName string `json:"tag_name"`
-		HTMLURL string `json:"html_url"`
+		TagName string         `json:"tag_name"`
+		HTMLURL string         `json:"html_url"`
+		Assets  []releaseAsset `json:"assets"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&r); err != nil {
 		return UpdateInfo{}, fmt.Errorf("unreadable answer from GitHub: %w", err)
@@ -58,7 +69,11 @@ func (s *SystemService) CheckForUpdate() (UpdateInfo, error) {
 	if strings.HasPrefix(r.HTMLURL, releasesURL+"/") {
 		u = r.HTMLURL
 	}
-	return UpdateInfo{Current: version, Latest: latest, Newer: newerVersion(latest, version), URL: u}, nil
+	info := UpdateInfo{Current: version, Latest: latest, Newer: newerVersion(latest, version), URL: u}
+	if a, kind, ok := pickAsset(r.Assets, platform.Current()); ok {
+		info.AssetName, info.AssetURL, info.AssetBytes, info.Kind = a.Name, a.URL, a.Size, kind
+	}
+	return info, nil
 }
 
 // OpenRelease opens the release page of this version, or of the given
@@ -103,4 +118,113 @@ func newerVersion(a, b string) bool {
 		}
 	}
 	return false
+}
+
+// releaseAsset is one file of a GitHub release.
+type releaseAsset struct {
+	Name string `json:"name"`
+	URL  string `json:"browser_download_url"`
+	Size int64  `json:"size"`
+}
+
+// downloadPrefix is where every release file must live; anything else in
+// an answer is ignored.
+const downloadPrefix = releasesURL + "/download/"
+
+var archNames = map[string][]string{
+	"amd64": {"amd64", "x86_64"},
+	"arm64": {"arm64", "aarch64"},
+}
+
+// assetKind classifies a release file name by its suffix.
+func assetKind(name string) string {
+	n := strings.ToLower(name)
+	switch {
+	case strings.HasSuffix(n, ".dmg"):
+		return "dmg"
+	case strings.HasSuffix(n, "-setup.exe"):
+		return "setup"
+	case strings.HasSuffix(n, ".zip"):
+		return "zip"
+	case strings.HasSuffix(n, ".deb"):
+		return "deb"
+	case strings.HasSuffix(n, ".rpm"):
+		return "rpm"
+	case strings.HasSuffix(n, ".appimage"):
+		return "appimage"
+	case strings.HasSuffix(n, ".tar.gz"):
+		return "tar"
+	}
+	return ""
+}
+
+// assetOrder is the preferred kinds per OS; on Linux the package format
+// follows the distribution (os-release ID and ID_LIKE).
+func assetOrder(in platform.Info) []string {
+	switch in.OS {
+	case "darwin":
+		return []string{"dmg"}
+	case "windows":
+		return []string{"setup", "zip"}
+	}
+	d := " " + strings.ToLower(in.DistroID) + " "
+	switch {
+	case strings.Contains(d, " debian ") || strings.Contains(d, " ubuntu "):
+		return []string{"deb", "appimage", "tar"}
+	case strings.Contains(d, " fedora ") || strings.Contains(d, " rhel ") || strings.Contains(d, " suse ") || strings.Contains(d, " centos "):
+		return []string{"rpm", "appimage", "tar"}
+	}
+	return []string{"appimage", "tar"}
+}
+
+// forThisComputer: the file names this OS and this architecture. A .dmg
+// is for Apple silicon (the only Mac build).
+func forThisComputer(name string, in platform.Info) bool {
+	n := strings.ToLower(name)
+	if in.OS == "darwin" {
+		return strings.HasSuffix(n, ".dmg") && in.Arch == "arm64"
+	}
+	switch k := assetKind(n); in.OS {
+	case "windows":
+		if !strings.Contains(n, "windows") {
+			return false
+		}
+	case "linux":
+		// Packages and AppImages are Linux by kind; a tar.gz must say so.
+		if k == "tar" && !strings.Contains(n, "linux") || strings.Contains(n, "windows") || strings.Contains(n, "darwin") {
+			return false
+		}
+	default:
+		return false
+	}
+	for _, a := range archNames[in.Arch] {
+		if strings.Contains(n, a) {
+			return true
+		}
+	}
+	return false
+}
+
+// pickAsset chooses the download for this computer.
+func pickAsset(assets []releaseAsset, in platform.Info) (releaseAsset, string, bool) {
+	for _, kind := range assetOrder(in) {
+		for _, a := range assets {
+			if path.Base(a.Name) != a.Name || !strings.HasPrefix(a.URL, downloadPrefix) {
+				continue
+			}
+			if assetKind(a.Name) == kind && forThisComputer(a.Name, in) {
+				return a, kind, true
+			}
+		}
+	}
+	return releaseAsset{}, "", false
+}
+
+// OpenDownload opens a release file from an update check in the browser
+// (the browser downloads it; clawdyX downloads nothing itself).
+func (s *SystemService) OpenDownload(u string) error {
+	if !strings.HasPrefix(u, downloadPrefix) || strings.ContainsAny(u, " \"'<>\\") {
+		return fmt.Errorf("not a clawdyX release file: %q", u)
+	}
+	return openURL(u)
 }

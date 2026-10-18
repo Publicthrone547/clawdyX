@@ -214,4 +214,14 @@ export interface UpdateInfo {
      * release page of Latest
      */
     "url": string;
+
+    /**
+     * The download for this OS and architecture (empty when the release has
+     * none): its file name, URL, size and kind (dmg, setup, zip, deb, rpm,
+     * appimage, tar).
+     */
+    "assetName": string;
+    "assetUrl": string;
+    "assetBytes": number;
+    "kind": string;
 }

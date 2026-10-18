@@ -58,6 +58,13 @@ export function ChooseImport(): $CancellablePromise<$models.ImportPreview> {
 }
 
 /**
+ * CopyDiagnostics is the report without Telegram IDs, for the clipboard.
+ */
+export function CopyDiagnostics(): $CancellablePromise<string> {
+    return $Call.ByID(1569337839);
+}
+
+/**
  * DetectClaude finds the claude CLI (for Settings → Claude Code → Detect).
  */
 export function DetectClaude(): $CancellablePromise<string> {
@@ -140,6 +147,14 @@ export function Open(key: string): $CancellablePromise<void> {
 }
 
 /**
+ * OpenDownload opens a release file from an update check in the browser
+ * (the browser downloads it; clawdyX downloads nothing itself).
+ */
+export function OpenDownload(u: string): $CancellablePromise<void> {
+    return $Call.ByID(464465544, u);
+}
+
+/**
  * OpenRelease opens the release page of this version, or of the given
  * version from a previous update check.
  */
@@ -177,6 +192,14 @@ export function ResetSettingsOffline(section: string): $CancellablePromise<contr
  */
 export function RestartService(): $CancellablePromise<string> {
     return $Call.ByID(871096158);
+}
+
+/**
+ * RevealFolder shows one of clawdyX's folders (config, state, logs) in the
+ * file manager.
+ */
+export function RevealFolder(which: string): $CancellablePromise<void> {
+    return $Call.ByID(2638849149, which);
 }
 
 /**

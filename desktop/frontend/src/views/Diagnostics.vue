@@ -53,6 +53,14 @@ async function copyLogs() {
   }
 }
 const bundle = ref<string | null>(null);
+async function copyBundle() {
+  try {
+    await navigator.clipboard.writeText(bundle.value ?? "");
+    toast("Report copied", "ok");
+  } catch (e) {
+    fail(e);
+  }
+}
 const includeIDs = ref(false);
 async function prepare() {
   bundle.value = "Collecting…";
@@ -122,6 +130,7 @@ async function saveBundle() {
       <pre class="mt-3 max-h-96 overflow-auto rounded bg-surface-2 p-3 whitespace-pre-wrap mono selectable">{{ bundle }}</pre>
       <template #actions>
         <button class="btn" @click="bundle = null">Cancel</button>
+        <button class="btn" @click="copyBundle">Copy report</button>
         <button class="btn btn-primary" @click="saveBundle">Save…</button>
       </template>
     </Modal>

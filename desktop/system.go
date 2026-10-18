@@ -229,6 +229,7 @@ func (s *SystemService) DiagnosticBundle(includeIDs bool) string {
 	w := s.w
 	var b strings.Builder
 	fmt.Fprintf(&b, "# clawdyX diagnostic report\n\nCreated %s · app %s\n\n", time.Now().Format(time.RFC1123), version)
+	fmt.Fprintf(&b, "## System\n\n%s\n\n", systemLine(platform.Current()))
 	si := s.Service()
 	fmt.Fprintf(&b, "## Service\n\ninstalled=%v loaded=%v pid=%d binary=%s usesAppWorker=%v\n\n", si.Installed, si.Loaded, si.PID, si.Binary, si.UsesAppWorker)
 	if st, err := w.Status(); err == nil {
@@ -308,4 +309,50 @@ func (s *SystemService) SaveDiagnostics(text string) (string, error) {
 		return "", err
 	}
 	return homeRel(path), nil
+}
+
+// systemLine describes the computer: "Windows 11 23H2 · amd64",
+// "Ubuntu 24.04 LTS · amd64 · Wayland (GNOME)".
+func systemLine(in platform.Info) string {
+	s := in.Pretty
+	if s == "" {
+		s = in.OSName
+	}
+	s += " · " + in.Arch
+	if in.OS == "linux" {
+		switch in.Session {
+		case platform.SessionX11:
+			s += " · X11"
+		case platform.SessionWayland:
+			s += " · Wayland"
+		default:
+			s += " · no graphical session"
+		}
+		if in.Desktop != "" {
+			s += " (" + in.Desktop + ")"
+		}
+	}
+	return s
+}
+
+// CopyDiagnostics is the report without Telegram IDs, for the clipboard.
+func (s *SystemService) CopyDiagnostics() string { return s.DiagnosticBundle(false) }
+
+// RevealFolder shows one of clawdyX's folders (config, state, logs) in the
+// file manager.
+func (s *SystemService) RevealFolder(which string) error {
+	cfgPath := config.DefaultPath()
+	if abs, err := filepath.Abs(cfgPath); err == nil {
+		cfgPath = abs
+	}
+	state, logs := config.Folders(cfgPath)
+	switch which {
+	case "config":
+		return openFolder(filepath.Dir(cfgPath))
+	case "state":
+		return openFolder(state)
+	case "logs":
+		return openFolder(logs)
+	}
+	return fmt.Errorf("unknown folder %q", which)
 }

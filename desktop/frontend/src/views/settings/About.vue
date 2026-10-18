@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import Badge from "../../components/Badge.vue";
 import { System, type D } from "../../api";
 import { store, toast, fail } from "../../store";
 import { words } from "../../platform";
+import { bytes } from "../../util";
 
 const app = ref<D.AppInfo | null>(null);
 const update = ref<D.UpdateInfo | null>(null);
@@ -32,6 +33,27 @@ function systemLine(): string {
   if (p.os === "linux") line += " · " + (p.headless ? "no graphical session" : p.session === "wayland" ? "Wayland" : "X11") + (p.desktop ? " (" + p.desktop + ")" : "");
   return line;
 }
+function serviceLine(): string {
+  const s = store.service;
+  if (!s) return "—";
+  const kind = words.value.serviceKind;
+  if (!s.installed) return `${kind}: not installed`;
+  return `${kind}: ${s.pid ? "running (pid " + s.pid + ")" : "stopped"}`;
+}
+const folders = computed(() => [
+  { id: "config", label: "Settings file", path: app.value?.configPath ?? "" },
+  { id: "state", label: "State", path: app.value?.stateDir ?? "" },
+  { id: "logs", label: "Logs", path: app.value?.logDir ?? "" },
+]);
+// The report without Telegram IDs (Diagnostics shows it before saving).
+async function copyDiagnostics() {
+  try {
+    await navigator.clipboard.writeText(await System.CopyDiagnostics());
+    toast("Diagnostics copied (tokens and Telegram IDs removed)", "ok");
+  } catch (e) {
+    fail(e);
+  }
+}
 const busy = ref(false);
 async function restart() {
   busy.value = true;
@@ -57,16 +79,29 @@ async function restart() {
       </dd>
       <dt class="text-muted">Claude Code</dt><dd class="mono">{{ store.status?.claude.version || "—" }}</dd>
       <dt class="text-muted">System</dt><dd>{{ systemLine() }}</dd>
+      <dt class="text-muted">Worker service</dt><dd>{{ serviceLine() }}</dd>
+      <template v-for="f in folders" :key="f.id">
+        <dt class="text-muted">{{ f.label }}</dt>
+        <dd class="flex min-w-0 items-center gap-2">
+          <span class="mono truncate" :title="f.path">{{ f.path || "—" }}</span>
+          <button v-if="f.path" class="btn btn-ghost btn-sm shrink-0" @click="System.RevealFolder(f.id).catch(fail)">Show in {{ words.fileManager }}</button>
+        </dd>
+      </template>
     </dl>
     <div v-if="update?.newer" class="mt-3 rounded-md border border-line bg-surface-2 px-3 py-2">
       <b>clawdyX {{ update.latest }} is available.</b> {{ words.updateHint }}
     </div>
     <div class="mt-3 flex flex-wrap gap-2">
-      <button v-if="update?.newer" class="btn btn-primary" @click="System.OpenRelease(update.latest).catch(fail)">Get {{ update.latest }}</button>
+      <button v-if="update?.newer && update.assetUrl" class="btn btn-primary" @click="System.OpenDownload(update.assetUrl).catch(fail)">Download {{ update.assetName }} ({{ bytes(update.assetBytes) }})</button>
+      <button v-if="update?.newer" class="btn" :class="update.assetUrl ? '' : 'btn-primary'" @click="System.OpenRelease(update.latest).catch(fail)">Release page of {{ update.latest }}</button>
       <button class="btn" :disabled="checking" @click="checkUpdate">{{ checking ? "Checking…" : "Check for updates" }}</button>
       <button v-if="app?.version" class="btn" @click="System.OpenRelease('').catch(fail)">What's new in {{ app.version }}</button>
       <button class="btn" @click="System.Open('releases').catch(fail)">All releases</button>
       <button v-if="workerOutdated()" class="btn" :disabled="busy" @click="restart">Restart worker</button>
+    </div>
+    <div class="mt-2 flex flex-wrap gap-2">
+      <button class="btn btn-ghost btn-sm" @click="copyDiagnostics">Copy diagnostics</button>
+      <button class="btn btn-ghost btn-sm" @click="store.view = 'diagnostics'">Save diagnostics…</button>
     </div>
     <p class="mt-2 text-xs text-muted">Checking for updates asks GitHub for the latest release, only when you click. clawdyX never checks on its own.</p>
   </section>

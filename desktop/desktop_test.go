@@ -10,6 +10,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/Publicthrone547/clawdyX/internal/platform"
 )
 
 func TestOpenOnlyKnownLinks(t *testing.T) {
@@ -61,7 +63,7 @@ func TestNewerVersion(t *testing.T) {
 }
 
 func TestCheckForUpdate(t *testing.T) {
-	answer := `{"tag_name":"v99.0.0","html_url":"https://github.com/Publicthrone547/clawdyX/releases/tag/v99.0.0"}`
+	answer := `{"tag_name":"v99.0.0","html_url":"https://github.com/Publicthrone547/clawdyX/releases/tag/v99.0.0","assets":[{"name":"clawdyX-99.0.0.dmg","browser_download_url":"https://github.com/Publicthrone547/clawdyX/releases/download/v99.0.0/clawdyX-99.0.0.dmg","size":30000000},{"name":"clawdyX-99.0.0-windows-amd64-setup.exe","browser_download_url":"https://github.com/Publicthrone547/clawdyX/releases/download/v99.0.0/clawdyX-99.0.0-windows-amd64-setup.exe","size":31000000},{"name":"clawdyx_99.0.0_amd64.deb","browser_download_url":"https://github.com/Publicthrone547/clawdyX/releases/download/v99.0.0/clawdyx_99.0.0_amd64.deb","size":29000000},{"name":"clawdyX-99.0.0-x86_64.AppImage","browser_download_url":"https://github.com/Publicthrone547/clawdyX/releases/download/v99.0.0/clawdyX-99.0.0-x86_64.AppImage","size":40000000}]}`
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
 			t.Error("update check must not send credentials")
@@ -77,6 +79,11 @@ func TestCheckForUpdate(t *testing.T) {
 	u, err := s.CheckForUpdate()
 	if err != nil || !u.Newer || u.Latest != "99.0.0" || u.Current != version || !strings.HasSuffix(u.URL, "/tag/v99.0.0") {
 		t.Fatalf("newer release: %+v %v", u, err)
+	}
+	if in := platform.Current(); in.Arch == "amd64" && (in.OS == "windows" || in.OS == "linux") || in.OS == "darwin" && in.Arch == "arm64" {
+		if u.AssetName == "" || u.AssetBytes == 0 || u.Kind == "" || !strings.HasPrefix(u.AssetURL, downloadPrefix) {
+			t.Fatalf("no download for this computer: %+v", u)
+		}
 	}
 	answer = `{"tag_name":"v` + version + `","html_url":"https://evil.example/x"}`
 	if u, err = s.CheckForUpdate(); err != nil || u.Newer || u.URL != releasesURL+"/tag/v"+version {
