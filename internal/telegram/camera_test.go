@@ -134,6 +134,11 @@ func TestCameraPhotoVideoAuditAndSwitch(t *testing.T) {
 	if r := rows[3]; r.Kind != "camera-photo" || r.Bytes != 4 {
 		t.Fatalf("photo audit %+v", r)
 	}
+	// Media is dropped once the upload returned (the fake server records
+	// the call slightly earlier).
+	for i := 0; i < 100 && h.app.cams.Held() != 0; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
 	if h.app.cams.Held() != 0 {
 		t.Fatal("media kept in memory after sending")
 	}
