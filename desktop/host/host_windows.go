@@ -1,7 +1,6 @@
 package host
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +13,10 @@ import (
 )
 
 // ScreenSupported reports whether this OS has screen capture.
-const ScreenSupported = false
+const ScreenSupported = true
 
-// ErrScreenUnsupported explains the missing screen capture.
-var ErrScreenUnsupported = errors.New("screen capture is not available on this PC yet")
+// ErrScreenUnsupported is nil where screens are supported.
+var ErrScreenUnsupported error
 
 // ServiceStatus reports the worker's login entry (HKCU Run value written
 // by `clawdyx service start`) and the running worker's pid from the state

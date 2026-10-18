@@ -216,6 +216,9 @@ func (s *SystemService) RequestScreenAccess() error {
 			return nil
 		}
 	}
+	if _, ok := links["screen-recording"]; !ok {
+		return nil // this OS asks for no screen permission
+	}
 	return s.Open("screen-recording")
 }
 
