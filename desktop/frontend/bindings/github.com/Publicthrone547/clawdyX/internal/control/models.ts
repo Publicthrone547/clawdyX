@@ -449,6 +449,11 @@ export interface SystemInfo {
     "load1": number;
     "load5": number;
     "load15": number;
+
+    /**
+     * false when the OS has no load average
+     */
+    "hasLoad": boolean;
     "memTotal": number;
     "memFree": number;
 }

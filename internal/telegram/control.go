@@ -449,7 +449,7 @@ func (a *App) processesInfo(ctx context.Context) control.ProcessesInfo {
 	}
 	out.ClaudeCount = processes.CountClaude(ctx)
 	if sys := processes.SystemSummary(ctx); sys.OK {
-		out.System = &control.SystemInfo{Load1: sys.Load1, Load5: sys.Load5, Load15: sys.Load15, MemTotal: sys.MemTotal, MemFree: sys.MemFree}
+		out.System = &control.SystemInfo{Load1: sys.Load1, Load5: sys.Load5, Load15: sys.Load15, HasLoad: sys.HasLoad, MemTotal: sys.MemTotal, MemFree: sys.MemFree}
 	}
 	wg.Wait()
 	for i := range out.Owned {

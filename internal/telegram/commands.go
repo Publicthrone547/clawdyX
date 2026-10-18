@@ -367,7 +367,10 @@ func (a *App) cmdUsage(m *models.Message) {
 	sys := processes.SystemSummary(context.Background())
 	fmt.Fprintf(&sb, "Memory: bot %s · Claude children %s", mb(stats[os.Getpid()].RSSKB), mb(child))
 	if sys.OK {
-		fmt.Fprintf(&sb, " · free+inactive %s of %s · load %.2f", gib(sys.MemFree), gib(sys.MemTotal), sys.Load1)
+		fmt.Fprintf(&sb, " · free or reclaimable %s of %s", gib(sys.MemFree), gib(sys.MemTotal))
+		if sys.HasLoad {
+			fmt.Fprintf(&sb, " · load %.2f", sys.Load1)
+		}
 	}
 	a.replyTo(m, sb.String())
 }
@@ -684,9 +687,13 @@ func (a *App) cmdProcesses(m *models.Message) {
 		fmt.Fprintf(&sb, "\nAll processes named claude: %d (only bot-owned jobs can be stopped from here)\n", n)
 	}
 	if sys := processes.SystemSummary(context.Background()); sys.OK {
-		fmt.Fprintf(&sb, "System · load %.2f / %.2f / %.2f · free+inactive %s of %s\n", sys.Load1, sys.Load5, sys.Load15, gib(sys.MemFree), gib(sys.MemTotal))
+		sb.WriteString("System")
+		if sys.HasLoad {
+			fmt.Fprintf(&sb, " · load %.2f / %.2f / %.2f", sys.Load1, sys.Load5, sys.Load15)
+		}
+		fmt.Fprintf(&sb, " · free or reclaimable %s of %s\n", gib(sys.MemFree), gib(sys.MemTotal))
 	}
-	sb.WriteString("CPU is ps's decaying average, not an instantaneous reading. Stop a bot job: /cancel j-ID")
+	sb.WriteString("CPU is an average, not an instantaneous reading. Stop a bot job: /cancel j-ID")
 	a.replyLongTo(m, sb.String())
 }
 

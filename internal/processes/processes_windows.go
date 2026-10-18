@@ -3,6 +3,7 @@ package processes
 import (
 	"context"
 	"strings"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -39,11 +40,12 @@ type memoryStatusEx struct {
 	AvailExtendedVirtual uint64
 }
 
-// Sample returns the working set of the given PIDs (others are ignored).
-// CPU is left at 0 on Windows (there is no decaying average like ps %cpu);
-// CPUPercent measures it over an interval instead.
+// Sample returns the working set and the CPU use (average over the
+// process's lifetime) of the given PIDs; others are ignored. CPUPercent
+// measures the current use over an interval instead.
 func Sample(_ context.Context, pids []int) map[int]Stat {
 	out := map[int]Stat{}
+	now := time.Now()
 	for _, pid := range pids {
 		h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
 		if err != nil {
@@ -52,11 +54,21 @@ func Sample(_ context.Context, pids []int) map[int]Stat {
 		var mc memoryCounters
 		mc.CB = uint32(unsafe.Sizeof(mc))
 		if r, _, _ := procMemoryInfo.Call(uintptr(h), uintptr(unsafe.Pointer(&mc)), uintptr(mc.CB)); r != 0 {
-			out[pid] = Stat{PID: pid, RSSKB: int64(mc.WorkingSetSize / 1024)}
+			s := Stat{PID: pid, RSSKB: int64(mc.WorkingSetSize / 1024)}
+			var created, exited, kernel, user windows.Filetime
+			if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) == nil {
+				s.CPU = LifetimeCPU(filetimeSeconds(kernel)+filetimeSeconds(user), now.Sub(time.Unix(0, created.Nanoseconds())))
+			}
+			out[pid] = s
 		}
 		_ = windows.CloseHandle(h)
 	}
 	return out
+}
+
+// filetimeSeconds converts a FILETIME duration (100 ns units) to seconds.
+func filetimeSeconds(f windows.Filetime) float64 {
+	return float64(uint64(f.HighDateTime)<<32|uint64(f.LowDateTime)) / 1e7
 }
 
 // CountClaude returns the number of running claude.exe processes.
@@ -97,8 +109,7 @@ func cpuTimes(_ context.Context, pids []int) map[int]float64 {
 		}
 		var created, exited, kernel, user windows.Filetime
 		if windows.GetProcessTimes(h, &created, &exited, &kernel, &user) == nil {
-			ticks := (uint64(kernel.HighDateTime)<<32 | uint64(kernel.LowDateTime)) + (uint64(user.HighDateTime)<<32 | uint64(user.LowDateTime))
-			out[pid] = float64(ticks) / 1e7 // 100 ns units
+			out[pid] = filetimeSeconds(kernel) + filetimeSeconds(user)
 		}
 		_ = windows.CloseHandle(h)
 	}

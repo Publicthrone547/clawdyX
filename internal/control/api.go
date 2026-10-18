@@ -252,6 +252,7 @@ type SystemInfo struct {
 	Load1    float64 `json:"load1"`
 	Load5    float64 `json:"load5"`
 	Load15   float64 `json:"load15"`
+	HasLoad  bool    `json:"hasLoad"` // false when the OS has no load average
 	MemTotal uint64  `json:"memTotal"`
 	MemFree  uint64  `json:"memFree"`
 }

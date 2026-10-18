@@ -1,5 +1,3 @@
-//go:build !windows
-
 package processes
 
 import (
@@ -106,7 +104,7 @@ func SystemSummary(ctx context.Context) System {
 			}
 		}
 		s.MemFree = (free + inactive) * page
-		s.OK = s.MemTotal > 0
+		s.OK, s.HasLoad = s.MemTotal > 0, true
 	}
 	return s
 }

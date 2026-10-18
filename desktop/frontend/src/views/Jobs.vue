@@ -125,7 +125,7 @@ const icons: Record<string, string> = { tool_use: "🔧", denial: "🚫", api_re
       </div>
       <p class="mt-1 text-xs text-muted">
         From <span class="mono">claude agents --json</span>, refreshed every minute ({{ procs?.agentsAt ? ago(procs.agentsAt) : "not yet" }}).
-        <template v-if="procs?.system">System load {{ procs.system.load1.toFixed(2) }} · {{ bytes(procs.system.memFree) }} of {{ bytes(procs.system.memTotal) }} free or reclaimable.</template>
+        <template v-if="procs?.system"><template v-if="procs.system.hasLoad">System load {{ procs.system.load1.toFixed(2) }} · </template>{{ bytes(procs.system.memFree) }} of {{ bytes(procs.system.memTotal) }} free or reclaimable.</template>
       </p>
     </template>
 

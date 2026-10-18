@@ -17,7 +17,7 @@ import (
 type Stat struct {
 	PID   int
 	RSSKB int64
-	CPU   float64 // ps %cpu (decaying average, not instantaneous)
+	CPU   float64 // average CPU % (ps %cpu on macOS, lifetime average on Linux and Windows)
 }
 
 // RSSKB returns one process's resident size in KiB, or 0.
@@ -26,8 +26,9 @@ func RSSKB(pid int) int64 { return Sample(context.Background(), []int{pid})[pid]
 // System is a cheap machine summary.
 type System struct {
 	Load1, Load5, Load15 float64
+	HasLoad              bool // the OS has a load average (Windows has none)
 	MemTotal             uint64
-	MemFree              uint64 // free + inactive pages (reclaimable estimate)
+	MemFree              uint64 // free or reclaimable memory
 	OK                   bool
 }
 
