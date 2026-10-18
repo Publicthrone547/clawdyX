@@ -3,6 +3,7 @@
 #   bin/clawdyX-gui          desktop app (Wails)          -> Contents/MacOS/clawdyX
 #   bin/clawdyx              worker (CGO-free)            -> Contents/Helpers/clawdyx
 #   bin/clawdyx-screenshot   ScreenCaptureKit helper      -> Contents/Helpers/clawdyx-screenshot
+#   bin/clawdyx-camera       AVFoundation camera helper   -> Contents/Helpers/clawdyx-camera
 # CLAWDYX_SIGN_IDENTITY selects the signing identity (default: ad-hoc "-").
 # CLAWDYX_HARDENED=1 adds the hardened runtime (needed for notarization).
 set -eu
@@ -12,7 +13,7 @@ IDENT=${CLAWDYX_SIGN_IDENTITY:--}
 OPTS=""
 [ "${CLAWDYX_HARDENED:-0}" = "1" ] && OPTS="--options runtime --timestamp"
 
-for f in bin/clawdyX-gui bin/clawdyx bin/clawdyx-screenshot; do
+for f in bin/clawdyX-gui bin/clawdyx bin/clawdyx-screenshot bin/clawdyx-camera; do
   [ -x "$f" ] || { echo "missing $f; run make app" >&2; exit 1; }
 done
 rm -rf "$APP"
@@ -20,6 +21,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Helpers" "$APP/Contents/Resources"
 cp bin/clawdyX-gui "$APP/Contents/MacOS/clawdyX"
 cp bin/clawdyx "$APP/Contents/Helpers/clawdyx"
 cp bin/clawdyx-screenshot "$APP/Contents/Helpers/clawdyx-screenshot"
+cp bin/clawdyx-camera "$APP/Contents/Helpers/clawdyx-camera"
 cp desktop/build/icons.icns "$APP/Contents/Resources/icons.icns"
 sed "s/__VERSION__/$VERSION/g" desktop/build/Info.plist > "$APP/Contents/Info.plist"
 cp LICENSE "$APP/Contents/Resources/LICENSE.txt"
@@ -31,6 +33,8 @@ xattr -cr "$APP"
 codesign --force $OPTS --identifier io.github.publicthrone547.clawdyx --sign "$IDENT" "$APP/Contents/Helpers/clawdyx"
 # shellcheck disable=SC2086
 codesign --force $OPTS --identifier io.github.publicthrone547.clawdyx.screenshot --sign "$IDENT" "$APP/Contents/Helpers/clawdyx-screenshot"
+# shellcheck disable=SC2086
+codesign --force $OPTS --entitlements desktop/helper/camera.entitlements --identifier io.github.publicthrone547.clawdyx.camera --sign "$IDENT" "$APP/Contents/Helpers/clawdyx-camera"
 # shellcheck disable=SC2086
 codesign --force $OPTS --identifier io.github.publicthrone547.clawdyx.app --sign "$IDENT" "$APP"
 codesign --verify --strict --deep "$APP"

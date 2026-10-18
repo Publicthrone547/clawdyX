@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>io.github.publicthrone547.clawdyx.camera</string>
+  <key>CFBundleName</key><string>clawdyx-camera</string>
+  <key>NSCameraUsageDescription</key><string>clawdyX takes a photo or a short clip only when you ask for it with /camera in your private Telegram chat. Claude never gets the camera.</string>
+</dict>
+</plist>

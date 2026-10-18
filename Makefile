@@ -44,7 +44,7 @@ build:
 	CGO_ENABLED=0 go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(BIN) ./cmd/clawdyx
 
 ## Desktop app
-app: build helper frontend ## build bin/clawdyX.app (desktop app + worker + capture helper)
+app: build helper frontend ## build bin/clawdyX.app (desktop app + worker + screen and camera helpers)
 	cd desktop && $(MACENV) go build -tags production -trimpath -buildvcs=false -ldflags="-w -s -X main.version=$(VERSION)" -o ../bin/clawdyX-gui .
 	VERSION=$(VERSION) scripts/bundle.sh
 
@@ -83,6 +83,8 @@ release: check-all dmg build-windows ## build every release file into bin/releas
 
 helper:
 	swiftc -O -parse-as-library -target $$(uname -m)-apple-macos14.0 desktop/helper/main.swift -o bin/clawdyx-screenshot
+	swiftc -O -parse-as-library -target $$(uname -m)-apple-macos14.0 desktop/helper/camera.swift -o bin/clawdyx-camera \
+		-Xlinker -sectcreate -Xlinker __TEXT -Xlinker __info_plist -Xlinker desktop/helper/camera-Info.plist
 
 frontend:
 	cd desktop/frontend && (test -d node_modules || npm ci) && npm run build
