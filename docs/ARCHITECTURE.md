@@ -1225,6 +1225,8 @@ Array of `{pid, cwd, kind ("interactive"|"background"), startedAt (ms epoch), se
 - **New verb `clawdyx token delete`** (used by the Windows uninstaller and the uninstall docs) removes only the token of the given settings file.
 - **Notifications** (Wails' notifications service) are off by default and sent by the Go side while the window is hidden; they never carry prompt or reply text.
 
+**State database: the schema stays v4; 1.0.0 has no migration.** New per-OS data needed no column: capture audit rows already take free-form display keys (`camera:<id>`, X11 output names, `wayland-screen`), and flags live in the `settings` key/value table. A later schema change follows the existing pattern in `internal/store/store.go` (a backup to `backups/state-pre-v<N>-<time>.db`, then one transaction per migration step) and gets an upgrade note in the RUNBOOK; `TestOpensA041Database` fails when `schemaVersion` changes, as a reminder.
+
 Verified on hardware (Windows 11 PC, 2026-10-18): the test suite, the permission rules of Section 3.1, the supervisor (backoff, stop file, launcher) on an isolated instance, the 0.4.x migration in a fake profile, screenshots of a 3440×1440 monitor and a pointer move, the camera helper's `list` and `preflight`. Built but not run on hardware: Linux (all of it; built, vetted and unit-tested in CI), Windows camera photos and clips (no camera on the test PC), arm64 builds, the installer outside CI (CI installs and removes it on a clean runner), the restart after a killed worker and the console flash at login (they need a separate test bot token and a logoff).
 
 ## Implementation status (2026-10-16)

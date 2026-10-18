@@ -20,7 +20,7 @@ clawdyX lets you use the Claude Code on {{.W.ThisComputer}} from Telegram. The b
 ## Install
 
 {{if .Darwin -}}
-1. Download `clawdyX-<version>.dmg` from the [release page](open:releases), open it and drag clawdyX to Applications.
+1. Download `clawdyX-<version>-darwin-arm64.dmg` from the [release page](open:releases), open it and drag clawdyX to Applications.
 2. Open clawdyX. Release builds are not notarized yet: if macOS refuses to open it, open System Settings → Privacy & Security and click **Open Anyway**.
 {{- else if .Windows -}}
 1. Download `clawdyX-<version>-windows-amd64-setup.exe` from the [release page](open:releases) and run it. It installs for your account only, without an administrator prompt. (The `.zip` works too: extract the `clawdyX` folder somewhere permanent and open `clawdyX.exe`.)
