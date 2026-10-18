@@ -146,6 +146,7 @@ var links = map[string]string{
 	"screen-recording": "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture",
 	"accessibility":    "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
 	"automation":       "x-apple.systempreferences:com.apple.preference.security?Privacy_Automation",
+	"camera":           "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera",
 	"login-items":      "x-apple.systempreferences:com.apple.LoginItems-Settings.extension",
 	"botfather":        "https://t.me/BotFather",
 	"docs":             "https://github.com/Publicthrone547/clawdyX#readme",
@@ -222,7 +223,7 @@ func (s *SystemService) DiagnosticBundle(includeIDs bool) string {
 		b.WriteString("\n")
 	}
 	if set, err := w.Settings(); err == nil {
-		fmt.Fprintf(&b, "## Settings\n\nworkspaces %d · default %s · concurrency %d · timeout %d min · automation %v · screen control %v · log level %s\n\n", len(set.Workspaces), set.DefaultWorkspace, set.MaxConcurrentJobs, set.JobTimeoutMinutes, set.AutomationEnabled, set.ScreenControl, set.LogLevel)
+		fmt.Fprintf(&b, "## Settings\n\nworkspaces %d · default %s · concurrency %d · timeout %d min · automation %v · screen control %v · camera %v · log level %s\n\n", len(set.Workspaces), set.DefaultWorkspace, set.MaxConcurrentJobs, set.JobTimeoutMinutes, set.AutomationEnabled, set.ScreenControl, set.Camera, set.LogLevel)
 	}
 	if includeIDs {
 		if users, err := w.Allowlist(); err == nil {

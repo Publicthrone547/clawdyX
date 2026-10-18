@@ -496,6 +496,8 @@ type SettingsInfo struct {
 	MaxTurns          int             `json:"maxTurns"`
 	AutomationEnabled bool            `json:"automationEnabled"`
 	ScreenControl     bool            `json:"screenControl"`
+	Camera            bool            `json:"camera"`
+	CameraSupported   bool            `json:"cameraSupported"`
 	OpenURLs          bool            `json:"openUrls"`
 	BrowserApp        string          `json:"browserApp"`
 	ShutdownCommand   bool            `json:"shutdownCommand"`
@@ -514,6 +516,7 @@ type SettingsPatch struct {
 	MaxTurns          *int              `json:"maxTurns,omitempty"`
 	AutomationEnabled *bool             `json:"automationEnabled,omitempty"`
 	ScreenControl     *bool             `json:"screenControl,omitempty"`
+	Camera            *bool             `json:"camera,omitempty"`
 	OpenURLs          *bool             `json:"openUrls,omitempty"`
 	BrowserApp        *string           `json:"browserApp,omitempty"`
 	ShutdownCommand   *bool             `json:"shutdownCommand,omitempty"`

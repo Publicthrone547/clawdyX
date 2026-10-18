@@ -765,6 +765,7 @@ func (a *App) diagnostics(ctx context.Context) []control.DiagnosticCheck {
 	} else {
 		add(control.DiagnosticCheck{ID: "screen", Label: "Screen features", OK: true, Detail: "off in config.json (desktop.screen_control)"})
 	}
+	add(a.cameraCheck(ctx))
 	if free, err := freeBytes(a.cfg.LogDir); err == nil {
 		add(control.DiagnosticCheck{ID: "disk", Label: "Disk space for logs and state", OK: free > 500<<20, Warn: free < 2<<30, Detail: gib(free) + " free"})
 	}

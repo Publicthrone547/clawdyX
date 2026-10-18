@@ -78,7 +78,7 @@ func (a *App) registerScreenControl(srv *control.Server) {
 	}))
 	srv.Handle("screens.enabled.set", 5*time.Second, typed(func(_ context.Context, p control.EnabledParams) (any, error) {
 		if p.Enabled && !a.cfg.Desktop.ScreenControl && !a.cfg.Desktop.Camera {
-			return nil, control.Errorf("screen and camera features are off in config.json (desktop.screen_control, desktop.camera); enable them there first")
+			return nil, control.Errorf("screen and camera features are off; turn them on in Settings → Features first")
 		}
 		a.SetScreenEnabled(p.Enabled)
 		return control.ScreenStatus(a.screenStatus()), nil

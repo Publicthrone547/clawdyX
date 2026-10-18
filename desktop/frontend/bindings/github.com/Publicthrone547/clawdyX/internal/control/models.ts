@@ -382,6 +382,8 @@ export interface SettingsInfo {
     "maxTurns": number;
     "automationEnabled": boolean;
     "screenControl": boolean;
+    "camera": boolean;
+    "cameraSupported": boolean;
     "openUrls": boolean;
     "browserApp": string;
     "shutdownCommand": boolean;
@@ -402,6 +404,7 @@ export interface SettingsPatch {
     "maxTurns"?: number | null;
     "automationEnabled"?: boolean | null;
     "screenControl"?: boolean | null;
+    "camera"?: boolean | null;
     "openUrls"?: boolean | null;
     "browserApp"?: string | null;
     "shutdownCommand"?: boolean | null;

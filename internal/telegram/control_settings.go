@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Publicthrone547/clawdyX/internal/camera"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
 	"github.com/Publicthrone547/clawdyX/internal/setup"
@@ -17,7 +18,7 @@ var restartPending atomic.Bool
 func settingsInfo(c *config.Config, path, def string) control.SettingsInfo {
 	si := control.SettingsInfo{ConfigPath: path, DefaultWorkspace: def, ClaudeBinary: c.Claude.Binary, MaxConcurrentJobs: c.Claude.MaxConcurrentJobs,
 		JobTimeoutMinutes: int(c.Claude.JobTimeout.Duration / time.Minute), MaxTurns: c.Claude.MaxTurns, AutomationEnabled: c.Modes.AutomationEnabled,
-		ScreenControl: c.Desktop.ScreenControl, OpenURLs: c.Desktop.OpenEnabled(), BrowserApp: c.Desktop.BrowserApp, ShutdownCommand: c.ShutdownCommandEnabled,
+		ScreenControl: c.Desktop.ScreenControl, Camera: c.Desktop.Camera, CameraSupported: camera.Supported, OpenURLs: c.Desktop.OpenEnabled(), BrowserApp: c.Desktop.BrowserApp, ShutdownCommand: c.ShutdownCommandEnabled,
 		LogLevel: c.Logging.Level, JobsDays: c.Retention.JobsDays, JobEventsDays: c.Retention.JobEventsDays, AuditDays: c.Retention.AuditDays,
 		RestartPending: restartPending.Load(), Workspaces: []control.WorkspaceInfo{}}
 	for _, w := range c.Workspaces {
@@ -43,6 +44,12 @@ func applyPatch(c *config.Config, p control.SettingsPatch, inUse func(ws string)
 	}
 	if p.ScreenControl != nil {
 		c.Desktop.ScreenControl = *p.ScreenControl
+	}
+	if p.Camera != nil {
+		if *p.Camera && !camera.Supported {
+			return camera.ErrUnsupported
+		}
+		c.Desktop.Camera = *p.Camera
 	}
 	if p.OpenURLs != nil {
 		v := *p.OpenURLs

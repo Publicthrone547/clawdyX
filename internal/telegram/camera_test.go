@@ -213,3 +213,45 @@ func TestParseCameraArgs(t *testing.T) {
 		}
 	}
 }
+
+// preflightCamera also reports the permission like the real helper.
+type preflightCamera struct {
+	fakeCamera
+	status string
+}
+
+func (p preflightCamera) Preflight(context.Context) (string, error) { return p.status, nil }
+
+func TestCameraDiagnostics(t *testing.T) {
+	ctx := context.Background()
+	shots := &atomic.Int64{}
+	off := startCam(t, nil, fakeCamera{shots: shots})
+	if c := off.app.cameraCheck(ctx); !c.OK || !strings.Contains(c.Detail, "off") {
+		t.Fatalf("off: %+v", c)
+	}
+	for _, tc := range []struct {
+		status, want string
+		ok, warn     bool
+	}{
+		{"authorized", "permission granted · 2 found (FaceTime HD Camera, USB Cam)", true, false},
+		{"denied", "permission not granted", false, false},
+		{"notDetermined", "permission not asked yet", false, true},
+	} {
+		h := startOpts(t, cameraOn, Options{Desktop: fakeDesk{}, Cameras: preflightCamera{fakeCamera{shots: shots}, tc.status}})
+		c := h.app.cameraCheck(ctx)
+		if c.OK != tc.ok || c.Warn != tc.warn || !strings.HasPrefix(c.Detail, tc.want) {
+			t.Fatalf("%s: %+v", tc.status, c)
+		}
+		if !tc.ok && c.Fix == "" {
+			t.Fatalf("%s: no fix offered", tc.status)
+		}
+	}
+	h := startOpts(t, cameraOn, Options{Desktop: fakeDesk{}, Cameras: preflightCamera{fakeCamera{shots: shots}, "authorized"}})
+	h.app.SetScreenEnabled(false)
+	if c := h.app.cameraCheck(ctx); !strings.HasSuffix(c.Detail, "switched off (/screen off)") {
+		t.Fatalf("switched off: %+v", c)
+	}
+	if shots.Load() != 0 {
+		t.Fatal("the diagnostics check captured")
+	}
+}

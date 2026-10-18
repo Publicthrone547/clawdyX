@@ -39,6 +39,7 @@ function fixKey(url?: string): string {
   if (!url) return "";
   if (url.includes("Privacy_ScreenCapture")) return "screen-recording";
   if (url.includes("Privacy_Accessibility")) return "accessibility";
+  if (url.includes("Privacy_Camera")) return "camera";
   return "";
 }
 async function copyLogs() {

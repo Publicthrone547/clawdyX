@@ -99,7 +99,7 @@ type helperResult struct {
 
 func (m Mac) call(ctx context.Context, timeout time.Duration, args ...string) (helperResult, error) {
 	var r helperResult
-	if !supported {
+	if !Supported {
 		return r, ErrUnsupported
 	}
 	if m.Helper == "" {
@@ -153,7 +153,7 @@ func (m Mac) Video(ctx context.Context, c Camera, d time.Duration) ([]byte, erro
 }
 
 func (m Mac) capture(ctx context.Context, timeout time.Duration, name string, args func(string) []string) ([]byte, error) {
-	if !supported {
+	if !Supported {
 		return nil, ErrUnsupported
 	}
 	if m.Helper == "" {

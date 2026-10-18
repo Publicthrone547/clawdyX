@@ -11,6 +11,8 @@ import (
 	"github.com/go-telegram/bot/models"
 
 	"github.com/Publicthrone547/clawdyX/internal/camera"
+	"github.com/Publicthrone547/clawdyX/internal/control"
+	"github.com/Publicthrone547/clawdyX/internal/observability"
 	"github.com/Publicthrone547/clawdyX/internal/store"
 )
 
@@ -24,7 +26,7 @@ func (a *App) CameraOn() bool { return a.cameraAllowed() == nil }
 
 func (a *App) cameraAllowed() error {
 	if !a.cfg.Desktop.Camera {
-		return errors.New("the camera is off in config.json (desktop.camera)")
+		return errors.New("the camera is off (clawdyX app → Settings → Features → Camera)")
 	}
 	if a.st.Setting(keyScreenEnabled, "true") == "false" {
 		return camera.ErrOff
@@ -45,7 +47,7 @@ func (a *App) initCamera(p camera.Provider) {
 func (a *App) cameraOffReply(m *models.Message, err error) {
 	switch {
 	case !a.cfg.Desktop.Camera:
-		a.replyTo(m, "The camera is off. Set \"desktop\": {\"camera\": true} in ~/.config/clawdyx/config.json and restart the bot.")
+		a.replyTo(m, "The camera is off. Turn it on in the clawdyX app on the Mac: Settings → Features → Camera, then restart the worker.")
 	case errors.Is(err, camera.ErrOff):
 		a.replyTo(m, "Screen and camera features are switched off (/screen off). Switch them on in the clawdyX app (Monitors) or with: clawdyx ctl screens.enabled.set '{\"enabled\":true}'")
 	default:
@@ -160,4 +162,53 @@ func (a *App) cmdCamera(m *models.Message, args []string) {
 			a.replyTo(m, "❌ Could not send it to Telegram.")
 		}
 	})
+}
+
+// cameraCheck is the Diagnostics line for the camera. It lists the cameras
+// and reads the permission status; it never captures.
+func (a *App) cameraCheck(ctx context.Context) control.DiagnosticCheck {
+	c := control.DiagnosticCheck{ID: "camera", Label: "Camera"}
+	switch {
+	case !camera.Supported:
+		c.OK, c.Detail = true, "not available on this platform (macOS only)"
+		return c
+	case !a.cfg.Desktop.Camera:
+		c.OK, c.Detail = true, "off (turn it on in Settings → Features)"
+		return c
+	}
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	cs, err := a.cams.Cameras(ctx)
+	if err != nil {
+		c.Detail = observability.Truncate(observability.Redact(err.Error()), 160)
+		if errors.Is(err, camera.ErrNoHelper) {
+			c.Fix = "Run the worker from the clawdyX app: Settings → Background worker → Use the app's worker."
+		}
+		return c
+	}
+	if len(cs) == 0 {
+		c.Detail, c.Fix = "no camera found", "Connect a camera or open the lid of a MacBook."
+		return c
+	}
+	names := make([]string, 0, len(cs))
+	for _, k := range cs {
+		names = append(names, k.Name)
+	}
+	found := fmt.Sprintf("%d found (%s)", len(cs), strings.Join(names, ", "))
+	c.FixURL = "x-apple.systempreferences:com.apple.preference.security?Privacy_Camera"
+	switch acc, _ := a.cams.Check(ctx); acc {
+	case "granted":
+		c.OK, c.Detail = true, "permission granted · "+found
+	case "denied":
+		c.Detail, c.Fix = "permission not granted · "+found, "Turn on clawdyX in System Settings → Privacy & Security → Camera, then restart the worker."
+	case "not asked yet":
+		c.Warn, c.Detail = true, "permission not asked yet · "+found
+		c.Fix = "macOS asks on this Mac the first time you send /camera."
+	default:
+		c.Warn, c.Detail = true, "permission unknown until the first /camera · "+found
+	}
+	if !a.CameraOn() {
+		c.Detail += " · switched off (/screen off)"
+	}
+	return c
 }

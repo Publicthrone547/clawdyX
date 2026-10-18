@@ -10,7 +10,7 @@ import { theme, setTheme, type Theme } from "../prefs";
 const s = ref<SettingsInfo | null>(null);
 const models = ref<ModelsInfo | null>(null);
 const app = ref<D.AppInfo | null>(null);
-const f = reactive({ maxConcurrentJobs: 2, jobTimeoutMinutes: 15, maxTurns: 60, automationEnabled: false, screenControl: false, openUrls: true, browserApp: "", shutdownCommand: false, logLevel: "info", jobsDays: 90, jobEventsDays: 14, auditDays: 180 });
+const f = reactive({ maxConcurrentJobs: 2, jobTimeoutMinutes: 15, maxTurns: 60, automationEnabled: false, screenControl: false, camera: false, openUrls: true, browserApp: "", shutdownCommand: false, logLevel: "info", jobsDays: 90, jobEventsDays: 14, auditDays: 180 });
 const th = ref<Theme>(theme());
 const update = ref<D.UpdateInfo | null>(null);
 const checking = ref(false);
@@ -32,7 +32,7 @@ const saving = ref(false);
 
 function fill(x: SettingsInfo) {
   s.value = x;
-  Object.assign(f, { maxConcurrentJobs: x.maxConcurrentJobs, jobTimeoutMinutes: x.jobTimeoutMinutes, maxTurns: x.maxTurns, automationEnabled: x.automationEnabled, screenControl: x.screenControl, openUrls: x.openUrls, browserApp: x.browserApp, shutdownCommand: x.shutdownCommand, logLevel: x.logLevel, jobsDays: x.jobsDays, jobEventsDays: x.jobEventsDays, auditDays: x.auditDays });
+  Object.assign(f, { maxConcurrentJobs: x.maxConcurrentJobs, jobTimeoutMinutes: x.jobTimeoutMinutes, maxTurns: x.maxTurns, automationEnabled: x.automationEnabled, screenControl: x.screenControl, camera: x.camera, openUrls: x.openUrls, browserApp: x.browserApp, shutdownCommand: x.shutdownCommand, logLevel: x.logLevel, jobsDays: x.jobsDays, jobEventsDays: x.jobEventsDays, auditDays: x.auditDays });
 }
 async function load() {
   app.value = await System.Info().catch(() => null);
@@ -56,7 +56,7 @@ function changed(): SettingsPatch {
 const riskAsk = ref(false);
 function save() {
   const p = changed();
-  if ((p.automationEnabled === true && !s.value?.automationEnabled) || (p.screenControl === true && !s.value?.screenControl)) riskAsk.value = true;
+  if ((p.automationEnabled === true && !s.value?.automationEnabled) || (p.screenControl === true && !s.value?.screenControl) || (p.camera === true && !s.value?.camera)) riskAsk.value = true;
   else doSave(p);
 }
 async function doSave(p: SettingsPatch = changed()) {
@@ -260,6 +260,7 @@ function doUninstall() {
       <div class="mt-3 space-y-2">
         <label class="flex items-start gap-2"><input v-model="f.automationEnabled" type="checkbox" class="mt-0.5" /><span><b>Automation tier available</b><span class="block text-xs text-muted">Lets a session switch to automation: Claude runs commands that Claude Code's safety classifier approves, anywhere on this Mac. Each session still needs an explicit switch.</span></span></label>
         <label class="flex items-start gap-2"><input v-model="f.screenControl" type="checkbox" class="mt-0.5" /><span><b>Screen features</b><span class="block text-xs text-muted">Monitors, /screen and /look, and Claude's screenshot, mouse and keyboard tools in automation sessions. Needs macOS permissions.</span></span></label>
+        <label v-if="s.cameraSupported" class="flex items-start gap-2"><input v-model="f.camera" type="checkbox" class="mt-0.5" /><span><b>Camera</b><span class="block text-xs text-muted">Owner-typed /cameras, /camera and /camera video in your private chat: a photo or a clip of up to 60 seconds without sound. Claude never gets the camera. Switched off together with the screen features by /screen off.</span></span></label>
         <label class="flex items-start gap-2"><input v-model="f.openUrls" type="checkbox" class="mt-0.5" /><span><b>/open in Telegram</b><span class="block text-xs text-muted">Owner-typed command that opens a website in</span></span></label>
         <div class="ml-6 w-64"><input v-model="f.browserApp" class="input" aria-label="Browser app" /></div>
         <label class="flex items-start gap-2"><input v-model="f.shutdownCommand" type="checkbox" class="mt-0.5" /><span><b>/shutdown in Telegram</b><span class="block text-xs text-muted">Lets the owner stop the worker from Telegram. Starting it again then needs this Mac.</span></span></label>
@@ -296,6 +297,7 @@ function doUninstall() {
     <Modal v-if="riskAsk" title="Turn on a powerful feature?" @close="riskAsk = false">
       <p v-if="changed().automationEnabled">Automation lets Claude run shell commands anywhere on this Mac when Claude Code's classifier approves them. Deny rules and secret paths stay blocked, and each session still needs an explicit switch.</p>
       <p v-if="changed().screenControl" class="mt-2">Screen features let you (and, in automation sessions, Claude) capture your displays. macOS will ask for Screen Recording and Accessibility permission.</p>
+      <p v-if="changed().camera" class="mt-2">The camera lets you get a photo or a short clip from this Mac's camera in your private Telegram chat. Only you can ask; Claude cannot. macOS asks for Camera permission on this Mac the first time.</p>
       <template #actions>
         <button class="btn" @click="riskAsk = false">Cancel</button>
         <button class="btn btn-primary" @click="doSave()">Turn on and save</button>

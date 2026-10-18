@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Publicthrone547/clawdyX/internal/camera"
 	"github.com/Publicthrone547/clawdyX/internal/config"
 	"github.com/Publicthrone547/clawdyX/internal/control"
 )
@@ -179,5 +180,16 @@ func TestSettingsGetSet(t *testing.T) {
 	}
 	if err := c.Call(ctx, "settings.set", control.SettingsPatch{AddWorkspace: &control.WorkspaceInfo{Path: "/"}}, nil); err == nil {
 		t.Fatal("filesystem root accepted as a workspace")
+	}
+	if si.Camera || si.CameraSupported != camera.Supported {
+		t.Fatalf("camera before the switch: %+v", si)
+	}
+	if err := c.Call(ctx, "settings.set", control.SettingsPatch{Camera: &on}, &si); camera.Supported && (err != nil || !si.Camera) {
+		t.Fatalf("camera on: %v %+v", err, si)
+	} else if !camera.Supported && err == nil {
+		t.Fatal("camera turned on where it is not supported")
+	}
+	if cfg3, _ := config.Parse(mustRead(t, p)); cfg3.Desktop.Camera != camera.Supported {
+		t.Fatalf("camera in the file = %v", cfg3.Desktop.Camera)
 	}
 }
