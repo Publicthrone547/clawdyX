@@ -4,7 +4,10 @@ package camera
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 	"unsafe"
 )
 
@@ -44,5 +47,41 @@ func TestNoCameraIsAnEmptyList(t *testing.T) {
 	}
 	if _, err := v.Photo(context.Background(), Camera{ID: "/etc/passwd"}); err == nil {
 		t.Fatal("a path outside the device folder was opened")
+	}
+}
+
+// On Linux clips land in a private folder under the state folder and are
+// gone after the call.
+func TestClipFolderIsPrivateAndRemoved(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "state", "tmp")
+	v, ok := NewProvider("", tmp).(V4L2)
+	if !ok || v.TmpDir != tmp {
+		t.Fatalf("provider %#v", v)
+	}
+	if st, err := os.Stat(tmp); err != nil || st.Mode().Perm() != 0o700 {
+		t.Fatalf("capture folder %v %v", st, err)
+	}
+	v.Dev = t.TempDir()
+	dev := filepath.Join(v.Dev, "video0")
+	if err := os.WriteFile(dev, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	bin := t.TempDir()
+	// The fake ffmpeg checks that its output folder is private, then writes.
+	script := "#!/bin/sh\nfor a; do out=$a; done\n[ \"$(stat -c %a \"$(dirname \"$out\")\")\" = 700 ] || exit 3\nprintf mp4 > \"$out\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "ffmpeg"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	b, err := v.Video(context.Background(), Camera{ID: dev}, 2*time.Second)
+	if err != nil || string(b) != "mp4" {
+		t.Fatalf("video %q, %v", b, err)
+	}
+	if left, _ := os.ReadDir(tmp); len(left) != 0 {
+		t.Fatalf("left behind: %v", left)
+	}
+	t.Setenv("PATH", t.TempDir())
+	if _, err := v.Video(context.Background(), Camera{ID: dev}, time.Second); err != ErrNoVideoTool {
+		t.Fatalf("without ffmpeg: %v", err)
 	}
 }
