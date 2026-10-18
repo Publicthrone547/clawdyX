@@ -240,24 +240,12 @@ func New(cfg *config.Config, st *store.Store, log *slog.Logger, opt Options) (*A
 	}
 	a.desktop = opt.Desktop
 	if a.desktop == nil {
-		mac := screen.Mac{TmpDir: os.TempDir()}
-		if exe, err := os.Executable(); err == nil {
-			if exe, err = filepath.EvalSymlinks(exe); err == nil {
-				mac.Helper = screen.FindHelper(exe)
-			}
-		}
-		a.desktop = mac
+		a.desktop = screen.NewDesktop(a.jobs.ScreenCommand)
 	}
 	a.initScreens(opt.Screens)
 	cams := opt.Cameras
 	if cams == nil {
-		mac := camera.Mac{TmpDir: os.TempDir()}
-		if exe, err := os.Executable(); err == nil {
-			if exe, err = filepath.EvalSymlinks(exe); err == nil {
-				mac.Helper = camera.FindHelper(exe)
-			}
-		}
-		cams = mac
+		cams = camera.NewProvider(a.jobs.ScreenCommand)
 	}
 	a.initCamera(cams)
 	return a, nil

@@ -28,8 +28,8 @@ func (f *fakeProv) CapturePNG(_ context.Context, d Display) ([]byte, error) {
 
 func twoDisplays() *fakeProv {
 	return &fakeProv{ds: []Display{
-		{Index: 1, ID: 4, Key: "6614AAAA-1", Name: "Main", W: 1720, H: 720, PixelW: 1720, PixelH: 720, Scale: 1, Main: true},
-		{Index: 2, ID: 5, Key: "ACCDBBBB-2", Name: "Side", X: -320, Y: -240, W: 320, H: 240, PixelW: 320, PixelH: 240, Scale: 1},
+		{Index: 1, ID: "4", Key: "6614AAAA-1", Name: "Main", W: 1720, H: 720, PixelW: 1720, PixelH: 720, Scale: 1, Main: true},
+		{Index: 2, ID: "5", Key: "ACCDBBBB-2", Name: "Side", X: -320, Y: -240, W: 320, H: 240, PixelW: 320, PixelH: 240, Scale: 1},
 	}}
 }
 
@@ -88,25 +88,6 @@ func TestBrokerSwitchAuditAndLimits(t *testing.T) {
 	}
 }
 
-func TestParseDisplaysOrderAndKeys(t *testing.T) {
-	out := `[{"id":5,"name":"BenQ","x":-1920,"y":-1080,"w":1920,"h":1080,"pw":1920,"ph":1080,"scale":1,"main":false,"vendor":2513,"model":31044,"serial":21573,"uuid":""},
-	{"id":4,"name":"VG34","x":0,"y":0,"w":3440,"h":1440,"pw":3440,"ph":1440,"scale":1,"main":true,"uuid":"661406D5-EFCE"},
-	{"id":1,"name":"","x":3440,"y":0,"w":1512,"h":982,"pw":3024,"ph":1964,"scale":2,"builtin":true,"uuid":"X"}]`
-	ds, err := ParseDisplays(out)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ds[0].ID != 4 || ds[0].Index != 1 || ds[1].ID != 5 || ds[2].ID != 1 || ds[2].Name != "Display 1" {
-		t.Fatalf("order %+v", ds)
-	}
-	if ds[1].Key == "" || ds[1].Key[:3] != "hw-" {
-		t.Fatalf("fallback key %q", ds[1].Key)
-	}
-	if ds[2].PixelW != 3024 {
-		t.Fatal("retina pixel size lost")
-	}
-}
-
 func TestEncodeJPEGNeverUpscales(t *testing.T) {
 	p := &fakeProv{}
 	raw, _ := p.CapturePNG(context.Background(), Display{PixelW: 800, PixelH: 600})
@@ -123,7 +104,7 @@ func TestEncodeJPEGNeverUpscales(t *testing.T) {
 type deniedProv struct{ fakeProv }
 
 func (d *deniedProv) CapturePNG(context.Context, Display) ([]byte, error) {
-	return nil, ErrNoScreenRecording
+	return nil, ErrCaptureDenied
 }
 
 func TestBrokerAccessFromLastCapture(t *testing.T) {
@@ -132,7 +113,7 @@ func TestBrokerAccessFromLastCapture(t *testing.T) {
 	if a, _ := b.Access(); a != "unknown" {
 		t.Fatalf("before any capture: %s", a)
 	}
-	if _, err := b.Capture(context.Background(), "1", "preview", "t"); !errors.Is(err, ErrNoScreenRecording) {
+	if _, err := b.Capture(context.Background(), "1", "preview", "t"); !errors.Is(err, ErrCaptureDenied) {
 		t.Fatalf("want permission error, got %v", err)
 	}
 	if a, _ := b.Access(); a != "denied" {

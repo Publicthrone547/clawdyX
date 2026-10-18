@@ -127,7 +127,7 @@ func (b *Broker) Capture(ctx context.Context, sel, dest, requester string) ([]*C
 			b.OnChange(false, d.Name)
 		}
 		if err != nil {
-			if errors.Is(err, ErrNoScreenRecording) {
+			if errors.Is(err, ErrCaptureDenied) {
 				b.setAccess("denied")
 			}
 			return out, fmt.Errorf("display %d (%s): %w", d.Index, d.Name, err)

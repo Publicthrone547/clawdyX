@@ -22,7 +22,7 @@ func (f *fakeCam) Cameras(context.Context) ([]Camera, error) { return f.cs, nil 
 func (f *fakeCam) Photo(context.Context, Camera) ([]byte, error) {
 	f.shots.Add(1)
 	if f.denied {
-		return nil, ErrNoCameraAccess
+		return nil, Denied("camera denied (test)")
 	}
 	return []byte{0xff, 0xd8, 0xff, 0xd9}, nil
 }
@@ -141,7 +141,7 @@ func TestBrokerAccessFromLastCapture(t *testing.T) {
 	}
 	p.denied = true
 	_, err := b.Photo(context.Background(), "", "telegram", "t")
-	if !errors.Is(err, ErrNoCameraAccess) || !strings.Contains(err.Error(), "Privacy & Security → Camera") {
+	if !errors.Is(err, ErrCameraDenied) || !strings.Contains(err.Error(), "camera denied (test)") {
 		t.Fatalf("denied: %v", err)
 	}
 	if acc, _ := b.Check(context.Background()); acc != "denied" {

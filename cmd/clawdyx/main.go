@@ -118,13 +118,15 @@ func main() {
 	case "mcp-screen":
 		// Started by claude (via --mcp-config) for automation sessions with
 		// screen control. Speaks MCP on stdin/stdout.
-		mac := screen.Mac{TmpDir: os.TempDir()}
-		if exe, err := os.Executable(); err == nil {
-			if exe, err = filepath.EvalSymlinks(exe); err == nil {
-				mac.Helper = screen.FindHelper(exe)
-			}
+		exe, _ := os.Executable()
+		if p, err := filepath.EvalSymlinks(exe); err == nil {
+			exe = p
 		}
-		srv := &screen.Server{D: mac, Version: version, Displays: mac.Displays}
+		d := screen.NewDesktop(exe)
+		srv := &screen.Server{D: d, Version: version}
+		if p, ok := d.(screen.Provider); ok {
+			srv.Displays = p.Displays
+		}
 		if sock := os.Getenv("CLAWDYX_CONTROL_SOCKET"); sock != "" {
 			// Ask the worker before every screenshot: the owner may have
 			// switched screen features off since this job started.

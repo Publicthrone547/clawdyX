@@ -164,8 +164,7 @@ func TestCameraPhotoVideoAuditAndSwitch(t *testing.T) {
 func TestCameraPermissionMissingIsExplained(t *testing.T) {
 	h := startCam(t, cameraOn, fakeCamera{shots: &atomic.Int64{}, denied: true})
 	h.tg.push(msg(owner, owner, "private", "/camera"))
-	h.tg.waitFor(t, "macOS Camera permission is missing")
-	h.tg.waitFor(t, "Privacy &amp; Security → Camera")
+	h.tg.waitFor(t, Esc(camera.ErrNoCameraAccess.Error()))
 	if len(sentMedia(h, "sendPhoto")) != 0 {
 		t.Fatal("photo sent without permission")
 	}

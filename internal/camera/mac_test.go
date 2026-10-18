@@ -31,7 +31,7 @@ func TestMacHelperProtocol(t *testing.T) {
 	if FindHelper(filepath.Join(dir, "clawdyx")) != h {
 		t.Fatal("helper next to the worker not found")
 	}
-	m := Mac{TmpDir: t.TempDir(), Helper: h}
+	m := HelperCamera{TmpDir: t.TempDir(), Path: h}
 	ctx := context.Background()
 	cs, err := m.Cameras(ctx)
 	if err != nil || len(cs) != 2 || cs[0].ID != "fhd" || cs[0].Index != 1 {
@@ -57,8 +57,8 @@ func TestMacHelperProtocol(t *testing.T) {
 	}
 }
 
-func TestMacWithoutHelperExplainsWhy(t *testing.T) {
-	_, err := Mac{}.Cameras(context.Background())
+func TestHelperMissingExplainsWhy(t *testing.T) {
+	_, err := HelperCamera{}.Cameras(context.Background())
 	if !errors.Is(err, ErrNoHelper) {
 		t.Fatalf("no helper: %v", err)
 	}

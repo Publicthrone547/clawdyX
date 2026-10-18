@@ -2,16 +2,21 @@ package camera
 
 import (
 	"context"
-	"errors"
+	"os/exec"
+	"strings"
+	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
-// ErrUnsupported is returned by every camera action on Windows.
-var ErrUnsupported = errors.New("camera capture is not supported on Windows (macOS only)")
-
-// Supported reports whether this platform has a camera backend (macOS).
-const Supported = false
-
-func run(context.Context, time.Duration, string, ...string) (string, error) {
-	return "", ErrUnsupported
+// run starts the camera helper without a console window and returns its
+// standard output.
+func run(ctx context.Context, timeout time.Duration, name string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{CreationFlags: windows.CREATE_NO_WINDOW, HideWindow: true}
+	out, err := cmd.Output()
+	return strings.TrimSpace(string(out)), err
 }

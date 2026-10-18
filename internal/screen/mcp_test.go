@@ -31,8 +31,8 @@ func (f *fakeDesk) TypeText(ctx context.Context, t string) error {
 	f.calls = append(f.calls, "type "+t)
 	return nil
 }
-func (f *fakeDesk) PressKey(ctx context.Context, c int, fl uint64) error {
-	f.calls = append(f.calls, "key")
+func (f *fakeDesk) PressKey(ctx context.Context, combo string) error {
+	f.calls = append(f.calls, "key "+combo)
 	return nil
 }
 func (f *fakeDesk) Trusted(ctx context.Context) bool { return true }
@@ -101,7 +101,7 @@ func TestCoordinatesMappedAndValidated(t *testing.T) {
 		call(4, "click", `{"x":1000,"y":10}`), // outside
 		call(5, "click", `{"x":5,"y":5,"count":9}`),
 		call(6, "type_text", `{"text":"hello"}`),
-		call(7, "press_key", `{"key":"cmd+l"}`),
+		call(7, "press_key", `{"key":"shift+tab"}`),
 		call(8, "press_key", `{"key":"hyper+q"}`),
 		call(9, "scroll", `{"x":1,"y":1,"direction":"sideways"}`),
 		call(10, "wait", `{"seconds":60}`),
@@ -120,21 +120,6 @@ func TestCoordinatesMappedAndValidated(t *testing.T) {
 	joined := strings.Join(d.calls, "|")
 	if !strings.Contains(joined, "click 200.0,100.0 right") || !strings.Contains(joined, "type hello") {
 		t.Fatalf("desktop calls %v (image pixels must be scaled to screen points)", d.calls)
-	}
-}
-
-func TestParseKey(t *testing.T) {
-	c, f, err := ParseKey("cmd+shift+t")
-	if err != nil || c != 17 || f != 0x100000|0x20000 {
-		t.Fatalf("%d %x %v", c, f, err)
-	}
-	if _, _, err := ParseKey("Return"); err != nil {
-		t.Fatal(err)
-	}
-	for _, bad := range []string{"", "cmd+", "super+a", "a+b+c+d+e+f"} {
-		if _, _, err := ParseKey(bad); err == nil {
-			t.Errorf("accepted %q", bad)
-		}
 	}
 }
 
@@ -184,6 +169,18 @@ func TestListDisplays(t *testing.T) {
 	for _, want := range []string{"2 display(s)", "1 · Built-in · 3024×1964 · main", "2 · BenQ · 1920×1080"} {
 		if !strings.Contains(txt, want) {
 			t.Errorf("missing %q in %q", want, txt)
+		}
+	}
+}
+
+func TestSplitCombo(t *testing.T) {
+	mods, key, err := SplitCombo("Shift+Tab")
+	if err != nil || len(mods) != 1 || mods[0] != "shift" || key != "tab" {
+		t.Fatalf("%v %q %v", mods, key, err)
+	}
+	for _, bad := range []string{"", "shift+", "hyper+q", "a+b+c+d+e+f", "shift+notakey"} {
+		if _, _, err := SplitCombo(bad); err == nil {
+			t.Errorf("accepted %q", bad)
 		}
 	}
 }

@@ -126,7 +126,7 @@ func (b *Broker) capture(ctx context.Context, sel, kind string, d time.Duration,
 		b.OnChange(false, c.Name)
 	}
 	if err != nil {
-		if errors.Is(err, ErrNoCameraAccess) {
+		if errors.Is(err, ErrCameraDenied) {
 			b.setAccess("denied")
 		}
 		return nil, fmt.Errorf("camera %d (%s): %w", c.Index, c.Name, err)

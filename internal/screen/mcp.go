@@ -72,9 +72,9 @@ var num = map[string]any{"type": "number"}
 // Tools is the advertised tool list.
 func Tools() []map[string]any {
 	return []map[string]any{
-		{"name": "list_displays", "description": "List the Mac's connected displays (number, name, resolution, which one is main). Captures nothing. Call it first when the user may mean a display other than the main one, or asks about all screens.",
+		{"name": "list_displays", "description": "List the computer's connected displays (number, name, resolution, which one is main). Captures nothing. Call it first when the user may mean a display other than the main one, or asks about all screens.",
 			"inputSchema": obj(map[string]any{})},
-		{"name": "screenshot", "description": "Take a screenshot of one of the Mac's displays (display 1 is the main display; omit display for it). The Mac may have several displays: use list_displays to see them, and take one screenshot per display to look at all of them. Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for the other tools are pixels in the most recent screenshot, on the display it shows.",
+		{"name": "screenshot", "description": "Take a screenshot of one of the computer's displays (display 1 is the main display; omit display for it). The computer may have several displays: use list_displays to see them, and take one screenshot per display to look at all of them. Always take a fresh screenshot before clicking and after each action to check the result. Coordinates for the other tools are pixels in the most recent screenshot, on the display it shows.",
 			"inputSchema": obj(map[string]any{"display": map[string]any{"type": "integer", "minimum": 1, "maximum": 16, "description": "1 = main display (default), 2… = other displays"}})},
 		{"name": "click", "description": "Click at a point given in pixels of the most recent screenshot.",
 			"inputSchema": obj(map[string]any{"x": num, "y": num,
@@ -88,7 +88,7 @@ func Tools() []map[string]any {
 				"amount":    map[string]any{"type": "integer", "minimum": 1, "maximum": 20}}, "x", "y", "direction")},
 		{"name": "type_text", "description": "Type text into the focused field. Never type passwords, card numbers or other secrets.",
 			"inputSchema": obj(map[string]any{"text": map[string]any{"type": "string", "maxLength": 2000}}, "text")},
-		{"name": "press_key", "description": "Press a key or shortcut, e.g. return, tab, escape, cmd+l, cmd+t, cmd+w, shift+tab, pagedown, up.",
+		{"name": "press_key", "description": "Press a key or shortcut, " + KeyHelp + ".",
 			"inputSchema": obj(map[string]any{"key": map[string]any{"type": "string"}}, "key")},
 		{"name": "wait", "description": "Wait for the screen to update (0.1-10 seconds).",
 			"inputSchema": obj(map[string]any{"seconds": num}, "seconds")},
@@ -300,11 +300,10 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) too
 		}
 		return okText("Typed.")
 	case "press_key":
-		code, flags, err := ParseKey(a.Key)
-		if err != nil {
+		if _, _, err := SplitCombo(a.Key); err != nil {
 			return fail("%v", err)
 		}
-		if err := s.D.PressKey(ctx, code, flags); err != nil {
+		if err := s.D.PressKey(ctx, a.Key); err != nil {
 			return fail("key press failed: %v", err)
 		}
 		return okText("Pressed " + a.Key + ".")

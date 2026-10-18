@@ -536,15 +536,15 @@ func (fakeDesk) Click(context.Context, float64, float64, string, int) error { re
 func (fakeDesk) Move(context.Context, float64, float64) error               { return nil }
 func (fakeDesk) Scroll(context.Context, float64, float64, int, int) error   { return nil }
 func (fakeDesk) TypeText(context.Context, string) error                     { return nil }
-func (fakeDesk) PressKey(context.Context, int, uint64) error                { return nil }
+func (fakeDesk) PressKey(context.Context, string) error                     { return nil }
 func (fakeDesk) Trusted(context.Context) bool                               { return true }
 
 var fakeCaptures atomic.Int64
 
 func (fakeDesk) Displays(context.Context) ([]screen.Display, error) {
 	return []screen.Display{
-		{Index: 1, ID: 4, Key: "AAAAAAAA-main", Name: "Wide", W: 400, H: 200, PixelW: 400, PixelH: 200, Scale: 1, Main: true},
-		{Index: 2, ID: 5, Key: "BBBBBBBB-side", Name: "Side", X: -300, Y: -200, W: 300, H: 200, PixelW: 300, PixelH: 200, Scale: 1},
+		{Index: 1, ID: "4", Key: "AAAAAAAA-main", Name: "Wide", W: 400, H: 200, PixelW: 400, PixelH: 200, Scale: 1, Main: true},
+		{Index: 2, ID: "5", Key: "BBBBBBBB-side", Name: "Side", X: -300, Y: -200, W: 300, H: 200, PixelW: 300, PixelH: 200, Scale: 1},
 	}, nil
 }
 
