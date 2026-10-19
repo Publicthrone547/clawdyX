@@ -2,9 +2,9 @@
 
 ## 1.0.1 — 2026-10-19
 
-The first published 1.x release; 1.0.0 was tagged but never released because its build failed on the CI runners. Same features as 1.0.0 below.
+The first published 1.x release, for **macOS and Windows**; 1.0.0 was tagged but never released. Same features as 1.0.0 below; Linux support is in the code but not released yet.
 
-- **Build fixes.** The macOS camera helper builds with older SDKs (macOS 14) as well as the macOS 15+ SDK; the Windows release job installs NSIS and passes the version to it correctly; `make check-notices` works on a fresh checkout; two tests no longer depend on the runner (Homebrew's claude location on macOS, a missing keyring on Linux).
+- **Build.** All release files are built on the Mac (`make release`): the macOS app and worker, and the Windows installer and zip (cross-compiled; the Windows camera helper is built on Windows and copied in). The GitHub Actions workflows were removed. The macOS camera helper also builds with the macOS 14 SDK.
 
 ## 1.0.0 — 2026-10-19
 

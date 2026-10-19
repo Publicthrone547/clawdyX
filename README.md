@@ -32,7 +32,7 @@ A private, single-operator Telegram bot that drives the **Claude Code CLI alread
 
 Only the Telegram users on your local allowlist are served (by numeric ID, in their own private chat): you as the owner, plus anyone you deliberately add. Every other update is dropped silently before any lookup or side effect.
 
-clawdyX runs on **macOS, Windows and Linux** with the same features; the few differences come from the operating system and are listed where they matter.
+clawdyX runs on **macOS, Windows and Linux** with the same features; the few differences come from the operating system and are listed where they matter. Releases ship files for macOS and Windows; on Linux, build from source for now (see [Build from source](#build-from-source)).
 
 | | macOS | Windows | Linux |
 | --- | --- | --- | --- |
@@ -55,12 +55,9 @@ Every file is on the [latest release](https://github.com/Publicthrone547/clawdyX
 | `clawdyx-<version>-darwin-arm64.tar.gz` | macOS: the bot only, for the terminal |
 | `clawdyX-<version>-windows-amd64-setup.exe` | Windows: the per-user installer (app and bot) |
 | `clawdyX-<version>-windows-amd64.zip` | Windows: the same files without an installer |
-| `clawdyx_<version>_amd64.deb` · `clawdyx-<version>-1.x86_64.rpm` | Linux: the package (app and bot) |
-| `clawdyX-<version>-linux-amd64.AppImage` · `clawdyX-<version>-linux-amd64.tar.gz` | Linux: the app and bot without a package |
-| `clawdyx-<version>-linux-amd64.tar.gz` · `clawdyx-<version>-linux-arm64.tar.gz` | Linux: the bot only, for servers |
 | `SHA256SUMS` | the checksums of every file above |
 
-Check a download against `SHA256SUMS`: `shasum -a 256 -c SHA256SUMS --ignore-missing` (macOS), `sha256sum -c SHA256SUMS --ignore-missing` (Linux), or in PowerShell `(Get-FileHash .\clawdyX-<version>-windows-amd64-setup.exe).Hash` and compare it with the line in `SHA256SUMS`.
+Check a download against `SHA256SUMS`: `shasum -a 256 -c SHA256SUMS --ignore-missing` (macOS), or in PowerShell `(Get-FileHash .\clawdyX-<version>-windows-amd64-setup.exe).Hash` and compare it with the line in `SHA256SUMS`.
 
 ## Install
 
@@ -84,7 +81,9 @@ The app uses the WebView2 runtime, which Windows 10 and 11 include. Screenshots 
 
 ### Linux
 
-1. Download the package for your distribution and install it: `sudo apt install ./clawdyx_<version>_amd64.deb` (Debian, Ubuntu) or `sudo dnf install ./clawdyx-<version>-1.x86_64.rpm` (Fedora). Without a package: the AppImage (it needs `libwebkit2gtk-4.1` installed, and `libfuse2` on Ubuntu 22.04 and later) or the `.tar.gz`.
+Linux files are not on the release page yet: build the package with `make package-linux` (see [Build from source](#build-from-source)), then:
+
+1. Install the package for your distribution: `sudo apt install ./clawdyx_<version>_amd64.deb` (Debian, Ubuntu) or `sudo dnf install ./clawdyx-<version>-1.x86_64.rpm` (Fedora). Without a package: the AppImage (it needs `libwebkit2gtk-4.1` installed, and `libfuse2` on Ubuntu 22.04 and later) or the `.tar.gz`.
 2. Open clawdyX from the applications menu.
 3. Claude Code: `curl -fsSL https://claude.ai/install.sh | bash`, then run `claude` once in a terminal to sign in.
 
@@ -235,7 +234,8 @@ Turn it on in the app: **Settings → Features → Camera**, then restart the wo
 The worker runs alone on a server without a desktop, as a systemd user service:
 
 ```bash
-tar -xzf clawdyx-<version>-linux-amd64.tar.gz && install -m 755 clawdyx-<version>-linux-amd64/clawdyx ~/.local/bin/
+make build-linux    # on any computer; copy bin/linux/amd64/clawdyx (or arm64) to the server
+install -m 755 clawdyx ~/.local/bin/    # on the server
 printf '%s\n' "$TOKEN" | clawdyx setup -headless -token-stdin -owner-id 123456789 -workspace ~/projects/app
 clawdyx service start && loginctl enable-linger "$USER"
 ```

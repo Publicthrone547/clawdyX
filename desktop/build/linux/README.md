@@ -1,7 +1,7 @@
 # Building the Linux app
 
 The desktop app needs cgo and GTK 3 with WebKitGTK 4.1 (`-tags production,gtk3`),
-so it is built on Linux (the release workflow builds it on Ubuntu 24.04). The
+so it is built on Linux. The
 worker (`clawdyx`) needs neither and cross-compiles from any system
 (`make build-linux`).
 

@@ -1,5 +1,5 @@
 # Check out text files with LF on every OS: gofmt, the shell scripts and the
-# CI checks expect LF, and Git for Windows would otherwise convert to CRLF.
+# The checks expect LF, and Git for Windows would otherwise convert to CRLF.
 * text=auto eol=lf
 *.png binary
 *.ico binary

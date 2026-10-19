@@ -82,7 +82,7 @@ build-windows: frontend ## build bin/windows/clawdyX/ for Windows $(WINARCH): cl
 	@if [ "$(GOHOSTOS)" = windows ]; then $(MAKE) --no-print-directory helper-windows || \
 		{ [ "$(WINARCH)" = arm64 ] && echo "note: no arm64 MSVC tools here; this arm64 build has no camera"; }; \
 	elif [ "$(WINARCH)" = amd64 ] && [ -f bin/clawdyx-camera.exe ]; then cp bin/clawdyx-camera.exe $(WINDIR)/helpers/; \
-	else echo "note: the Windows camera helper is built on Windows (make helper-windows) or in CI; this build has no camera"; fi
+	else echo "note: the Windows camera helper is built on Windows (make helper-windows) and copied to bin/clawdyx-camera.exe; this build has no camera"; fi
 	cp LICENSE THIRD_PARTY_NOTICES.md README.md $(WINDIR)/
 	@ls -lh $(WINDIR)/clawdyX.exe $(WINDIR)/helpers/clawdyx.exe $(WINDIR)/helpers/clawdyxw.exe
 
@@ -92,7 +92,7 @@ installer-windows: build-windows ## build the per-user Windows installer (NSIS: 
 	@ls -lh $(REL)/clawdyX-$(VERSION)-windows-$(WINARCH)-setup.exe
 
 # The Windows camera helper (C++, Media Foundation) needs MSVC: it builds on a
-# Windows host with the Visual Studio Build Tools, and in CI.
+# Windows host with the Visual Studio Build Tools.
 helper-windows: ## build bin/windows/clawdyX/helpers/clawdyx-camera.exe with MSVC (Windows only)
 	powershell -NoProfile -ExecutionPolicy Bypass -File desktop/helper/windows/build.ps1 -Arch $(if $(filter arm64,$(WINARCH)),arm64,x64) -Out $(WINDIR)/helpers/clawdyx-camera.exe
 
@@ -122,7 +122,7 @@ vet-linux: ## type-check everything (including tests) for Linux; the app's cgo p
 	cd desktop && $(LINENV) go vet ./host
 
 app-linux: frontend ## build bin/linux/clawdyX/ (app, worker, .desktop file, icons); runs on Linux only
-	@test "$$(go env GOOS)" = linux || { echo "app-linux builds on Linux only (the app needs cgo and GTK); CI builds it"; exit 1; }
+	@test "$$(go env GOOS)" = linux || { echo "app-linux builds on Linux only (the app needs cgo and GTK)"; exit 1; }
 	rm -rf $(LINDIR)/clawdyX && mkdir -p $(LINDIR)/clawdyX
 	CGO_ENABLED=0 go build -trimpath -ldflags="-X main.version=$(VERSION)" -o $(LINDIR)/clawdyX/clawdyx ./cmd/clawdyx
 	cd desktop && CGO_ENABLED=1 go build -tags production,gtk3 -trimpath -buildvcs=false -ldflags="-w -s -X main.version=$(VERSION)" -o ../$(LINDIR)/clawdyX/clawdyX .
@@ -136,20 +136,18 @@ vet-darwin:
 	cd desktop && $(DARENV) go vet ./host
 
 ## Release
-# Release files. Each OS builds its own app files (the macOS app and the
-# Linux app need their OS; the Windows camera helper needs MSVC); the
-# worker-only Linux tarballs cross-compile anywhere. The release workflow
-# (.github/workflows/release.yml) runs these per OS and adds SHA256SUMS.
-release: check-all ## build this computer's release files into bin/release-$(VERSION)/ with SHA256SUMS (CI builds the rest)
+# Release files: macOS and Windows, built on the Mac. The Windows files
+# cross-compile; the Windows camera helper needs MSVC, so it is built on a
+# Windows PC (make helper-windows) and copied to bin/clawdyx-camera.exe
+# first. Linux is not released for now.
+release: check-all ## build the macOS and Windows release files into bin/release-$(VERSION)/ with SHA256SUMS (on the Mac)
+	@test "$(GOHOSTOS)" = darwin || { echo "make release runs on the Mac (see docs/RELEASE.md)"; exit 1; }
+	@test -f bin/clawdyx-camera.exe || { echo "missing bin/clawdyx-camera.exe: build it on Windows (make helper-windows) and copy it here"; exit 1; }
 	rm -rf $(REL) && mkdir -p $(REL)
-	$(MAKE) --no-print-directory release-workers
-	@case "$(GOHOSTOS)" in \
-	darwin) $(MAKE) --no-print-directory release-darwin ;; \
-	windows) $(MAKE) --no-print-directory release-windows ;; \
-	linux) $(MAKE) --no-print-directory release-linux ;; esac
+	$(MAKE) --no-print-directory release-darwin
+	$(MAKE) --no-print-directory release-windows
 	$(MAKE) --no-print-directory release-sums
-	@echo "built here: $$(cd $(REL) && ls | grep -v SHA256SUMS | tr '\n' ' ')"
-	@echo "from CI only: the files of the other systems (see docs/RELEASE.md)"
+	@echo "built: $$(cd $(REL) && ls | grep -v SHA256SUMS | tr '\n' ' ')"
 
 # worker-tar OS ARCH SRC: clawdyx-<version>-<os>-<arch>.tar.gz with the worker and the license files.
 define worker-tar
@@ -167,7 +165,7 @@ release-darwin: dmg ## the macOS release files (on a Mac): the .dmg and the work
 	cp $(DMG) $(REL)/
 	$(call worker-tar,darwin,arm64,bin/clawdyx)
 
-release-windows: installer-windows ## the Windows release files (on Windows): the installer and the .zip
+release-windows: installer-windows ## the Windows release files: the installer and the .zip
 	mkdir -p $(REL)
 	z=clawdyX-$(VERSION)-windows-$(WINARCH).zip; rm -f $(REL)/$$z; \
 	bsdtar="$$(cygpath -u "$${SYSTEMROOT:-C:/Windows}" 2>/dev/null)/System32/tar.exe"; \

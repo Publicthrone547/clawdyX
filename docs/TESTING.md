@@ -13,17 +13,7 @@ make vet-darwin         # the same for macOS (the app's cgo part only on a Mac)
 make check-all          # all of the above
 ```
 
-Every system's code is compiled and vetted on every `make check-all`, whatever the host. The tests themselves run on the host's OS; CI runs them on all three.
-
-## CI
-
-`.github/workflows/ci.yml` runs on every push to `main` and every pull request:
-
-| Job | Runners | Steps |
-| --- | --- | --- |
-| `go` | macos-14, windows-latest, ubuntu-24.04 | `go vet`, `go test -race`, gofmt, and `go vet` of both modules for the other two OSes |
-| `desktop` | the same three | frontend type check, Vitest and build; desktop module vet and test; the app built for the runner's OS (Linux: GTK 3 + WebKitGTK 4.1, started under `xvfb` for 5 s); Linux: the launcher entry validated, `.deb`/`.rpm`/`.tar.gz` built, the `.deb` installed and the worker run from it; Windows: the camera helper built with MSVC and its `list` checked, the installer built, installed silently, checked and removed on the runner |
-| `secrets` | ubuntu-24.04 | `make check-secrets` over the history |
+Every system's code is compiled and vetted on every `make check-all`, whatever the host. The tests themselves run on the host's OS: run `make check-all` on the Mac and on the Windows PC before a release.
 
 ## What the suites cover
 
@@ -106,12 +96,12 @@ Each checklist runs on the release candidate; the outcome ("tested on …") goes
 
 **Linux server (Ubuntu Server 24.04, Debian 12, SSH only):** the worker tarball; `clawdyx setup -headless -token-stdin …`; the token in `.env` with the printed reason; `clawdyx service start` and linger; the bot answers; after a reboot it is back without a login; `/doctor` names no graphical session; `/screens` and `/camera` explain themselves; `journalctl --user -u clawdyx` shows the start.
 
-### What needs hardware, what CI covers
+### What needs hardware, what the tests cover
 
-| Needs hardware | CI covers |
+| Needs hardware | Covered by `make check-all` and the tests |
 | --- | --- |
-| Console flash at login; Task Manager kill and restart; SmartScreen; input into elevated windows; a Windows camera; per-monitor scaling; `ms-settings:` links | compile and vet for three OSes; unit and golden tests; Windows desktop capture on the runner; the MSVC helper build; the installer installed and removed |
-| Wayland portal dialogs; GNOME without a tray; a locked keyring after SSH; a V4L2 device; ffmpeg encoding; linger | the app started under `xvfb`; the `.deb` installed and run |
+| Console flash at login; Task Manager kill and restart; SmartScreen; input into elevated windows; a Windows camera; per-monitor scaling; `ms-settings:` links | compile and vet for three OSes; unit and golden tests; Windows desktop capture (tests on the Windows PC) |
+| Wayland portal dialogs; GNOME without a tray; a locked keyring after SSH; a V4L2 device; ffmpeg encoding; linger | compile and vet only |
 | macOS TCC prompts; notarization | everything else |
 
 ## Manual acceptance (needs a real bot token)

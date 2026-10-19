@@ -1215,7 +1215,7 @@ Array of `{pid, cwd, kind ("interactive"|"background"), startedAt (ms epoch), se
 
 ## Implementation status (v1.0.0)
 
-1.0.0 implements the cross-platform plan: the bot, the worker and the desktop app on macOS, Windows and Linux (Section 21), every setting in the app (`internal/settings`; offline editing while the worker is down; reset per section, export and import), the Help screen, per-OS installers and packages, and CI on all three systems. macOS behaviour is unchanged. Deviations from the plan, with reasons:
+1.0.0 implements the cross-platform plan: the bot, the worker and the desktop app on macOS, Windows and Linux (Section 21), every setting in the app (`internal/settings`; offline editing while the worker is down; reset per section, export and import), the Help screen, per-OS installers and packages. macOS behaviour is unchanged. Deviations from the plan, with reasons:
 
 - **Windows settings move only on `service start|install|restart`** (and the app's Start), after the old worker is stopped, not on every subcommand: moving the file under a running 0.4.x worker would pull it away. Until then `DefaultPath` reads the old file where it is; `clawdyx check` stays read-only.
 - **The word tables of all three OSes live in one shared file** (`internal/platform/words.go`) instead of build-tagged files, so every guard test renders every OS on any host. `platform.W` is still the running OS's table.

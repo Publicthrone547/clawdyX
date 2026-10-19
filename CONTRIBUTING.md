@@ -22,7 +22,7 @@ Every OS needs Go (the version in `go.mod`) and Node.js 22 or newer.
 | Windows | Git for Windows (its bash runs the Makefile), GNU make; Visual Studio Build Tools with the C++ workload for the camera helper; NSIS for the installer | `make build-windows`, `make installer-windows` | without gcc, `make test` runs without `-race` |
 | Linux | `build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev libx11-dev` (see `desktop/build/linux/README.md` for other distributions) | `make app-linux`, `make package-linux` | the app needs cgo; the worker cross-compiles from anywhere (`make build-linux`) |
 
-`make check-all` runs the Go tests, vet, gofmt, the secret scan, the wording and docs guards, the desktop module's tests, the frontend type check and Vitest, and the type checks of both modules for all three OSes. It must be green before a pull request. CI runs the same on macOS, Windows and Linux. `make help` lists every target.
+`make check-all` runs the Go tests, vet, gofmt, the secret scan, the wording and docs guards, the desktop module's tests, the frontend type check and Vitest, and the type checks of both modules for all three OSes. It must be green before a pull request. `make help` lists every target.
 
 Test without touching a running bot: use a separate settings file (`CLAWDYX_CONFIG`), a separate service name (`CLAWDYX_SERVICE_LABEL=local.clawdyx.dev`) and a separate test bot token; see `docs/TESTING.md`.
 
