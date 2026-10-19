@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.1 — 2026-10-19
+
+The first published 1.x release; 1.0.0 was tagged but never released because its build failed on the CI runners. Same features as 1.0.0 below.
+
+- **Build fixes.** The macOS camera helper builds with older SDKs (macOS 14) as well as the macOS 15+ SDK; the Windows release job installs NSIS and passes the version to it correctly; `make check-notices` works on a fresh checkout; two tests no longer depend on the runner (Homebrew's claude location on macOS, a missing keyring on Linux).
+
 ## 1.0.0 — 2026-10-19
 
 clawdyX now runs on macOS, Windows and Linux with the same features, and every setting is edited in the app.

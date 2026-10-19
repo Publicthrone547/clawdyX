@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
 PackageIdentifier: Publicthrone547.clawdyX
-PackageVersion: 1.0.0
+PackageVersion: 1.0.1
 PackageLocale: en-US
 Publisher: Publicthrone547
 PublisherUrl: https://github.com/Publicthrone547
@@ -19,6 +19,6 @@ Tags:
   - claude-code
   - telegram
   - bot
-ReleaseNotesUrl: https://github.com/Publicthrone547/clawdyX/releases/tag/v1.0.0
+ReleaseNotesUrl: https://github.com/Publicthrone547/clawdyX/releases/tag/v1.0.1
 ManifestType: defaultLocale
 ManifestVersion: 1.6.0
