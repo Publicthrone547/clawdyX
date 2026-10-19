@@ -96,6 +96,16 @@ final class MovieDelegate: NSObject, AVCaptureFileOutputRecordingDelegate {
     }
 }
 
+// legacyExport writes the clip with the pre-macOS 15 export API.
+func legacyExport(_ export: AVAssetExportSession, to out: URL) async {
+    export.outputURL = out
+    export.outputFileType = .mp4
+    await export.export()
+    if export.status != .completed {
+        fail("cannot convert the clip: \(export.error?.localizedDescription ?? "export did not complete")")
+    }
+}
+
 @main
 struct Helper {
     static func main() async {
@@ -181,11 +191,21 @@ struct Helper {
         guard let export = AVAssetExportSession(asset: AVURLAsset(url: mov), presetName: AVAssetExportPresetPassthrough) else {
             fail("cannot convert the clip")
         }
-        do {
-            try await export.export(to: out, as: .mp4)
-        } catch {
-            fail("cannot convert the clip: \(error.localizedDescription)")
+        // export(to:as:) is in the macOS 15 SDK (Swift 6 compilers); older
+        // SDKs and macOS 14 use the status-based export.
+        #if compiler(>=6.0)
+        if #available(macOS 15, *) {
+            do {
+                try await export.export(to: out, as: .mp4)
+            } catch {
+                fail("cannot convert the clip: \(error.localizedDescription)")
+            }
+        } else {
+            await legacyExport(export, to: out)
         }
+        #else
+        await legacyExport(export, to: out)
+        #endif
         let size = (try? FileManager.default.attributesOfItem(atPath: out.path)[.size] as? Int) ?? 0
         emit(["ok": true, "bytes": size, "seconds": seconds])
     }

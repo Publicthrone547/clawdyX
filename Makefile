@@ -234,7 +234,7 @@ check-version: ## VERSION is CHANGELOG.md's first entry and has release notes (T
 	echo "version $(VERSION) ok"
 
 check-notices: ## THIRD_PARTY_NOTICES.md is up to date (needs desktop/frontend/node_modules)
-	@sh scripts/gen-notices.sh bin/notices.md >/dev/null && \
+	@mkdir -p bin && sh scripts/gen-notices.sh bin/notices.md >/dev/null && \
 	if diff -u THIRD_PARTY_NOTICES.md bin/notices.md >/dev/null; then echo "notices up to date"; rm -f bin/notices.md; \
 	else diff -u THIRD_PARTY_NOTICES.md bin/notices.md | head -40; echo "run scripts/gen-notices.sh and commit THIRD_PARTY_NOTICES.md"; exit 1; fi
 

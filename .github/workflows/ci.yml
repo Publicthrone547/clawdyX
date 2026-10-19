@@ -129,7 +129,7 @@ jobs:
           Copy-Item LICENSE, THIRD_PARTY_NOTICES.md, README.md $src/
           $env:PATH = "C:\Program Files (x86)\NSIS;" + $env:PATH
           if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) { choco install nsis -y --no-progress; $env:PATH = "C:\Program Files (x86)\NSIS;" + $env:PATH }
-          makensis -V2 -DVERSION=0.0.0 "-DSRC=$(Resolve-Path $src)" "-DOUT=$PWD\bin\setup.exe" desktop/build/windows/installer.nsi
+          makensis -V2 "-DVERSION=0.0.0" "-DSRC=$(Resolve-Path $src)" "-DOUT=$PWD\bin\setup.exe" desktop/build/windows/installer.nsi
           if ($LASTEXITCODE -ne 0) { throw "makensis failed" }
           Start-Process -Wait bin/setup.exe -ArgumentList "/S"
           $dir = "$env:LOCALAPPDATA\Programs\clawdyX"

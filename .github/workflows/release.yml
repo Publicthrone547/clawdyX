@@ -50,6 +50,7 @@ jobs:
           echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
           security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$pw" "$kc" >/dev/null
+          # shellcheck disable=SC2046 # one keychain path per word
           security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
           rm -f "$RUNNER_TEMP/cert.p12"
           id=$(security find-identity -v -p codesigning "$kc" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)
@@ -93,6 +94,7 @@ jobs:
       - name: tools (wails3 for the icon and manifest, NSIS on PATH)
         run: |
           command -v make || choco install make -y --no-progress
+          command -v makensis || test -x "/c/Program Files (x86)/NSIS/makensis.exe" || choco install nsis -y --no-progress
           go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-beta.30
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
           echo "C:/Program Files (x86)/NSIS" >> "$GITHUB_PATH"
@@ -111,9 +113,9 @@ jobs:
           sign() { AzureSignTool sign -kvu "$AZURE_KEY_VAULT_URL" -kvi "$AZURE_CLIENT_ID" -kvs "$AZURE_CLIENT_SECRET" -kvt "$AZURE_TENANT_ID" -kvc "$AZURE_CERT_NAME" -tr http://timestamp.digicert.com -td sha256 "$@"; }
           sign bin/windows/clawdyX/clawdyX.exe bin/windows/clawdyX/helpers/*.exe
           v=${GITHUB_REF_NAME#v}
-          rm -f bin/release-$v/*.exe bin/release-$v/*.zip
+          rm -f "bin/release-$v"/*.exe "bin/release-$v"/*.zip
           make -o build-windows installer-windows release-windows
-          sign bin/release-$v/*-setup.exe
+          sign "bin/release-$v"/*-setup.exe
       - uses: actions/upload-artifact@v4
         with:
           name: windows
@@ -183,7 +185,7 @@ jobs:
           mkdir -p out
           find dl -type f ! -name SHA256SUMS -exec cp {} out/ \;
           test -n "$(ls out/*linux-amd64.tar.gz 2>/dev/null)" || { echo "the Linux amd64 files are missing"; exit 1; }
-          (cd out && sha256sum $(ls | sort) > SHA256SUMS && sha256sum -c SHA256SUMS)
+          (cd out && find . -maxdepth 1 -type f -printf '%f\n' | LC_ALL=C sort | xargs sha256sum > SHA256SUMS && sha256sum -c SHA256SUMS)
           ls -l out
       - name: draft release (the owner publishes it)
         env:

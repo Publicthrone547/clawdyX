@@ -3,6 +3,7 @@ package setup
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,16 +13,28 @@ func TestClaudeCandidatesFindTheNativeInstaller(t *testing.T) {
 	if len(c) == 0 {
 		t.Fatal("no candidates")
 	}
-	// The native installer's location is tried first on every OS.
-	if filepath.Dir(c[0]) != filepath.Join(home, ".local", "bin") {
-		t.Fatalf("first candidate %s", c[0])
+	// The native installer's location is tried on every OS. Only the
+	// candidates under home are checked: the machine may have claude in a
+	// system location.
+	native := ""
+	var inHome []string
+	for _, p := range c {
+		if filepath.Dir(p) == filepath.Join(home, ".local", "bin") {
+			native = p
+		}
+		if strings.HasPrefix(p, home+string(filepath.Separator)) {
+			inHome = append(inHome, p)
+		}
 	}
-	if firstFile(c) != "" {
+	if native == "" {
+		t.Fatalf("no native installer location in %v", c)
+	}
+	if firstFile(inHome) != "" {
 		t.Fatal("nothing installed yet")
 	}
-	os.MkdirAll(filepath.Dir(c[0]), 0o755)
-	os.WriteFile(c[0], []byte("x"), 0o755)
-	if firstFile(c) != c[0] {
+	os.MkdirAll(filepath.Dir(native), 0o755)
+	os.WriteFile(native, []byte("x"), 0o755)
+	if firstFile(inHome) != native {
 		t.Fatal("installed binary not found")
 	}
 }
